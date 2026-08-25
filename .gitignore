@@ -1,0 +1,19 @@
+# JetBrains IDE
+.idea/
+# IDE temp files (atomic write leftovers: ..gitignore.<pid>.<uuid>.tmpdir)
+*..*.tmpdir
+*..*.tmp
+
+# VS Code
+.vscode/
+*.iml
+
+# Build output
+target/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup / corrupt files
+docs/test-design.md.corrupt.bak
