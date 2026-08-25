@@ -1,8 +1,8 @@
 package com.example.agent.provider.deepseek;
 
+import com.example.agent.agent.Message;
 import com.example.agent.provider.ChatRequest;
 import com.example.agent.provider.FinishReason;
-import com.example.agent.provider.Message;
 import com.example.agent.provider.StreamChunk;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -87,6 +87,19 @@ public class DeepSeekMapper {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("role", m.role());
             entry.put("content", m.content());
+            if (m instanceof Message.Assistant a && a.toolCalls() != null && !a.toolCalls().isEmpty()) {
+                List<Map<String, Object>> tcs = new ArrayList<>();
+                for (var tc : a.toolCalls()) {
+                    tcs.add(Map.of(
+                        "id", tc.id(),
+                        "type", "function",
+                        "function", Map.of("name", tc.name(), "arguments", tc.argumentsJson())));
+                }
+                entry.put("tool_calls", tcs);
+            }
+            if (m instanceof Message.ToolResult tr) {
+                entry.put("tool_call_id", tr.toolCallId());
+            }
             arr.add(entry);
         }
         return arr;

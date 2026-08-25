@@ -1,7 +1,7 @@
 package com.example.agent.provider.deepseek;
 
+import com.example.agent.agent.Message;
 import com.example.agent.provider.ChatRequest;
-import com.example.agent.provider.Message;
 import com.example.agent.provider.StreamChunk;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -46,7 +46,7 @@ class DeepSeekProviderTest {
                     + "data: [DONE]\n\n")));
 
         ChatRequest req = new ChatRequest("deepseek-chat", null,
-            List.of(Message.user("hello")), List.of(), 1.0, 1000, Map.of());
+            List.of(new Message.User("hello")), List.of(), 1.0, 1000, Map.of());
 
         StepVerifier.create(provider.streamChat(req).collectList())
             .assertNext(chunks -> {
@@ -76,7 +76,7 @@ class DeepSeekProviderTest {
                 .withBody("data: [DONE]\n\n")));
 
         ChatRequest req = new ChatRequest("deepseek-chat", null,
-            List.of(Message.user("hello")), List.of(), 1.0, 1000, Map.of());
+            List.of(new Message.User("hello")), List.of(), 1.0, 1000, Map.of());
         provider.streamChat(req).collectList().block();
 
         wm.verify(WireMock.postRequestedFor(urlEqualTo("/v1/chat/completions"))

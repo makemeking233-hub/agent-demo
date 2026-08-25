@@ -1,7 +1,7 @@
 package com.example.agent.provider.deepseek;
 
+import com.example.agent.agent.Message;
 import com.example.agent.provider.ChatRequest;
-import com.example.agent.provider.Message;
 import com.example.agent.provider.StreamChunk;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +19,7 @@ class DeepSeekMapperTest {
     @Test
     void requestBodyIncludesStreamOptions() {
         ChatRequest req = new ChatRequest(
-            "deepseek-chat", "system", List.of(Message.user("hi")),
+            "deepseek-chat", "system", List.of(new Message.User("hi")),
             List.of(), 1.0, 1000, Map.of());
         Map<String, Object> body = mapper.toRequestBody(req);
 
