@@ -1,16 +1,22 @@
 package com.example.agent;
 
+import com.example.agent.cli.ChatCommand;
+import com.example.agent.cli.InitCommand;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
 
 /**
- * agent-demo 入口（M0 脚手架阶段）。
+ * agent-demo 入口。
  *
- * <p>实现 Spring Boot {@link CommandLineRunner}，Spring 启动完成后会自动执行 {@link #run(String...)}。
- * M0 阶段仅打印启动信息；M1+ 会接入 picocli 子命令并在此分发到 chat / init。
+ * <p>实现 Spring Boot {@link CommandLineRunner}，Spring 启动完成后会自动执行 {@link #run(String...)}，
+ * 把命令行参数转交给 picocli 分发到 chat / init 子命令。
  */
 @SpringBootApplication
+@Command(name = "agent-demo", mixinStandardHelpOptions = true, version = "agent-demo 0.1.0",
+        subcommands = {ChatCommand.class, InitCommand.class})
 public class AgentCli implements CommandLineRunner {
 
     public static void main(String[] args) {
@@ -19,7 +25,8 @@ public class AgentCli implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        // M0 阶段为空；M1+ 添加 picocli 子命令
-        System.out.println("agent-demo v0.1.0 — 启动成功（脚手架阶段）");
+        // Spring 启动后，picocli-spring-boot-starter 已自动注册所有 @Component 子命令
+        int exitCode = new CommandLine(new AgentCli()).execute(args);
+        System.exit(exitCode);
     }
 }
