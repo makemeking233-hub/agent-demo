@@ -52,6 +52,7 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 
 - **TDD 优先**：每个 Task 严格按 plan 中"测试先红 → 实现 → 测试转绿"的顺序执行
 - **commit 即里程碑**：每个 Task 完成后立即 commit，commit 信息遵循全局规则 §13 的中文 Conventional Commits 风格
+- **commit 即 push**：本地 commit 完成后**立即** push 到 `origin/main`，不积压等待；默认分支是 `main`
 - **里程碑 review 点**：每个里程碑（M0-M10）完成后停下，向用户汇报：
   - 已完成内容
   - 测试结果（`mvn test` 全绿）
