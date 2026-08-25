@@ -59,7 +59,14 @@ public class DeepSeekMapper {
                 }
                 JsonNode fr = choice0.path("finish_reason");
                 if (!fr.isNull() && !fr.asText().isEmpty()) {
-                    return Optional.of(new StreamChunk.Finished(toFinishReason(fr.asText()), null));
+                    StreamChunk.Usage usage = null;
+                    if (root.has("usage") && !root.get("usage").isNull()) {
+                        JsonNode u = root.get("usage");
+                        usage = new StreamChunk.Usage(
+                            u.path("prompt_tokens").asInt(0),
+                            u.path("completion_tokens").asInt(0));
+                    }
+                    return Optional.of(new StreamChunk.Finished(toFinishReason(fr.asText()), usage));
                 }
             }
             if (root.has("usage") && !root.get("usage").isNull()) {
