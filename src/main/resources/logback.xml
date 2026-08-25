@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>${user.home}/.agent-demo/logs/agent.log</file>
+        <append>true</append>
+        <encoder><pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="STDERR_MIRROR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder><pattern>%d{HH:mm:ss.SSS} %-5level %logger{20} - %msg%n</pattern></encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="STDERR_MIRROR"/>
+    </root>
+</configuration>

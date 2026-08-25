@@ -1,0 +1,7 @@
+spring:
+  main:
+    banner-mode: console
+    web-application-type: none   # CLI 不需要 Web 服务器；避免占用 8080
+
+agent:
+  version: 0.1.0
