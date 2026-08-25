@@ -101,6 +101,7 @@
 | TC-PROV-016 | `Flux.timeout(first, next)` 首 token 60s | mock 60s 无 chunk | 超时抛错；不自动重试 | P0 |
 | TC-PROV-017 | 流中途空闲 30s 超时 | mock chunk 后 30s 无新 chunk | 超时抛错；不自动重试 | P0 |
 | TC-PROV-018 | SSE 解析异常单行不污染后续行 | mock 1 行坏 JSON + N 行正常 | 该行被吞并打 WARN 日志，后续继续解析 | P1 |
+| TC-PROV-019 | perModel firstTokenTimeoutSec 覆盖（Q8 设计答复新增） | mock `provider.perModel.deepseek-reasoner.firstTokenTimeoutSec=120`；当前模型=reasoner；chunk 延迟 90s | 查表顺序 `perModel[currentModel]` -> 全局；用 120s 不超时 | P0 |
 
 ### 3.2 TC-LOOP：AgentLoop / MessageHistory / 流式打印（P0）
 
@@ -207,6 +208,7 @@
 | TC-PERM-012 | defaultShell=ask | ShellTool 普通命令 | 弹交互 | P0 |
 | TC-PERM-013 | 用户 deny | 交互中输入 `n` | 返回 deny；下游回流 `permission_denied` | P0 |
 | TC-PERM-014 | 用户 allow this session | mock 状态 | 当前 session 内同工具同参数不再问 | P1 |
+| TC-PERM-015 | denyCommands 全局拒绝规则（Q9 设计答复新增，v0.2 占位） | mock `permission.denyCommands` v0.2 字段；命中 `rm -rf /` | 拒绝；不弹交互；不进入第 2 步 | P2 |
 
 ### 3.6 TC-SESS：SessionStore（P0）
 
@@ -280,6 +282,8 @@
 | TC-CFG-008 | `init` 子命令生成默认配置 | 执行 `agent-demo init` | 生成 `~/.agent-demo/config.yaml` | P1 |
 | TC-CFG-009 | 命令行 `--model / --api-key / --system-prompt` | 启动时传入 | 覆盖 config | P1 |
 | TC-CFG-010 | 命令行 `--model` 校验 | 非法模型名 | 报错退出 | P1 |
+| TC-CFG-004a | 安全敏感 List 字段合并：追加（Q4 设计答复新增） | user.yaml `permission.destructiveCommands.linux=["wget"]` + 内置 `["rm -rf","mkfs",...]` | 合并后含全部内置 + `wget`（追加语义）；用户空配置不会清空内置 | P1 |
+| TC-CFG-004b | 普通 List 字段合并：覆盖（Q4 设计答复新增） | user.yaml 覆盖某普通 list 字段 | 合并后仅用户值；默认被替换 | P1 |
 
 ### 3.10 TC-ERR：错误处理 / 重试 / 超时（P0）
 
@@ -450,3 +454,45 @@
 8. §11.4 TTFT=60s 对 deepseek-reasoner（v0.2）是否需要上调？
 9. §6.2 Tool `checkPermissions` 返回 `deny` 时是否仍需进入第 3 步交互？（设计文档"deny 拒绝"表述，可能漏掉 deny-then-ask 场景）
 10. §8.2 Post-Compact 状态重注入的"刚打开的文件"——定义时间窗？是当前 turn 还是当前 session？
+---
+
+## 8. 设计澄清答复落地记录（Q1-Q10 已答复）
+
+> 本节由测试侧在收到设计作者 Q1-Q10 答复后追加，**未修改** §1-§7 任何既有内容；新增用例已追加在 §3 各模块表格末尾。
+
+### 8.1 Q1-Q10 决策摘要
+
+| Q | 决策摘要 | 关联 TC |
+|:--:|---------|:-------:|
+| Q1 | `role()` 在 record 内硬编码常量；Jackson 按 `type` discriminator 反序列化，不触发 `role()` 方法 | TC-LOOP-012 |
+| Q2 | 截断标记固定前缀 `[truncated:` + 后缀 ` bytes omitted]`，中间为被丢弃**字节数** | TC-TOOL-005 |
+| Q3 | memory 字符串拼入 system prompt（**不是**独立 system）；压缩保留含 memory 的 system message；MEMORY.md 文件本身压缩不触碰 | TC-MEM-014 |
+| Q4 | List 字段分两类：安全敏感字段**追加**（destructiveCommands / sanitizeEnv.patterns / sensitivePathPatterns）；普通字段**覆盖** | TC-CFG-004a / TC-CFG-004b |
+| Q5 | sync flush 时机：`execute() -> appendToolResult -> syncFlush -> FileChannel.force(true)`；崩溃窗口 < 10ms | TC-SESS-008 |
+| Q6 | AbortSignal 检查频率 **1 秒**；用 `LockSupport.parkNanos(1_000_000_000L)` 替代 `Thread.sleep` | TC-INT-005 |
+| Q7 | JLine3 降级三级方案：① `TerminalBuilder.jna(true)` 抛异常 -> 原生 Console；② `MSYSTEM` 非空 + `TERM` 非 xterm -> WARN 降级；③ config `repl.forceNativeConsole=true` -> 直接 `System.console()`。优先级 1 > 3 > 2 | TC-INT-006 |
+| Q8 | v0.1 默认 60s 够 chat；建议预留 `provider.perModel.<modelId>.firstTokenTimeoutSec` 覆盖结构 | TC-PROV-019 |
+| Q9 | deny 是终态不可覆盖；新增 `denyCommands` 全局拒绝规则（v0.2 字段） | TC-PERM-015 |
+| Q10 | 重注入 = session 内 LRU 最近 10 个文件，每个前 200 行；用 `Deque<Path>` 实现 | TC-COMP-011 |
+
+### 8.2 答复带来的增量用例（已落地到 §3 表格）
+
+| 新增 TC | 优先级 | 触发问题 | 落地位置 |
+|---------|:------:|:--------:|---------|
+| TC-PROV-019 | P0 | Q8 | §3.1 表格末尾 |
+| TC-CFG-004a | P1 | Q4 | §3.9 表格末尾 |
+| TC-CFG-004b | P1 | Q4 | §3.9 表格末尾 |
+| TC-PERM-015 | P2 | Q9 | §3.5 表格末尾 |
+
+> 用例总数：**196（原作者基线） + 4（新增）= 200 条**。
+
+### 8.3 答复带来的设计文档待更新点（反馈给设计作者）
+
+> 本次答复未触发设计文档实质改动，但下列点建议作者在 design.md 后续修订中固化：
+
+1. §6.4 增补一句："`role()` 在 record 内部硬编码常量，Jackson 不注入。"
+2. §6.5 增补截断标记格式说明（前缀/后缀固定、中间为字节数）。
+3. §9 增补 List 字段合并语义表格（安全敏感追加 / 普通覆盖）。
+4. §10 增补 sync flush 时序图（execute -> append -> syncFlush -> force）。
+5. §11.4 增补 `provider.perModel.<modelId>.firstTokenTimeoutSec` 配置项说明（v0.1 预留）。
+6. §6.2 增补 deny 终态不可覆盖的状态机表格；增补 `denyCommands` v0.2 占位字段。
