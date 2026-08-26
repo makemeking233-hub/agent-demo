@@ -146,4 +146,12 @@ public class SessionStore implements AutoCloseable {
         flushScheduler.shutdown();
         channel.close();
     }
+
+    @Override
+    public String toString() {
+        return "SessionStore{file=" + file
+            + ", lastSyncedOffset=" + lastSyncedOffset.get()
+            + ", batchSize=" + flushBatchSize
+            + ", intervalMs=" + flushIntervalMs + "}";
+    }
 }

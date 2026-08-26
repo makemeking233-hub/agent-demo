@@ -2,9 +2,6 @@ package com.example.agent.permission;
 
 import com.example.agent.tools.Tool;
 
-import java.nio.file.Paths;
-import java.util.regex.Pattern;
-
 /**
  * 权限裁决管理器（详见 design.md §6.5）。
  *
@@ -14,11 +11,14 @@ import java.util.regex.Pattern;
  *   <li>按 tool 类型查默认策略（read/write/shell）</li>
  * </ol>
  *
- * <p>Q9 决议：Tool.checkPermissions 返回 deny 是终态，由 PermissionManager 调用 tool 层方法处理；
+ * <p>Q9 决议：Tool.checkPermissions 返回 deny 是终态，由本类调用 tool 层方法处理；
  * 本类当前 v0.1 仅做 1+2 两步。
+ *
+ * <p>路径匹配逻辑抽到 {@link PermissionPathMatcher}，本类专注策略。
  */
 public class PermissionManager {
     private final PermissionPolicy policy;
+    private final PermissionPathMatcher pathMatcher;
 
     public PermissionManager() {
         this(PermissionPolicy.defaults());
@@ -26,12 +26,13 @@ public class PermissionManager {
 
     public PermissionManager(PermissionPolicy policy) {
         this.policy = policy;
+        this.pathMatcher = new PermissionPathMatcher(policy.sensitivePathPatterns());
     }
 
     /** 主裁决方法 */
     public PermissionDecision decide(String toolName, Object input, Tool.ToolContext ctx) {
         String path = extractPath(input);
-        if (path != null && matchesSensitivePath(path)) {
+        if (path != null && pathMatcher.matches(path)) {
             return PermissionDecision.ask();
         }
         return switch (toolName) {
@@ -54,25 +55,7 @@ public class PermissionManager {
             if (input instanceof com.example.agent.tools.WriteFileTool.Input i) return i.path();
             if (input instanceof com.example.agent.tools.EditFileTool.Input i) return i.path();
             if (input instanceof com.example.agent.tools.LsTool.Input i) return i.path();
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) { /* instanceof 不会抛，防御性 */ }
         return null;
-    }
-
-    /** Ant 风格 glob 转正则：双星跨段、单星不跨段、连续双星斜杠可为空。 */
-    private boolean matchesSensitivePath(String path) {
-        String normalized = Paths.get(path).toString().replace('\\', '/');
-        for (String glob : policy.sensitivePathPatterns()) {
-            String regex = "^" + glob
-                .replace("\\", "\\\\")
-                .replace(".", "\\.")
-                .replace("**/", "::DOUBLESLASH::")
-                .replace("**", ".*")
-                .replace("*", "[^/]*")
-                .replace("::DOUBLESLASH::", "(?:.*/)?") + "$";
-            if (Pattern.matches(regex, normalized)) {
-                return true;
-            }
-        }
-        return false;
     }
 }

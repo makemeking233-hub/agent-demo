@@ -38,6 +38,7 @@ public class MemoryDir {
     public Path indexFile() { return dir.resolve("MEMORY.md"); }
     public Path entryFile(String filename) { return dir.resolve(filename); }
 
+    /** 列出 memory 目录下的单条记忆文件（排除 MEMORY.md 索引文件）。 */
     public Stream<Path> listEntries() throws IOException {
         return Files.list(dir).filter(p -> !p.getFileName().toString().equals("MEMORY.md"));
     }
@@ -59,5 +60,11 @@ public class MemoryDir {
         }
         sb.append("\n[... index truncated ...]\n");
         return sb.toString();
+    }
+
+    @Override
+    public String toString() {
+        return "MemoryDir{path=" + dir + ", maxIndexLines=" + MAX_INDEX_LINES
+            + ", maxIndexBytes=" + MAX_INDEX_BYTES + "}";
     }
 }

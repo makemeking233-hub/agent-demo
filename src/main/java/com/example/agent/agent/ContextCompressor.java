@@ -140,4 +140,11 @@ public class ContextCompressor {
         log.warn("PTL fallback not implemented in v0.1: {}", e.toString());
         return Mono.error(e);
     }
+
+    @Override
+    public String toString() {
+        return "ContextCompressor{buffer=" + autoCompactBuffer
+            + ", maxFailures=" + maxConsecutiveFailures
+            + ", summaryModel=" + summaryModel + "}";
+    }
 }

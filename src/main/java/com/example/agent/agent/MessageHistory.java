@@ -84,4 +84,12 @@ public class MessageHistory {
     }
 
     public record ToolResultEnvelope(String toolCallId, String content, boolean isError) {}
+
+    @Override
+    public String toString() {
+        return "MessageHistory{size=" + messages.size()
+            + ", estTokens=" + estimateTokens()
+            + ", compactFailures=" + compactFailures.get()
+            + ", recentFiles=" + recentFileContents.size() + "}";
+    }
 }
