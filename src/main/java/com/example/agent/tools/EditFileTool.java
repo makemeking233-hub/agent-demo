@@ -6,6 +6,7 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 
@@ -13,13 +14,15 @@ import java.util.Map;
  * 字符串替换编辑（oldText 必须精确匹配且唯一出现）。
  *
  * <p>权限：默认 ask。多次匹配时报错（避免歧义替换，详见 test-design.md R11 决议）。
- * v0.1 无原子写——失败时可能留下部分写入的文件。
+ *
+ * <p>v0.2 起改为原子写：先写到 {@code target.tmp}，再 {@code Files.move} 覆盖原文件。
+ * 失败时原文件保持不变（要么旧版本，要么新版本，不会半截写入）。
  */
 public class EditFileTool implements Tool<EditFileTool.Input, String> {
     public record Input(String path, String oldText, String newText) {}
 
     @Override public String name() { return "EditFile"; }
-    @Override public String description() { return "字符串替换编辑（oldText 必须精确且唯一）"; }
+    @Override public String description() { return "字符串替换编辑（oldText 必须精确且唯一；原子写）"; }
     @Override public Map<String, Object> inputSchema() {
         return Map.of("type", "object",
             "properties", Map.of(
@@ -45,26 +48,34 @@ public class EditFileTool implements Tool<EditFileTool.Input, String> {
     public Mono<ToolResult<String>> execute(Input input, ToolContext ctx) {
         return Mono.fromCallable(() -> {
             Path base = ctx.workingDirectory();
-            Path p = base.resolve(input.path()).normalize();
-            if (!p.startsWith(base)) {
+            Path target = base.resolve(input.path()).normalize();
+            if (!target.startsWith(base)) {
                 return ToolResult.<String>error("路径越界: " + input.path());
             }
+            Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
             try {
-                String content = Files.readString(p, StandardCharsets.UTF_8);
+                String content = Files.readString(target, StandardCharsets.UTF_8);
                 int firstIdx = content.indexOf(input.oldText());
                 if (firstIdx < 0) {
                     return ToolResult.<String>error("未找到 oldText");
                 }
                 int lastIdx = content.lastIndexOf(input.oldText());
                 if (firstIdx != lastIdx) {
-                    return ToolResult.<String>error("found " + (content.split(java.util.regex.Pattern.quote(input.oldText()), -1).length - 1)
-                        + " matches, expected 1");
+                    int matches = content.split(java.util.regex.Pattern.quote(input.oldText()), -1).length - 1;
+                    return ToolResult.<String>error("found " + matches + " matches, expected 1");
                 }
                 String updated = content.substring(0, firstIdx) + input.newText()
                     + content.substring(firstIdx + input.oldText().length());
-                Files.writeString(p, updated);
-                return ToolResult.ok("已编辑 " + p, "<auto>");
+
+                // 原子写：先写 .tmp，再 move 覆盖
+                Files.writeString(tmp, updated, StandardCharsets.UTF_8);
+                Files.move(tmp, target,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+                return ToolResult.ok("已编辑 " + target, "<auto>");
             } catch (Exception e) {
+                // 清理残留 .tmp
+                try { Files.deleteIfExists(tmp); } catch (Exception ignored) {}
                 return ToolResult.<String>error("编辑失败: " + e.getMessage());
             }
         });
