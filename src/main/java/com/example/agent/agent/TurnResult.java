@@ -9,8 +9,4 @@ package com.example.agent.agent;
  * @param toolCallCount 工具调用总次数
  */
 public record TurnResult(
-    String finalMessage,
-    int totalPromptTokens,
-    int totalCompletionTokens,
-    int toolCallCount
-) {}
+    String finalMessage, int totalPromptTokens, int totalCompletionTokens, int toolCallCount) {}

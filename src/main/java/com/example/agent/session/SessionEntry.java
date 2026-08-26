@@ -21,68 +21,93 @@ public record SessionEntry(
     String parentUuid,
     String content,
     Map<String, Object> extras,
-    long timestamp
-) {
-    /**
-     * 构造 user 输入条目。
-     * @param content 用户消息内容
-     * @param parent 父条目 UUID（可空）
-     * @return 新 user 条目
-     */
-    public static SessionEntry user(String content, UUID parent) {
-        return new SessionEntry("user", UUID.randomUUID().toString(),
-            parent == null ? null : parent.toString(),
-            content, null, System.currentTimeMillis());
-    }
+    long timestamp) {
+  /**
+   * 构造 user 输入条目。
+   *
+   * @param content 用户消息内容
+   * @param parent 父条目 UUID（可空）
+   * @return 新 user 条目
+   */
+  public static SessionEntry user(String content, UUID parent) {
+    return new SessionEntry(
+        "user",
+        UUID.randomUUID().toString(),
+        parent == null ? null : parent.toString(),
+        content,
+        null,
+        System.currentTimeMillis());
+  }
 
-    /**
-     * 构造 assistant 回复条目（含可选 tool_calls）。
-     * @param content 模型回复内容
-     * @param toolCalls 工具调用列表（可空）
-     * @param parent 父条目 UUID（可空）
-     * @return 新 assistant 条目
-     */
-    public static SessionEntry assistant(String content, java.util.List<?> toolCalls, UUID parent) {
-        return new SessionEntry("assistant", UUID.randomUUID().toString(),
-            parent == null ? null : parent.toString(),
-            content, java.util.Map.of("toolCalls", toolCalls), System.currentTimeMillis());
-    }
+  /**
+   * 构造 assistant 回复条目（含可选 tool_calls）。
+   *
+   * @param content 模型回复内容
+   * @param toolCalls 工具调用列表（可空）
+   * @param parent 父条目 UUID（可空）
+   * @return 新 assistant 条目
+   */
+  public static SessionEntry assistant(String content, java.util.List<?> toolCalls, UUID parent) {
+    return new SessionEntry(
+        "assistant",
+        UUID.randomUUID().toString(),
+        parent == null ? null : parent.toString(),
+        content,
+        java.util.Map.of("toolCalls", toolCalls),
+        System.currentTimeMillis());
+  }
 
-    /**
-     * 构造 tool_result 条目（回流给模型）。
-     * @param toolCallId 关联的工具调用 ID
-     * @param content 工具输出内容
-     * @param isError 是否为错误结果
-     * @param parent 父条目 UUID（可空）
-     * @return 新 tool_result 条目
-     */
-    public static SessionEntry toolResult(String toolCallId, String content, boolean isError, UUID parent) {
-        return new SessionEntry("tool_result", UUID.randomUUID().toString(),
-            parent == null ? null : parent.toString(),
-            content, java.util.Map.of("toolCallId", toolCallId, "isError", isError),
-            System.currentTimeMillis());
-    }
+  /**
+   * 构造 tool_result 条目（回流给模型）。
+   *
+   * @param toolCallId 关联的工具调用 ID
+   * @param content 工具输出内容
+   * @param isError 是否为错误结果
+   * @param parent 父条目 UUID（可空）
+   * @return 新 tool_result 条目
+   */
+  public static SessionEntry toolResult(
+      String toolCallId, String content, boolean isError, UUID parent) {
+    return new SessionEntry(
+        "tool_result",
+        UUID.randomUUID().toString(),
+        parent == null ? null : parent.toString(),
+        content,
+        java.util.Map.of("toolCallId", toolCallId, "isError", isError),
+        System.currentTimeMillis());
+  }
 
-    /**
-     * 构造 system 条目。
-     * @param content system prompt 内容
-     * @param parent 父条目 UUID（可空）
-     * @return 新 system 条目
-     */
-    public static SessionEntry system(String content, UUID parent) {
-        return new SessionEntry("system", UUID.randomUUID().toString(),
-            parent == null ? null : parent.toString(),
-            content, null, System.currentTimeMillis());
-    }
+  /**
+   * 构造 system 条目。
+   *
+   * @param content system prompt 内容
+   * @param parent 父条目 UUID（可空）
+   * @return 新 system 条目
+   */
+  public static SessionEntry system(String content, UUID parent) {
+    return new SessionEntry(
+        "system",
+        UUID.randomUUID().toString(),
+        parent == null ? null : parent.toString(),
+        content,
+        null,
+        System.currentTimeMillis());
+  }
 
-    /**
-     * 构造 meta 条目（用于 token 累计、模型信息等元数据）。
-     * @param key 元数据键
-     * @param value 元数据值
-     * @return 新 meta 条目
-     */
-    public static SessionEntry meta(String key, Object value) {
-        return new SessionEntry("meta", UUID.randomUUID().toString(), null,
-            null, java.util.Map.of("key", key, "value", value), System.currentTimeMillis());
-    }
+  /**
+   * 构造 meta 条目（用于 token 累计、模型信息等元数据）。
+   *
+   * @param key 元数据键
+   * @param value 元数据值
+   * @return 新 meta 条目
+   */
+  public static SessionEntry meta(String key, Object value) {
+    return new SessionEntry(
+        "meta",
+        UUID.randomUUID().toString(),
+        null,
+        null,
+        java.util.Map.of("key", key, "value", value),
+        System.currentTimeMillis());
+  }
 }

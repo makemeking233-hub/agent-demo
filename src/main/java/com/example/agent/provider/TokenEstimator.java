@@ -12,16 +12,17 @@ import com.knuddels.jtokkit.api.EncodingType;
  * <p>v0.2 改进：校准系数（在 {@code DeepSeekProviderTest} 测真实 usage vs 估算值，偏差 &gt; 5% 时引入）。
  */
 public class TokenEstimator {
-    private final Encoding encoding = Encodings.newDefaultEncodingRegistry()
-        .getEncoding(EncodingType.CL100K_BASE);
+  private final Encoding encoding =
+      Encodings.newDefaultEncodingRegistry().getEncoding(EncodingType.CL100K_BASE);
 
-    /**
-     * 估算单段文本的 token 数。
-     * @param text 待估算文本，{@code null} 或空串返回 0
-     * @return token 数
-     */
-    public int estimate(String text) {
-        if (text == null || text.isEmpty()) return 0;
-        return encoding.countTokens(text);
-    }
+  /**
+   * 估算单段文本的 token 数。
+   *
+   * @param text 待估算文本，{@code null} 或空串返回 0
+   * @return token 数
+   */
+  public int estimate(String text) {
+    if (text == null || text.isEmpty()) return 0;
+    return encoding.countTokens(text);
+  }
 }

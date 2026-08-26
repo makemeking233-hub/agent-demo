@@ -17,3 +17,6 @@ Thumbs.db
 
 # Backup / corrupt files
 docs/test-design.md.corrupt.bak
+
+# Local tools (e.g. google-java-format jar for manual formatting)
+tools/
