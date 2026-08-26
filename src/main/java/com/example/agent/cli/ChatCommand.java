@@ -10,10 +10,12 @@ import com.example.agent.config.AgentConfig;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.permission.PermissionManager;
 import com.example.agent.provider.LlmProvider;
-import com.example.agent.provider.deepseek.DeepSeekProvider;
 import com.example.agent.provider.TokenEstimator;
+import com.example.agent.provider.deepseek.DeepSeekProvider;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.ToolRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -45,6 +47,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
     mixinStandardHelpOptions = true,
     description = "启动交互式 REPL，进入多轮对话")
 public class ChatCommand implements Runnable {
+    private static final Logger log = LoggerFactory.getLogger(ChatCommand.class);
+
+    /** 默认 API base URL（DeepSeek 官方） */
+    private static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
+    /** 默认单轮工具调用上限（与 Claude Code 对齐） */
+    private static final int DEFAULT_MAX_TOOL_ITERATIONS = 25;
 
     @Option(names = {"--model"}, description = "覆盖默认模型")
     String model;
@@ -63,13 +71,11 @@ public class ChatCommand implements Runnable {
 
     @Override
     public void run() {
-        AgentConfig cfg = new ConfigLoader().load(Paths.get(System.getProperty("user.home"), ".agent-demo", "config.yaml"));
-
-        // API key 优先级：--api-key > env > config
+        AgentConfig cfg = loadConfig();
         String resolvedKey = pickFirstNonBlank(apiKey, System.getenv("DEEPSEEK_API_KEY"), cfg.provider().apiKey());
         String resolvedModel = pickFirstNonBlank(model, System.getenv("AGENT_MODEL"), cfg.provider().model());
         String baseUrl = pickFirstNonBlank(System.getenv("DEEPSEEK_BASE_URL"), cfg.provider().baseUrl());
-        if (baseUrl == null || baseUrl.isBlank()) baseUrl = "https://api.deepseek.com";
+        if (baseUrl == null || baseUrl.isBlank()) baseUrl = DEFAULT_BASE_URL;
 
         LlmProvider provider = new DeepSeekProvider(resolvedKey, baseUrl);
         TokenEstimator estimator = new TokenEstimator();
@@ -77,49 +83,46 @@ public class ChatCommand implements Runnable {
         ToolRegistry tools = new ToolRegistry();
         ToolRegistry.registerMemoryTools(tools);
         StreamingPrinter printer = new StreamingPrinter();
+        PermissionManager perms = new PermissionManager();  // v0.1 占位：autoApproveWrite 行为后续完善
 
-        // 权限管理器（v0.1 简化版：auto-approve 时所有写都 allow）
-        PermissionManager perms = new PermissionManager();
-        if (autoApproveWrite) {
-            // 注：当前 PermissionManager 默认对 write/ask；autoApproveWrite v0.1 仅是占位，
-            // 真"自动批准"在 v0.2 通过 PermissionManager.decide() override 实现
-        }
-
-        // 上下文压缩
         ContextCompressor compressor = new ContextCompressor(provider,
             cfg.context().compactBuffer(),
             cfg.context().maxConsecutiveCompactFailures(),
             resolvedModel);
 
         Path workingDir = Paths.get(System.getProperty("user.dir"));
-        AgentLoop loop = new AgentLoop(provider, tools, histRef[0], printer, 25,
-            resolvedModel, workingDir);
+        AgentLoop loop = new AgentLoop(provider, tools, histRef[0], printer,
+            DEFAULT_MAX_TOOL_ITERATIONS, resolvedModel, workingDir);
 
-        // 中断信号（v0.1 简化：JVM 关闭 hook）
         AtomicBoolean aborted = new AtomicBoolean(false);
         AbortSignal abortSignal = () -> aborted.get();
-
-        // Slash 命令
         SlashCommand slash = new SlashCommand();
         int[] totalPrompt = {0};
         int[] totalCompletion = {0};
 
-        // stdin 处理（--input 一次性注入用于 E2E 测试）
+        runReplLoop(histRef, estimator, loop, slash, totalPrompt, totalCompletion, resolvedModel, aborted);
+    }
+
+    /** 加载用户 config（拆出来降低 run() 嵌套/行数，规范 14） */
+    private AgentConfig loadConfig() {
+        Path cfgPath = Paths.get(System.getProperty("user.home"), ".agent-demo", "config.yaml");
+        return new ConfigLoader().load(cfgPath);
+    }
+
+    /** REPL 主循环：读 stdin → 调 SlashCommand 或 AgentLoop（拆出来降低 run() 行数） */
+    private void runReplLoop(MessageHistory[] histRef, TokenEstimator estimator,
+                             AgentLoop loop, SlashCommand slash,
+                             int[] totalPrompt, int[] totalCompletion, String resolvedModel,
+                             AtomicBoolean aborted) {
         InputStream stdin = injectedInput != null
             ? new ByteArrayInputStream(injectedInput.getBytes(StandardCharsets.UTF_8))
             : System.in;
-
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stdin, StandardCharsets.UTF_8))) {
             System.out.println("agent-demo v0.1 chat (model=" + resolvedModel + ")，输入 /help 查看命令，/quit 退出");
             String line;
             while ((line = reader.readLine()) != null && !aborted.get()) {
                 if (line.isBlank()) continue;
-                if (slash.dispatch(line, histRef[0], totalPrompt, totalCompletion, resolvedModel,
-                        () -> {
-                            MessageHistory fresh = new MessageHistory(estimator);
-                            histRef[0] = fresh;
-                            loop.setHistory(fresh);
-                        })) {
+                if (handleLine(line, histRef, estimator, loop, slash, totalPrompt, totalCompletion, resolvedModel)) {
                     continue;
                 }
                 TurnResult result = loop.processTurn(new Message.User(line)).block();
@@ -129,8 +132,20 @@ public class ChatCommand implements Runnable {
                 }
             }
         } catch (IOException e) {
-            System.err.println("[chat] 读取输入失败: " + e.getMessage());
+            log.error("[chat] 读取输入失败", e);
         }
+    }
+
+    /** 处理单行：slash 命令直接处理；普通输入返回 false 让调用方走 AgentLoop */
+    private boolean handleLine(String line, MessageHistory[] histRef, TokenEstimator estimator,
+                               AgentLoop loop, SlashCommand slash,
+                               int[] totalPrompt, int[] totalCompletion, String resolvedModel) {
+        return slash.dispatch(line, histRef[0], totalPrompt, totalCompletion, resolvedModel,
+            () -> {
+                MessageHistory fresh = new MessageHistory(estimator);
+                histRef[0] = fresh;
+                loop.setHistory(fresh);
+            });
     }
 
     private static String pickFirstNonBlank(String... candidates) {

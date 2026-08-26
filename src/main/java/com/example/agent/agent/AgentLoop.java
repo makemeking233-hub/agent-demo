@@ -34,6 +34,13 @@ import java.util.List;
 public class AgentLoop {
     private static final Logger log = LoggerFactory.getLogger(AgentLoop.class);
 
+    /** 默认模型（v0.1 单 provider；从 cfg 传入覆盖） */
+    private static final String DEFAULT_MODEL = "deepseek-chat";
+    /** 默认 temperature（DeepSeek 推荐 1.0） */
+    private static final double DEFAULT_TEMPERATURE = 1.0;
+    /** 默认 max_tokens（DeepSeek-chat 上限 8192） */
+    private static final int DEFAULT_MAX_TOKENS = 8192;
+
     private final LlmProvider provider;
     private final ToolRegistry tools;
     private final Tool.ToolContext toolContext;
@@ -95,7 +102,10 @@ public class AgentLoop {
             specs.add(new ToolSpec(t.name(), t.description(), t.inputSchema()));
         }
         List<com.example.agent.agent.Message> msgs = new ArrayList<>(history.all());
-        return new ChatRequest(model, null, msgs, specs, 1.0, 8192, null);
+        return new ChatRequest(
+            model != null ? model : DEFAULT_MODEL,
+            null, msgs, specs,
+            DEFAULT_TEMPERATURE, DEFAULT_MAX_TOKENS, null);
     }
 
     private void printChunk(StreamChunk chunk) {

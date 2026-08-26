@@ -26,6 +26,13 @@ import java.util.Optional;
 public class ContextCompressor {
     private static final Logger log = LoggerFactory.getLogger(ContextCompressor.class);
 
+    /** summary 请求 temperature（低温度保证稳定摘要，详见 design.md §8.2） */
+    private static final double SUMMARY_TEMPERATURE = 0.3;
+    /** summary 输出 token 上限（与 summarize.txt 第 5 条约束一致） */
+    private static final int SUMMARY_MAX_TOKENS = 2000;
+    /** summary 失败的熔断阈值 */
+    private static final int DEFAULT_MAX_FAILURES = 3;
+
     private final LlmProvider provider;
     private final int autoCompactBuffer;
     private final int maxConsecutiveFailures;
@@ -64,7 +71,9 @@ public class ContextCompressor {
 
     private Mono<String> requestSummary(MessageHistory hist) {
         String prompt = loadPrompt().replace("[消息历史 JSONL]", serializeHistory(hist));
-        ChatRequest req = new ChatRequest(summaryModel, prompt, List.of(), List.of(), 0.3, 2000,
+        ChatRequest req = new ChatRequest(
+            summaryModel, prompt, List.of(), List.of(),
+            SUMMARY_TEMPERATURE, SUMMARY_MAX_TOKENS,
             Map.of("stream_options", Map.of("include_usage", true)));
 
         return provider.streamChat(req)
