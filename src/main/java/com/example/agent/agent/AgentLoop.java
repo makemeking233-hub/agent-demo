@@ -1,5 +1,6 @@
 package com.example.agent.agent;
 
+import com.example.agent.permission.PermissionManager;
 import com.example.agent.provider.ChatRequest;
 import com.example.agent.provider.LlmProvider;
 import com.example.agent.provider.StreamChunk;
@@ -14,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +27,8 @@ import java.util.List;
  *   <li>{@code maxToolIterations} 强制熔断，防止模型/工具诱导无限循环（§7）</li>
  *   <li>assistant(tool_calls) 必须先入 history，再 append tool_results（§7 消息顺序约束）</li>
  *   <li>流式打印统一在 {@link #printChunk} 内部，processTurn 外层不再打印（避免双打）</li>
+ *   <li>history 字段 mutable，{@link #setHistory} 支持 /clear 切换（详见 ChatCommand）</li>
+ *   <li>所有工具调用共享 {@link #toolContext}（含 workingDirectory + PermissionManager + AbortSignal）</li>
  * </ul>
  */
 public class AgentLoop {
@@ -32,18 +36,27 @@ public class AgentLoop {
 
     private final LlmProvider provider;
     private final ToolRegistry tools;
-    private final MessageHistory history;
+    private final Tool.ToolContext toolContext;
+    private volatile MessageHistory history;
     private final StreamingPrinter printer;
     private final int maxToolIterations;
+    private final String model;
 
     public AgentLoop(LlmProvider provider, ToolRegistry tools,
                      MessageHistory history, StreamingPrinter printer,
-                     int maxToolIterations) {
+                     int maxToolIterations, String model, Path workingDir) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
         this.printer = printer;
         this.maxToolIterations = maxToolIterations;
+        this.model = model;
+        this.toolContext = new Tool.ToolContext(workingDir, new PermissionManager(), () -> false);
+    }
+
+    /** /clear 时切换历史容器（详见 ChatCommand） */
+    public void setHistory(MessageHistory history) {
+        this.history = history;
     }
 
     public Mono<TurnResult> processTurn(Message.User userMsg) {
@@ -82,7 +95,7 @@ public class AgentLoop {
             specs.add(new ToolSpec(t.name(), t.description(), t.inputSchema()));
         }
         List<com.example.agent.agent.Message> msgs = new ArrayList<>(history.all());
-        return new ChatRequest("deepseek-chat", null, msgs, specs, 1.0, 8192, null);
+        return new ChatRequest(model, null, msgs, specs, 1.0, 8192, null);
     }
 
     private void printChunk(StreamChunk chunk) {
@@ -109,7 +122,7 @@ public class AgentLoop {
         return new Message.Assistant(content.toString(), calls);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings("unchecked")
     private Flux<List<ToolResult<Object>>> executeTools(List<ToolCall> calls) {
         return Flux.fromIterable(calls).flatMap(call -> {
             Tool tool = tools.getRaw(call.name());
@@ -117,9 +130,8 @@ public class AgentLoop {
                 ToolResult<Object> err = ToolResult.<Object>error("工具不存在: " + call.name());
                 return Mono.just(List.of(err));
             }
-            return tool.execute(call.argumentsJson(), null)
+            return tool.execute(call.argumentsJson(), toolContext)
                 .map(r -> {
-                    @SuppressWarnings("unchecked")
                     ToolResult<Object> typed = (ToolResult<Object>) r;
                     return List.of(typed);
                 })

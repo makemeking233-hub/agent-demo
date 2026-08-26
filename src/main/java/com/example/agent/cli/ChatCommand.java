@@ -73,7 +73,7 @@ public class ChatCommand implements Runnable {
 
         LlmProvider provider = new DeepSeekProvider(resolvedKey, baseUrl);
         TokenEstimator estimator = new TokenEstimator();
-        MessageHistory history = new MessageHistory(estimator);
+        MessageHistory[] histRef = {new MessageHistory(estimator)};
         ToolRegistry tools = new ToolRegistry();
         ToolRegistry.registerMemoryTools(tools);
         StreamingPrinter printer = new StreamingPrinter();
@@ -91,7 +91,9 @@ public class ChatCommand implements Runnable {
             cfg.context().maxConsecutiveCompactFailures(),
             resolvedModel);
 
-        AgentLoop loop = new AgentLoop(provider, tools, history, printer, 25);
+        Path workingDir = Paths.get(System.getProperty("user.dir"));
+        AgentLoop loop = new AgentLoop(provider, tools, histRef[0], printer, 25,
+            resolvedModel, workingDir);
 
         // 中断信号（v0.1 简化：JVM 关闭 hook）
         AtomicBoolean aborted = new AtomicBoolean(false);
@@ -101,7 +103,6 @@ public class ChatCommand implements Runnable {
         SlashCommand slash = new SlashCommand();
         int[] totalPrompt = {0};
         int[] totalCompletion = {0};
-        MessageHistory[] histRef = {history};  // 用数组让 lambda 能修改
 
         // stdin 处理（--input 一次性注入用于 E2E 测试）
         InputStream stdin = injectedInput != null
@@ -114,7 +115,11 @@ public class ChatCommand implements Runnable {
             while ((line = reader.readLine()) != null && !aborted.get()) {
                 if (line.isBlank()) continue;
                 if (slash.dispatch(line, histRef[0], totalPrompt, totalCompletion, resolvedModel,
-                        () -> { histRef[0] = new MessageHistory(estimator); })) {
+                        () -> {
+                            MessageHistory fresh = new MessageHistory(estimator);
+                            histRef[0] = fresh;
+                            loop.setHistory(fresh);
+                        })) {
                     continue;
                 }
                 TurnResult result = loop.processTurn(new Message.User(line)).block();

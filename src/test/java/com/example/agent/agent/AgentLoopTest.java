@@ -45,7 +45,8 @@ class AgentLoopTest {
         when(tools.list()).thenReturn(List.of(fakeTool));
 
         MessageHistory hist = new MessageHistory(new TokenEstimator());
-        AgentLoop loop = new AgentLoop(provider, tools, hist, new StreamingPrinter(), 3);
+        AgentLoop loop = new AgentLoop(provider, tools, hist, new StreamingPrinter(), 3,
+            "deepseek-chat", java.nio.file.Paths.get("."));
 
         StepVerifier.create(loop.processTurn(new Message.User("go")))
             .expectError(MaxIterationsExceededException.class)
@@ -66,7 +67,8 @@ class AgentLoopTest {
         when(tools.list()).thenReturn(List.of());
 
         MessageHistory hist = new MessageHistory(new TokenEstimator());
-        AgentLoop loop = new AgentLoop(provider, tools, hist, new StreamingPrinter(), 25);
+        AgentLoop loop = new AgentLoop(provider, tools, hist, new StreamingPrinter(), 25,
+            "deepseek-chat", java.nio.file.Paths.get("."));
 
         TurnResult result = loop.processTurn(new Message.User("hi")).block();
         assertEquals("你好，有什么可以帮你的？", result.finalMessage());
@@ -94,7 +96,8 @@ class AgentLoopTest {
         when(tools.list()).thenReturn(List.of());
 
         MessageHistory hist = new MessageHistory(new TokenEstimator());
-        AgentLoop loop = new AgentLoop(provider, tools, hist, new StreamingPrinter(), 25);
+        AgentLoop loop = new AgentLoop(provider, tools, hist, new StreamingPrinter(), 25,
+            "deepseek-chat", java.nio.file.Paths.get("."));
 
         TurnResult result = loop.processTurn(new Message.User("hi")).block();
         assertEquals("done", result.finalMessage());
