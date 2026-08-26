@@ -44,6 +44,7 @@ public class SessionStore implements AutoCloseable {
     private final long flushIntervalMs;
     private final ObjectMapper json = new ObjectMapper();
     private final FileChannel channel;
+    private final Object writeLock = new Object();
     private final AtomicLong lastSyncedOffset = new AtomicLong(0);
     private volatile boolean closed = false;
 
@@ -81,7 +82,9 @@ public class SessionStore implements AutoCloseable {
     public void syncFlush() {
         List<SessionEntry> drained = new ArrayList<>();
         queue.drainTo(drained);
-        writeIfAny(drained);
+        synchronized (writeLock) {
+            writeIfAny(drained);
+        }
     }
 
     private void flushAsync() {
@@ -89,7 +92,9 @@ public class SessionStore implements AutoCloseable {
         List<SessionEntry> drained = new ArrayList<>();
         queue.drainTo(drained);
         try {
-            writeIfAny(drained);
+            synchronized (writeLock) {
+                writeIfAny(drained);
+            }
         } catch (Exception e) {
             log.warn("async flush failed", e);
             System.err.println("[agent-demo] session flush 失败: " + e.getMessage());
@@ -106,7 +111,11 @@ public class SessionStore implements AutoCloseable {
             while (buf.hasRemaining()) channel.write(buf);
             channel.force(true);
             lastSyncedOffset.addAndGet(bytes.length);
-        } catch (IOException e) {
+        } catch (Exception e) {   // IOException + JsonProcessingException + RuntimeException
+            log.warn("写盘失败，entries 已重入队首", e);
+            for (int i = entries.size() - 1; i >= 0; i--) {
+                queue.offer(entries.get(i));
+            }
             throw new RuntimeException("写盘失败", e);
         }
     }
