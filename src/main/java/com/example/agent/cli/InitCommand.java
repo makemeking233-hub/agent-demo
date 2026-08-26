@@ -3,6 +3,8 @@ package com.example.agent.cli;
 import com.example.agent.config.AgentConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -17,6 +19,10 @@ import java.util.EnumSet;
  */
 @Command(name = "init", description = "在 ~/.agent-demo/ 生成默认 config.yaml")
 public class InitCommand implements Runnable {
+    private static final Logger log = LoggerFactory.getLogger(InitCommand.class);
+
+    /** 需要创建的子目录清单 */
+    private static final String[] SUBDIRS = {"memory", "sessions", "cache", "logs"};
 
     @Option(names = "--home", description = "覆盖 home 目录（测试用）")
     String homeOverride;
@@ -31,7 +37,7 @@ public class InitCommand implements Runnable {
             Files.createDirectories(home);
             trySetPosixPermissions(home, "rwx------");
 
-            for (String sub : new String[]{"memory", "sessions", "cache", "logs"}) {
+            for (String sub : SUBDIRS) {
                 Path p = home.resolve(sub);
                 Files.createDirectories(p);
                 trySetPosixPermissions(p, "rwx------");
@@ -39,14 +45,15 @@ public class InitCommand implements Runnable {
 
             Path cfg = home.resolve("config.yaml");
             if (Files.exists(cfg) && !force) {
-                System.err.println("[init] 配置已存在: " + cfg + "（使用 --force 覆盖）");
+                log.info("[init] 配置已存在: {}（需要 --force 覆盖）", cfg);
                 return;
             }
             ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
             yaml.writeValue(cfg.toFile(), AgentConfig.defaults());
             trySetPosixPermissions(cfg, "rw-------");
-            System.out.println("[init] 已生成: " + cfg);
+            log.info("[init] 已生成: {}", cfg);
         } catch (Exception e) {
+            log.error("[init] 生成配置失败", e);
             throw new RuntimeException(e);
         }
     }
@@ -70,9 +77,9 @@ public class InitCommand implements Runnable {
             if (mode.contains("w")) set.add(PosixFilePermission.OWNER_WRITE);
             if (mode.contains("x")) set.add(PosixFilePermission.OWNER_EXECUTE);
             Files.setPosixFilePermissions(p, set);
-        } catch (UnsupportedOperationException ignored) { /* Windows */ }
+        } catch (UnsupportedOperationException ignored) { /* Windows 不支持 POSIX */ }
         catch (Exception e) {
-            System.err.println("[init] 设置权限失败: " + p + " - " + e.getMessage());
+            log.warn("[init] 设置权限失败: {} - {}", p, e.getMessage());
         }
     }
 }

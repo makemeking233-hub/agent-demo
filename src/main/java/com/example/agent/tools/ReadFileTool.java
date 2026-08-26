@@ -1,6 +1,8 @@
 package com.example.agent.tools;
 
 import com.example.agent.permission.PermissionDecision;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.io.IOException;
@@ -17,6 +19,8 @@ import java.util.Map;
  * <p>权限：默认 allow；路径含 {@code ..} 一律 deny（防止路径越界）。
  */
 public class ReadFileTool implements Tool<ReadFileTool.Input, String> {
+    private static final Logger log = LoggerFactory.getLogger(ReadFileTool.class);
+
     public record Input(String path) {}
 
     @Override public String name() { return "ReadFile"; }
@@ -57,9 +61,11 @@ public class ReadFileTool implements Tool<ReadFileTool.Input, String> {
                         new String(Files.readAllBytes(p), java.nio.charset.Charset.forName("GBK")),
                         "<auto>");
                 } catch (IOException ex) {
+                    log.warn("UTF-8/GBK 都失败: {}", p, ex);
                     return ToolResult.<String>error("UTF-8/GBK 都失败: " + ex.getMessage());
                 }
             } catch (IOException e) {
+                log.warn("读取文件失败: {}", p, e);
                 return ToolResult.<String>error("读取失败: " + e.getMessage());
             }
         });

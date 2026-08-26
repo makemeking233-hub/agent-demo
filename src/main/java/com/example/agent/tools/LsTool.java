@@ -1,6 +1,8 @@
 package com.example.agent.tools;
 
 import com.example.agent.permission.PermissionDecision;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.nio.file.Files;
@@ -15,6 +17,8 @@ import java.util.stream.Collectors;
  * <p>权限：默认 allow；路径含 {@code ..} 一律 deny。
  */
 public class LsTool implements Tool<LsTool.Input, String> {
+    private static final Logger log = LoggerFactory.getLogger(LsTool.class);
+
     public record Input(String path) {}
 
     @Override public String name() { return "Ls"; }
@@ -52,6 +56,7 @@ public class LsTool implements Tool<LsTool.Input, String> {
                     .collect(Collectors.joining("\n"));
                 return ToolResult.ok(listing.isEmpty() ? "(空目录)" : listing, "<auto>");
             } catch (Exception e) {
+                log.warn("列出目录失败: {}", p, e);
                 return ToolResult.<String>error("列出失败: " + e.getMessage());
             }
         });

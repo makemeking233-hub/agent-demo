@@ -1,6 +1,8 @@
 package com.example.agent.tools;
 
 import com.example.agent.permission.PermissionDecision;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.nio.file.Files;
@@ -15,6 +17,8 @@ import java.util.Map;
  * 父目录不存在时自动创建。
  */
 public class WriteFileTool implements Tool<WriteFileTool.Input, String> {
+    private static final Logger log = LoggerFactory.getLogger(WriteFileTool.class);
+
     public record Input(String path, String content) {}
 
     @Override public String name() { return "WriteFile"; }
@@ -51,6 +55,7 @@ public class WriteFileTool implements Tool<WriteFileTool.Input, String> {
                 Files.writeString(p, input.content());
                 return ToolResult.ok("已写入 " + p, "<auto>");
             } catch (Exception e) {
+                log.warn("写入文件失败: {}", p, e);
                 return ToolResult.<String>error("写入失败: " + e.getMessage());
             }
         });

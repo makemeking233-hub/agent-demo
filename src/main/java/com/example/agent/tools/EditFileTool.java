@@ -1,6 +1,8 @@
 package com.example.agent.tools;
 
 import com.example.agent.permission.PermissionDecision;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
@@ -19,6 +21,8 @@ import java.util.Map;
  * 失败时原文件保持不变（要么旧版本，要么新版本，不会半截写入）。
  */
 public class EditFileTool implements Tool<EditFileTool.Input, String> {
+    private static final Logger log = LoggerFactory.getLogger(EditFileTool.class);
+
     public record Input(String path, String oldText, String newText) {}
 
     @Override public String name() { return "EditFile"; }
@@ -74,8 +78,9 @@ public class EditFileTool implements Tool<EditFileTool.Input, String> {
                     StandardCopyOption.ATOMIC_MOVE);
                 return ToolResult.ok("已编辑 " + target, "<auto>");
             } catch (Exception e) {
-                // 清理残留 .tmp
-                try { Files.deleteIfExists(tmp); } catch (Exception ignored) {}
+                log.warn("编辑文件失败: {}", target, e);
+                // 清理残留 .tmp（清理失败不影响主流程）
+                try { Files.deleteIfExists(tmp); } catch (Exception ignored) { /* 清理失败容忍 */ }
                 return ToolResult.<String>error("编辑失败: " + e.getMessage());
             }
         });

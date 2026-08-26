@@ -16,9 +16,10 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -64,13 +65,29 @@ public class SessionStore implements AutoCloseable {
             Files.setPosixFilePermissions(file, EnumSet.of(
                 PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
         } catch (UnsupportedOperationException ignored) {}
-        this.flushScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        this.flushScheduler = createFlushScheduler();
+        flushScheduler.scheduleAtFixedRate(this::flushAsync,
+            flushIntervalMs, flushIntervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 创建显式参数的 {@link ScheduledThreadPoolExecutor}，避免 {@code Executors} 静态工厂
+     * （规范 10.1-1：禁止 Executors，必须 ThreadPoolExecutor 显式 7 参数）。
+     *
+     * <p>参数取值：
+     * <ul>
+     *   <li>corePoolSize=1：单线程足够（单写者）</li>
+     *   <li>queue 容量 = 64：避免无界 OOM（规范 10.1-2）</li>
+     *   <li>daemon=true：JVM 退出时不阻塞（规范 10.1-3 自定义 ThreadFactory）</li>
+     * </ul>
+     */
+    private static ScheduledExecutorService createFlushScheduler() {
+        ThreadFactory tf = r -> {
             Thread t = new Thread(r, "session-flush");
             t.setDaemon(true);
             return t;
-        });
-        flushScheduler.scheduleAtFixedRate(this::flushAsync,
-            flushIntervalMs, flushIntervalMs, TimeUnit.MILLISECONDS);
+        };
+        return new ScheduledThreadPoolExecutor(1, tf);
     }
 
     public void append(SessionEntry entry) {
@@ -97,7 +114,6 @@ public class SessionStore implements AutoCloseable {
             }
         } catch (Exception e) {
             log.warn("async flush failed", e);
-            System.err.println("[agent-demo] session flush 失败: " + e.getMessage());
         }
     }
 
