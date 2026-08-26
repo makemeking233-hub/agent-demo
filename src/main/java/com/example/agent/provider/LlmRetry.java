@@ -21,17 +21,26 @@ import java.util.function.Predicate;
 public class LlmRetry {
     private static final Logger log = LoggerFactory.getLogger(LlmRetry.class);
 
+    /** 指数退避序列：1s, 2s, 4s, 8s（最多 3 次重试 = 4 次尝试） */
     private static final long[] DEFAULT_BACKOFF_MS = {1000L, 2000L, 4000L, 8000L};
+    /** 单次退避上限（防止指数爆炸） */
     private static final long MAX_BACKOFF_MS = 10_000L;
+    /** 429 重试最大次数 */
+    private static final int MAX_RATE_LIMIT_RETRIES = 5;
 
-    /** 网络错 / 5xx 指数退避，最多 3 次 */
+    /**
+     * 网络错 / 5xx 指数退避，最多 3 次。
+     * @param source 原始请求 Mono
+     */
     public static <T> Mono<T> retryOnTransient(Mono<T> source) {
         return retry(source, 3, LlmRetry::isTransientError);
     }
 
-    /** 429 限流按 Retry-After header 退避，最多 5 次 */
+    /**
+     * 429 限流按 Retry-After header 退避，最多 5 次。
+     */
     public static <T> Mono<T> retryOnRateLimit(Mono<T> source) {
-        return retry(source, 5, e -> e instanceof WebClientResponseException wcre
+        return retry(source, MAX_RATE_LIMIT_RETRIES, e -> e instanceof WebClientResponseException wcre
             && wcre.getStatusCode().value() == 429);
     }
 
@@ -52,6 +61,11 @@ public class LlmRetry {
         });
     }
 
+    /**
+     * 判断是否为瞬时错误（网络错 / 5xx）。
+     * @param e 异常
+     * @return true=可重试
+     */
     public static boolean isTransientError(Throwable e) {
         if (e instanceof IOException) return true;
         if (e instanceof WebClientRequestException) return true;
@@ -59,6 +73,12 @@ public class LlmRetry {
         return false;
     }
 
+    /**
+     * 从 Retry-After header 解析退避毫秒，解析失败回退到 fallback。
+     * @param e 异常
+     * @param fallback 解析失败时的兜底值
+     * @return 退避毫秒
+     */
     public static long parseRetryAfterOr(Throwable e, long fallback) {
         if (e instanceof WebClientResponseException wcre) {
             String header = wcre.getHeaders().getFirst("Retry-After");
