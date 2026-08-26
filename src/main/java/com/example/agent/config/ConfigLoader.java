@@ -9,11 +9,16 @@ import java.nio.file.Path;
 import java.util.Map;
 
 /**
- * 三层优先级加载：env > user config > defaults（详见 design.md §9）。
+ * 三层优先级配置加载：env &gt; user config &gt; defaults（详见 design.md §9）。
  */
 public class ConfigLoader {
     private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
 
+    /**
+     * 加载配置（合并 user yaml 后再应用 env override）。
+     * @param userConfigPath 用户配置文件路径（{@code ~/.agent-demo/config.yaml}），可空
+     * @return 合并后的 {@link AgentConfig}
+     */
     public AgentConfig load(Path userConfigPath) {
         AgentConfig base = AgentConfig.defaults();
         if (userConfigPath != null && Files.exists(userConfigPath)) {
@@ -22,6 +27,7 @@ public class ConfigLoader {
         return applyEnv(base);
     }
 
+    /** 把 user yaml 的 provider 段覆盖到 base */
     private AgentConfig mergeYaml(AgentConfig base, Path yamlPath) {
         try {
             @SuppressWarnings("unchecked")
@@ -43,6 +49,7 @@ public class ConfigLoader {
         }
     }
 
+    /** 把 env 变量覆盖到 base（仅 provider 段） */
     private AgentConfig applyEnv(AgentConfig base) {
         AgentConfig.Provider p = base.provider();
         String apiKey = firstNonBlank(System.getenv(EnvKeys.DEEPSEEK_API_KEY), p.apiKey());
@@ -58,15 +65,18 @@ public class ConfigLoader {
                 base.permission(), base.cost(), base.context(), base.shell(), base.memoryInject());
     }
 
+    /** 取第一个非空白的字符串 */
     private static String firstNonBlank(String a, String b) {
         return (a != null && !a.isBlank()) ? a : b;
     }
 
+    /** Map 读 string，缺失返回默认值 */
     private static String str(Map<String, Object> m, String k, String d) {
         Object v = m.get(k);
         return v == null ? d : v.toString();
     }
 
+    /** Map 读 int，缺失返回默认值 */
     private static int intVal(Map<String, Object> m, String k, int d) {
         Object v = m.get(k);
         return v == null ? d : ((Number) v).intValue();

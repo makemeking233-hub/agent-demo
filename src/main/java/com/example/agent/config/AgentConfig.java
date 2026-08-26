@@ -2,6 +2,18 @@ package com.example.agent.config;
 
 import java.util.List;
 
+/**
+ * agent-demo 顶层配置（详见 design.md §9）。
+ *
+ * <p>三层优先级：环境变量 &gt; {@code ~/.agent-demo/config.yaml} &gt; 内置默认（{@link #defaults()}）。
+ *
+ * @param provider LLM provider 配置（DeepSeek / OpenAI / 自定义）
+ * @param permission 权限策略
+ * @param cost 成本控制阈值（按 model 分桶，v0.1 简化）
+ * @param context 上下文压缩参数
+ * @param shell ShellTool 沙箱参数
+ * @param memoryInject 注入到 system prompt 的额外 memory 指引
+ */
 public record AgentConfig(
         Provider provider,
         Permission permission,
@@ -10,16 +22,50 @@ public record AgentConfig(
         Shell shell,
         List<String> memoryInject) {
 
+    /**
+     * LLM provider 配置。
+     * @param type provider 类型（v0.1 固定 "deepseek"）
+     * @param apiKey API key（优先用环境变量）
+     * @param baseUrl API base URL
+     * @param model 模型名（deepseek-chat / deepseek-reasoner）
+     * @param maxOutputTokens 最大输出 token
+     */
     public record Provider(String type, String apiKey, String baseUrl, String model, int maxOutputTokens) {}
 
+    /**
+     * 权限策略。
+     * @param defaultPolicy 全局默认策略名（"ask-write" / "allow-all"）
+     * @param shellDenylist shell 全局黑名单（合并 ShellAdapter.defaultDenylist）
+     */
     public record Permission(String defaultPolicy, List<String> shellDenylist) {}
 
+    /**
+     * 成本控制阈值。
+     * @param inputPerMTokens 输入价格（元/M tokens）
+     * @param outputPerMTokens 输出价格（元/M tokens）
+     * @param warnThreshold 告警阈值（元）
+     * @param stopThreshold 停止阈值（元）
+     */
     public record Cost(double inputPerMTokens, double outputPerMTokens, double warnThreshold, double stopThreshold) {}
 
+    /**
+     * 上下文压缩参数。
+     * @param compactBuffer 提前压缩 buffer（tokens）
+     * @param maxConsecutiveCompactFailures 连续失败熔断阈值
+     */
     public record Context(int compactBuffer, int maxConsecutiveCompactFailures) {}
 
+    /**
+     * Shell 沙箱参数。
+     * @param timeoutMs 单次命令硬超时（毫秒）
+     * @param maxOutputBytes 输出上限（字节，stdout+stderr 累计）
+     */
     public record Shell(int timeoutMs, int maxOutputBytes) {}
 
+    /**
+     * v0.1 内置默认配置。
+     * @return 默认 {@link AgentConfig}
+     */
     public static AgentConfig defaults() {
         return new AgentConfig(
                 new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 8192),

@@ -18,21 +18,28 @@ import java.util.List;
  * <p>每个 record 实现 sealed interface 的抽象方法 {@link #role()}（Jackson 反序列化不会注入，详见 design.md §6.4）
  */
 public sealed interface Message permits Message.User, Message.Assistant, Message.ToolResult, Message.System {
+    /** 角色名（user / assistant / tool / system） */
     String role();
+
+    /** 消息主内容 */
     String content();
 
+    /** 用户输入 */
     record User(String content) implements Message {
         @Override public String role() { return "user"; }
     }
 
+    /** 模型回复（含可选 tool_calls） */
     record Assistant(String content, List<ToolCall> toolCalls) implements Message {
         @Override public String role() { return "assistant"; }
     }
 
+    /** 工具调用结果回流给模型（关联 toolCallId） */
     record ToolResult(String toolCallId, String content, boolean isError) implements Message {
         @Override public String role() { return "tool"; }
     }
 
+    /** system prompt（注入 memory、行为约束等） */
     record System(String content) implements Message {
         @Override public String role() { return "system"; }
     }

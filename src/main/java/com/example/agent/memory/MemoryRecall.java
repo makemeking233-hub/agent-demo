@@ -15,9 +15,12 @@ import java.util.stream.Collectors;
 public class MemoryRecall {
 
     /**
-     * @param entries 候选记忆
-     * @param maxRecall 最多返回数
-     * @param minScore 评分阈值（0~1；详见 design.md §9 `recallMinScore`，默认 0.3）
+     * 按 token 重叠评分召回最相关的 memory entry。
+     * @param query 用户查询字符串
+     * @param entries 候选 memory entry 列表
+     * @param maxRecall 最多返回条数
+     * @param minScore 评分阈值（{@code 0~1}；详见 design.md §9 {@code recallMinScore}，默认 0.3）
+     * @return 评分 >= minScore 的 entry，按评分降序，最多 maxRecall 条
      */
     public List<MemoryEntry> recall(String query, List<MemoryEntry> entries, int maxRecall, double minScore) {
         Set<String> queryTokens = tokenize(query);
@@ -39,7 +42,11 @@ public class MemoryRecall {
             .toList();
     }
 
-    /** 简单分词：去除停用标点 + 长度 < 2 的词丢弃。 */
+    /**
+     * 简单分词：去除停用标点 + 长度 {@code < 2} 的词丢弃。
+     * @param s 原始文本
+     * @return token 集合
+     */
     public Set<String> tokenize(String s) {
         if (s == null) return Set.of();
         return Arrays.stream(s.toLowerCase().split("[\\s,;.!?，。；！？、]+"))

@@ -58,6 +58,11 @@ public class InitCommand implements Runnable {
         }
     }
 
+    /**
+     * 测试钩子：覆盖 home 目录后执行 {@link #run()}，返回生成的 config.yaml 路径。
+     * @param home 测试用 home 目录
+     * @return 生成的 config.yaml 完整路径
+     */
     public Path runForTest(Path home) throws Exception {
         this.homeOverride = home.toString();
         run();

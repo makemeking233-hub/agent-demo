@@ -13,6 +13,11 @@ public class MemoryPromptBuilder {
 
     public MemoryPromptBuilder(MemoryDir dir) { this.dir = dir; }
 
+    /**
+     * 构造 memory 部分的 system prompt。
+     * @param extraGuidelines 额外附加的 memory 指引（可空）
+     * @return 完整 system prompt 片段
+     */
     public String build(String extraGuidelines) {
         StringBuilder sb = new StringBuilder();
         sb.append("# Persistent Agent Memory\n\n");
