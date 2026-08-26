@@ -113,7 +113,22 @@ bin\agent.bat chat
 agent chat --model deepseek-reasoner
 agent chat --system-prompt "你是一名资深 Java 工程师"
 agent chat --api-key sk-...               # 仅本次覆盖
+agent chat --input "读 ./README.md"      # E2E 测试：一次性注入输入
+agent chat --auto-approve-write          # E2E 测试：跳过写权限确认
 ```
+
+### 4.5 Slash 命令
+
+| 命令 | 行为 | 输出示例 |
+|------|------|----------|
+| `/help` | 列出可用命令 | `可用命令: /help /clear /quit /history` |
+| `/clear` | 清空当前会话历史（保留 session 文件） | `[已清空会话历史]` |
+| `/quit` | 退出 REPL（exit code 0） | （无输出） |
+| `/history` | 显示累计 token + 估算费用 | `消息数: 12 \| 累计 token: 345 in / 678 out \| 估算费用: ¥0.0061` |
+| 其他 `/xxx` | 未知命令 | `[未知命令] 输入 /help 查看可用命令` |
+
+> **费用估算**：v0.1 硬编码 DeepSeek-chat 定价（输入 2 元/M tokens、输出 8 元/M tokens）。
+> v0.2 改为读 `~/.agent-demo/config.yaml` 的 `cost.prices.{model_id}` 配置。
 
 ---
 
