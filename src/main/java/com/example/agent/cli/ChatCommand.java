@@ -131,8 +131,17 @@ public class ChatCommand implements Runnable {
     int[] totalPrompt = {0};
     int[] totalCompletion = {0};
 
-    runReplLoop(
-        history, estimator, loop, slash, totalPrompt, totalCompletion, resolvedModel, aborted);
+    ReplContext ctx =
+        new ReplContext(
+            history,
+            estimator,
+            loop,
+            slash,
+            totalPrompt,
+            totalCompletion,
+            resolvedModel,
+            aborted);
+    runReplLoop(ctx);
   }
 
   /** Load user config (extracted to reduce run() nesting) */
@@ -144,24 +153,9 @@ public class ChatCommand implements Runnable {
   /**
    * REPL 主循环：读取 stdin → 派发 slash 命令或 AgentLoop。
    *
-   * @param history 当前消息历史（/clear 时切换）
-   * @param estimator token 估算器
-   * @param loop Agent 主循环
-   * @param slash slash 命令分发器
-   * @param totalPrompt 累计 prompt token 累加器
-   * @param totalCompletion 累计 completion token 累加器
-   * @param resolvedModel 解析后的模型名
-   * @param aborted 中断标志（Ctrl+C 置 true）
+   * @param ctx REPL 共享状态
    */
-  private void runReplLoop(
-      AtomicReference<MessageHistory> history,
-      TokenEstimator estimator,
-      AgentLoop loop,
-      SlashCommand slash,
-      int[] totalPrompt,
-      int[] totalCompletion,
-      String resolvedModel,
-      AtomicBoolean aborted) {
+  private void runReplLoop(ReplContext ctx) {
     InputStream stdin =
         injectedInput != null
             ? new ByteArrayInputStream(injectedInput.getBytes(StandardCharsets.UTF_8))
@@ -169,18 +163,19 @@ public class ChatCommand implements Runnable {
     try (BufferedReader reader =
         new BufferedReader(new InputStreamReader(stdin, StandardCharsets.UTF_8))) {
       System.out.println(
-          "agent-demo v0.1 chat (model=" + resolvedModel + "), /help for commands, /quit to exit");
+          "agent-demo v0.1 chat (model="
+              + ctx.resolvedModel()
+              + "), /help for commands, /quit to exit");
       String line;
-      while ((line = reader.readLine()) != null && !aborted.get()) {
+      while ((line = reader.readLine()) != null && !ctx.aborted().get()) {
         if (line.isBlank()) continue;
-        if (handleLine(
-            line, history, estimator, loop, slash, totalPrompt, totalCompletion, resolvedModel)) {
+        if (handleLine(line, ctx)) {
           continue;
         }
-        TurnResult result = loop.processTurn(new Message.User(line)).block();
+        TurnResult result = ctx.loop().processTurn(new Message.User(line)).block();
         if (result != null) {
-          totalPrompt[0] += result.totalPromptTokens();
-          totalCompletion[0] += result.totalCompletionTokens();
+          ctx.totalPrompt()[0] += result.totalPromptTokens();
+          ctx.totalCompletion()[0] += result.totalCompletionTokens();
         }
       }
     } catch (IOException e) {
@@ -192,27 +187,43 @@ public class ChatCommand implements Runnable {
    * Handle a single line: slash commands processed directly; return true if consumed. Other lines
    * return false so the caller passes them to AgentLoop.
    */
-  private boolean handleLine(
-      String line,
+  private boolean handleLine(String line, ReplContext ctx) {
+    return ctx
+        .slash()
+        .dispatch(
+            line,
+            ctx.history().get(),
+            ctx.totalPrompt(),
+            ctx.totalCompletion(),
+            ctx.resolvedModel(),
+            () -> {
+              MessageHistory fresh = new MessageHistory(ctx.estimator());
+              ctx.history().set(fresh);
+              ctx.loop().setHistory(fresh);
+            });
+  }
+
+  /**
+   * REPL 循环共享状态 record（聚合 8 个参数，消除 runReplLoop/handleLine 的参数列表膨胀）。
+   *
+   * @param history 当前消息历史（/clear 时切换）
+   * @param estimator token 估算器
+   * @param loop Agent 主循环
+   * @param slash slash 命令分发器
+   * @param totalPrompt 累计 prompt token 累加器
+   * @param totalCompletion 累计 completion token 累加器
+   * @param resolvedModel 解析后的模型名
+   * @param aborted 中断标志（Ctrl+C 置 true）
+   */
+  private record ReplContext(
       AtomicReference<MessageHistory> history,
       TokenEstimator estimator,
       AgentLoop loop,
       SlashCommand slash,
       int[] totalPrompt,
       int[] totalCompletion,
-      String resolvedModel) {
-    return slash.dispatch(
-        line,
-        history.get(),
-        totalPrompt,
-        totalCompletion,
-        resolvedModel,
-        () -> {
-          MessageHistory fresh = new MessageHistory(estimator);
-          history.set(fresh);
-          loop.setHistory(fresh);
-        });
-  }
+      String resolvedModel,
+      AtomicBoolean aborted) {}
 
   /**
    * 取第一个非空白字符串（用于多源配置优先级：CLI flag &gt; env &gt; config.yaml）。
