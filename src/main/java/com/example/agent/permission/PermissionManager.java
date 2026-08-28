@@ -17,19 +17,35 @@ import com.example.agent.tools.Tool;
  * <p>路径匹配逻辑抽到 {@link PermissionPathMatcher}，本类专注策略。
  */
 public class PermissionManager {
+  /** 权限策略（read/write/shell 默认 + 敏感路径 glob） */
   private final PermissionPolicy policy;
+
+  /** 路径 glob 匹配器（敏感路径检测） */
   private final PermissionPathMatcher pathMatcher;
 
+  /** 默认策略构造（{@link PermissionPolicy#defaults()}） */
   public PermissionManager() {
     this(PermissionPolicy.defaults());
   }
 
+  /**
+   * 自定义策略构造。
+   *
+   * @param policy 权限策略（不可空）
+   */
   public PermissionManager(PermissionPolicy policy) {
     this.policy = policy;
     this.pathMatcher = new PermissionPathMatcher(policy.sensitivePathPatterns());
   }
 
-  /** 主裁决方法 */
+  /**
+   * 主裁决方法。
+   *
+   * @param toolName 工具名
+   * @param input 工具输入（用于抽取路径）
+   * @param ctx 工具上下文（可空，v0.1 暂未使用）
+   * @return 裁决结果
+   */
   public PermissionDecision decide(String toolName, Object input, Tool.ToolContext ctx) {
     String path = extractPath(input);
     if (path != null && pathMatcher.matches(path)) {
@@ -47,11 +63,23 @@ public class PermissionManager {
     };
   }
 
-  /** 兼容 stub 调用（M2 AgentLoop 用） */
+  /**
+   * 兼容 stub 调用（M2 AgentLoop 用）。
+   *
+   * @param toolName 工具名
+   * @param input 工具输入
+   * @return 裁决结果
+   */
   public PermissionDecision decide(String toolName, Object input) {
     return decide(toolName, input, null);
   }
 
+  /**
+   * 从工具输入抽取文件路径（支持 ReadFileTool/WriteFileTool/EditFileTool/LsTool.Input）。
+   *
+   * @param input 工具输入
+   * @return 路径字符串；类型不匹配时返回 {@code null}
+   */
   private String extractPath(Object input) {
     if (input instanceof Tool.ToolContext) return null;
     try {

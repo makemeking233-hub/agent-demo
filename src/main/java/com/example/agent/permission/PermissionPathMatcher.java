@@ -21,9 +21,17 @@ public class PermissionPathMatcher {
   /** Placeholder to avoid double-star-slash replacement conflict with double-star */
   private static final String DOUBLE_SLASH_PLACEHOLDER = "::DOUBLESLASH::";
 
+  /** 原始 glob 模式列表（不可变副本） */
   private final List<String> patterns;
+
+  /** 编译后的正则数组（与 patterns 一一对应） */
   private final Pattern[] compiled;
 
+  /**
+   * 构造路径匹配器。
+   *
+   * @param patterns Ant glob 模式列表
+   */
   public PermissionPathMatcher(List<String> patterns) {
     this.patterns = List.copyOf(patterns);
     this.compiled = new Pattern[patterns.size()];
@@ -64,6 +72,9 @@ public class PermissionPathMatcher {
         + "$";
   }
 
+  /**
+   * @return 原始 glob 模式列表（只读）
+   */
   public List<String> patterns() {
     return patterns;
   }
