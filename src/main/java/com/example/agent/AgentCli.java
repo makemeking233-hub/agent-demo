@@ -33,11 +33,15 @@ public class AgentCli implements CommandLineRunner {
   /**
    * Spring 启动后回调：再次执行 picocli 解析（因为 Spring 启动时 picocli 未注册）。
    *
+   * <p>未传子命令时默认执行 {@code chat}（v0.1：Agent 即 REPL）； 显式传 {@code init} 则生成默认配置目录。
+   *
    * @param args 命令行参数
    */
   @Override
   public void run(String... args) {
-    int exitCode = new CommandLine(new AgentCli()).execute(args);
+    // 没传子命令 → 默认启动 chat（避免 "Missing required subcommand"）
+    String[] effectiveArgs = args.length == 0 ? new String[] {"chat"} : args;
+    int exitCode = new CommandLine(new AgentCli()).execute(effectiveArgs);
     System.exit(exitCode);
   }
 }
