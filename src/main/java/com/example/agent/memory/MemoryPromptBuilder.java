@@ -1,7 +1,6 @@
 package com.example.agent.memory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
@@ -52,12 +51,8 @@ public class MemoryPromptBuilder {
    * @return 模板字符串
    */
   private String loadTemplate() {
-    try (var in = getClass().getResourceAsStream(TEMPLATE_PATH)) {
-      if (in == null) return "# Persistent Agent Memory\n{memoryDir}\n{indexContent}";
-      return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-    } catch (IOException e) {
-      return "# Persistent Agent Memory\n{memoryDir}\n{indexContent}";
-    }
+    return com.example.agent.util.PromptLoader.loadOrFallback(
+        TEMPLATE_PATH, "# Persistent Agent Memory\n{memoryDir}\n{indexContent}");
   }
 
   /**

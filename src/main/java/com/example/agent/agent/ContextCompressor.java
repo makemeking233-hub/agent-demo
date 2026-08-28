@@ -130,13 +130,12 @@ public class ContextCompressor {
    * @return prompt 模板（含 {@code [消息历史 JSONL]} 占位符）
    */
   private String loadPrompt() {
-    try (var in = getClass().getResourceAsStream("/prompts/summarize.txt")) {
-      if (in == null) return "请将以下对话压缩为摘要：\n\n[消息历史 JSONL]";
-      return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-    } catch (Exception e) {
-      log.warn("summary prompt 加载失败，使用 fallback", e);
-      return "请将以下对话压缩为摘要：\n\n[消息历史 JSONL]";
+    String fallback = "请将以下对话压缩为摘要：\n\n[消息历史 JSONL]";
+    String loaded = com.example.agent.util.PromptLoader.loadOrFallback("/prompts/summarize.txt", fallback);
+    if (loaded.equals(fallback)) {
+      log.debug("summary prompt 使用 fallback（classpath 资源不可用）");
     }
+    return loaded;
   }
 
   /**
