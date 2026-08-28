@@ -9,8 +9,14 @@ import java.nio.file.Files;
  * <p>v0.1 简化：只拼 MEMORY.md 索引内容到 system prompt；不注入文件级内容。
  */
 public class MemoryPromptBuilder {
+  /** memory 目录管理器（用于读 MEMORY.md 索引） */
   private final MemoryDir dir;
 
+  /**
+   * 构造 memory prompt 构建器。
+   *
+   * @param dir memory 目录管理器
+   */
   public MemoryPromptBuilder(MemoryDir dir) {
     this.dir = dir;
   }
@@ -43,6 +49,11 @@ public class MemoryPromptBuilder {
     return sb.toString();
   }
 
+  /**
+   * 读取 MEMORY.md 索引内容（不存在或读取失败返回空串）。
+   *
+   * @return 索引文本
+   */
   private String readIndex() {
     try {
       if (Files.notExists(dir.indexFile())) return "";

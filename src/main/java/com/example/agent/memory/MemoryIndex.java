@@ -17,8 +17,14 @@ public class MemoryIndex {
   /** 索引行匹配正则（捕获：标题 / 文件名 / 描述） */
   private static final Pattern ENTRY = Pattern.compile("^- \\[([^\\]]+)\\]\\(([^)]+)\\) — (.+)$");
 
+  /** MEMORY.md 文件路径 */
   private final Path file;
 
+  /**
+   * 构造索引解析器。
+   *
+   * @param file MEMORY.md 文件路径
+   */
   public MemoryIndex(Path file) {
     this.file = file;
   }

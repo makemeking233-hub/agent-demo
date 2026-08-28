@@ -9,6 +9,7 @@ import java.util.Map;
 
 /** 三层优先级配置加载：env &gt; user config &gt; defaults（详见 design.md §9）。 */
 public class ConfigLoader {
+  /** YAML 反序列化器 */
   private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
 
   /**
@@ -25,7 +26,13 @@ public class ConfigLoader {
     return applyEnv(base);
   }
 
-  /** 把 user yaml 的 provider 段覆盖到 base */
+  /**
+   * 把 user yaml 的 provider 段覆盖到 base。
+   *
+   * @param base 当前配置
+   * @param yamlPath yaml 文件路径
+   * @return 合并后的 {@link AgentConfig}
+   */
   private AgentConfig mergeYaml(AgentConfig base, Path yamlPath) {
     try {
       @SuppressWarnings("unchecked")
@@ -49,7 +56,12 @@ public class ConfigLoader {
     }
   }
 
-  /** 把 env 变量覆盖到 base（仅 provider 段） */
+  /**
+   * 把 env 变量覆盖到 base（仅 provider 段）。
+   *
+   * @param base 当前配置
+   * @return 应用 env 后的 {@link AgentConfig}
+   */
   private AgentConfig applyEnv(AgentConfig base) {
     AgentConfig.Provider p = base.provider();
     String apiKey = firstNonBlank(System.getenv(EnvKeys.DEEPSEEK_API_KEY), p.apiKey());
@@ -72,18 +84,38 @@ public class ConfigLoader {
         base.memoryInject());
   }
 
-  /** 取第一个非空白的字符串 */
+  /**
+   * 取第一个非空白的字符串。
+   *
+   * @param a 候选 1
+   * @param b 候选 2
+   * @return 第一个非 null 且非空白；都为空返回 {@code b}（可能为 {@code null}）
+   */
   private static String firstNonBlank(String a, String b) {
     return (a != null && !a.isBlank()) ? a : b;
   }
 
-  /** Map 读 string，缺失返回默认值 */
+  /**
+   * Map 读 string，缺失返回默认值。
+   *
+   * @param m 字典
+   * @param k 键
+   * @param d 默认值
+   * @return 值字符串；缺失时返回 {@code d}
+   */
   private static String str(Map<String, Object> m, String k, String d) {
     Object v = m.get(k);
     return v == null ? d : v.toString();
   }
 
-  /** Map 读 int，缺失返回默认值 */
+  /**
+   * Map 读 int，缺失返回默认值。
+   *
+   * @param m 字典
+   * @param k 键
+   * @param d 默认值
+   * @return 整数值；缺失时返回 {@code d}
+   */
   private static int intVal(Map<String, Object> m, String k, int d) {
     Object v = m.get(k);
     return v == null ? d : ((Number) v).intValue();

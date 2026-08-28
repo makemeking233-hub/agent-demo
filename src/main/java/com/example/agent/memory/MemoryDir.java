@@ -18,8 +18,14 @@ public class MemoryDir {
   public static final int MAX_INDEX_LINES = 200;
   public static final int MAX_INDEX_BYTES = 25_000;
 
+  /** memory 目录路径 */
   private final Path dir;
 
+  /**
+   * 构造 memory 目录（不存在则创建；POSIX 设 0700，Windows 跳过）。
+   *
+   * @param dir memory 目录路径
+   */
   public MemoryDir(Path dir) {
     this.dir = dir;
     try {

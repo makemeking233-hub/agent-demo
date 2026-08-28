@@ -21,12 +21,17 @@ public class InitCommand implements Runnable {
   /** 需要创建的子目录清单 */
   private static final String[] SUBDIRS = {"memory", "sessions", "cache", "logs"};
 
+  /** --home：覆盖 home 目录（测试用） */
   @Option(names = "--home", description = "覆盖 home 目录（测试用）")
   String homeOverride;
 
+  /** --force：覆盖已存在的 config.yaml */
   @Option(names = "--force", description = "覆盖已存在配置")
   boolean force;
 
+  /**
+   * picocli 入口：创建 ~/.agent-demo/ 子目录并写入默认 config.yaml。
+   */
   @Override
   public void run() {
     try {
@@ -67,6 +72,11 @@ public class InitCommand implements Runnable {
     return home.resolve("config.yaml");
   }
 
+  /**
+   * 解析 home 目录（CLI flag &gt; env &gt; {@code user.home}）。
+   *
+   * @return 完整 home 路径（含 {@code .agent-demo} 子目录）
+   */
   private Path resolveHome() {
     if (homeOverride != null) return Paths.get(homeOverride);
     String env = System.getenv("AGENT_DEMO_HOME");
@@ -74,6 +84,12 @@ public class InitCommand implements Runnable {
         env != null && !env.isBlank() ? env : System.getProperty("user.home"), ".agent-demo");
   }
 
+  /**
+   * 尝试设置 POSIX 权限（Windows 跳过；失败仅 warn 不阻断）。
+   *
+   * @param p 目标路径
+   * @param mode 权限模式字符串（{@code "rwx------"} / {@code "rw-------"}）
+   */
   private void trySetPosixPermissions(Path p, String mode) {
     try {
       EnumSet<PosixFilePermission> set = EnumSet.noneOf(PosixFilePermission.class);
