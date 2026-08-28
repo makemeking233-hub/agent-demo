@@ -75,7 +75,45 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 | §8 任务成本红线 | **被本文件 §2.1 覆盖** |
 | §9 任务成本汇报 | 降级为"每里程碑汇报"而非"每任务汇报" |
 
----
+### 2.4 Mermaid 8.8.3 兼容性规则（docs/ 下 md 文档专属）
+
+> 本项目 `docs/` 下的 Markdown 文档使用 mermaid 8.8.3 渲染（GitHub / VS Code 通用版本）。  
+> 下方规则是从 `~/.dsh/AGENTS.md §3` 抽取的本项目精简版，写入以防后续 Agent 重新踩坑。
+
+#### 🔴 必修（违反会导致渲染失败）
+
+| 规则 | ❌ 反例 | ✅ 正确 |
+|------|--------|--------|
+| **不用 `actor`** | `actor App as main()` | `participant App as "main()"` |
+| **classDiagram 不用泛型** | `class Tool~I,O~` | `class Tool`（用注释指向源码） |
+| **classDiagram 不用 `List~T~`** | `+toolCalls List~ToolCall~` | `+toolCalls List` |
+| **flowchart 不写 `&` 链式语法** | `ToolReg --> ReadFile & WriteFile` | 多行 `ToolReg --> ReadFile\nToolReg --> WriteFile` |
+| **节点标签内 ASCII `"`** | `node["文本"关键词"更多"]` | 改用 `「」` 或去掉引号 |
+| **节点标签内 `→`** | `node["a → b"]` | 改 `,` 或 `->` |
+| **节点标签内 `\|\|`** | `node["W' = ... / \|\|W₀\|\|"]` | 改 `norm(W)` 或 `||x||` 文字 |
+
+#### 🟡 推荐
+
+| 规则 | ❌ 反例 | ✅ 正确 |
+|------|--------|--------|
+| **participant 名含空格/括号/点** | `participant File as .jsonl 文件` | `participant File as "JSONL 文件"` |
+| **subgraph 内 direction** | `subgraph X\n  direction LR` | 8.x 不支持，省略或用注释 |
+| **subgraph 之间互连** | `subgraph A --> subgraph B` | 从子图**内部节点**出发：`A_node --> B_node` |
+
+#### ✅ 允许
+
+| 项 | 用途 |
+|----|------|
+| `<br/>` 在 flowchart 节点 label 内 | 换行（OK） |
+| `<br/>` 在 sequenceDiagram Note / 消息文本内 | 换行（OK） |
+| `participant X as "Foo Bar"` | 引号包名字含空格 |
+| `node["任意不含特殊字符的标签"]` | 标准标签 |
+
+**自检清单**：写完 mermaid 图后扫一遍
+1. `grep -n '^\s*actor '` → 必须为 0 匹配
+2. `grep -n '~[A-Z][a-z]*~'` → classDiagram 必须 0 匹配（其他图可有）
+3. `grep -n '^\s\+[A-Z][a-zA-Z]* -->'` 看 `&` 在末尾的→改为多行
+4. `grep -n '||'` 在节点 label 内 → 改为文字
 
 ## 3. 关键决策摘要（供后续 Agent 快速对齐）
 
@@ -91,4 +129,5 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 ---
 
 > 修订记录：
+> - v0.1.1（2026-08-26）：新增 §2.4 Mermaid 8.8.3 兼容性规则（docs/ 文档专属）
 > - v0.1.0（2026-08-26）：初版；定义成本红线豁免与实施方法学

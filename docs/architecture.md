@@ -59,7 +59,11 @@ flowchart TB
     LlmProvider --> DeepSeek
     DeepSeek --> Mapper
     DeepSeek --> Retry
-    ToolReg --> ReadFile & WriteFile & EditFile & Ls & Shell
+    ToolReg --> ReadFile
+    ToolReg --> WriteFile
+    ToolReg --> EditFile
+    ToolReg --> Ls
+    ToolReg --> Shell
     AgentLoop --> Perm
     AgentLoop --> Session
     ChatCmd --> Config
@@ -98,8 +102,8 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-    actor U as 用户
-    participant REPL as ChatCommand (REPL)
+    participant U as "用户"
+    participant REPL as "ChatCommand (REPL)"
     participant Loop as AgentLoop
     participant Hist as MessageHistory
     participant Compressor as ContextCompressor
@@ -213,18 +217,18 @@ stateDiagram-v2
 
 ```mermaid
 classDiagram
-    class Tool~I,O~ {
+    class Tool {
         <<interface>>
         +name() String
         +description() String
         +inputSchema() Map
-        +isReadOnly(I) boolean
-        +isDestructive(I) boolean
-        +isConcurrencySafe(I) boolean
-        +checkPermissions(I, ctx) PermissionDecision
-        +execute(I, ctx) Mono~ToolResult~O~~
-        +renderUse(I) String
-        +renderResult(O) String
+        +isReadOnly() boolean
+        +isDestructive() boolean
+        +isConcurrencySafe() boolean
+        +checkPermissions() PermissionDecision
+        +execute() Mono
+        +renderUse() String
+        +renderResult() String
     }
 
     class ReadFileTool
@@ -244,6 +248,8 @@ classDiagram
     Tool <|.. ShellTool
 ```
 
+> Mermaid 8.x classDiagram 泛型支持有限（`Tool~I,O~` 显示为字面量），故简化为无泛型版本。完整泛型契约见源码 `src/main/java/.../tools/Tool.java`。
+
 ### 5.2 5 个工具一览
 
 | 工具 | isReadOnly | isDestructive | 关键约束 |
@@ -262,11 +268,11 @@ Fail-Closed 默认：所有工具 `isConcurrencySafe / isReadOnly / isDestructiv
 
 ```mermaid
 sequenceDiagram
-    participant LLM as 模型
+    participant LLM as "模型"
     participant Loop as AgentLoop
     participant Shell as ShellTool
-    participant Adapter as ShellAdapter (Bash/Cmd/PowerShell)
-    participant OS as 操作系统
+    participant Adapter as "ShellAdapter (Bash/Cmd/PowerShell)"
+    participant OS as "操作系统"
 
     LLM->>Loop: streamChat 返回 tool_call
     Loop->>Shell: execute(command, ctx)
@@ -342,8 +348,8 @@ sequenceDiagram
     participant Loop as AgentLoop
     participant Store as SessionStore
     participant Queue as BlockingQueue
-    participant Sched as 后台线程
-    participant File as .jsonl 文件
+    participant Sched as "后台线程"
+    participant File as "JSONL 文件"
     participant Channel as FileChannel
 
     Loop->>Store: append(User entry)
@@ -408,7 +414,7 @@ classDiagram
     class Assistant {
         <<record>>
         +content String
-        +toolCalls List~ToolCall~
+        +toolCalls List
     }
     class ToolResult {
         <<record>>
@@ -445,6 +451,8 @@ classDiagram
     StreamChunk <|.. Finished
     StreamChunk <|.. Error
 ```
+
+> Mermaid 8.x classDiagram 泛型支持有限（`List~ToolCall~` 显示为字面量），故简化为无泛型。完整契约见源码。
 
 设计要点：
 - `sealed` 强制子类型有限（避免外部乱继承破坏 sealed 模式匹配）
