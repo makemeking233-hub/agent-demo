@@ -22,49 +22,88 @@ import java.util.concurrent.atomic.AtomicInteger;
  * </ul>
  */
 public class MessageHistory {
+  /** Token 估算器（用于 {@link #estimateTokens()} 与压缩触发阈值） */
   private final TokenEstimator estimator;
+
+  /** 有序消息列表（追加顺序 = 发送给模型的顺序） */
   private final List<Message> messages = new ArrayList<>();
+
+  /** 最近 ReadFileTool 读过的文件内容（按插入顺序，Post-Compact 重注入用） */
   private final Map<String, String> recentFileContents = new LinkedHashMap<>();
+
+  /** 连续压缩失败计数（达到 {@code maxConsecutiveCompactFailures} 触发熔断） */
   private final AtomicInteger compactFailures = new AtomicInteger(0);
 
+  /**
+   * 构造消息历史容器。
+   *
+   * @param estimator token 估算器（不可空）
+   */
   public MessageHistory(TokenEstimator estimator) {
     this.estimator = estimator;
   }
 
+  /**
+   * @return 当前消息总数（user / assistant / tool / system 全部计入）
+   */
   public int size() {
     return messages.size();
   }
 
+  /**
+   * @return 不可变消息列表快照（外部修改不影响内部状态）
+   */
   public List<Message> all() {
     return Collections.unmodifiableList(messages);
   }
 
+  /**
+   * @return 最后一条消息；空历史时返回 {@code null}
+   */
   public Message last() {
     return messages.isEmpty() ? null : messages.get(messages.size() - 1);
   }
 
+  /**
+   * 追加单条消息到历史末尾。
+   *
+   * @param m 待追加消息
+   */
   public void append(Message m) {
     messages.add(m);
   }
 
+  /**
+   * 把工具调用结果批量追加为 {@link Message.ToolResult}（回流给模型的格式）。
+   *
+   * @param results 工具结果信封列表
+   */
   public void appendToolResults(List<ToolResultEnvelope> results) {
     for (var r : results) {
       messages.add(new Message.ToolResult(r.toolCallId(), r.content(), r.isError()));
     }
   }
 
+  /**
+   * @return 累计 token 估算（每条消息 content 的 token 数相加）
+   */
   public int estimateTokens() {
     return messages.stream().mapToInt(m -> estimator.estimate(m.content())).sum();
   }
 
+  /**
+   * @return 当前连续压缩失败次数（自上次成功压缩以来）
+   */
   public int consecutiveCompactFailures() {
     return compactFailures.get();
   }
 
+  /** 增加连续压缩失败计数（一次失败时调用） */
   public void incrementCompactFailures() {
     compactFailures.incrementAndGet();
   }
 
+  /** 重置连续压缩失败计数（压缩成功时调用） */
   public void resetCompactFailures() {
     compactFailures.set(0);
   }
@@ -96,8 +135,18 @@ public class MessageHistory {
     recentFileContents.clear();
   }
 
+  /**
+   * 工具调用结果传输信封（仅内部包内可见，避免污染公共 API）。
+   *
+   * @param toolCallId 关联的工具调用 ID（用于回流给模型时匹配 assistant.tool_calls）
+   * @param content 工具输出内容（错误时为错误信息）
+   * @param isError 是否为错误结果
+   */
   public record ToolResultEnvelope(String toolCallId, String content, boolean isError) {}
 
+  /**
+   * @return 调试用字符串（含 size / estTokens / compactFailures / recentFiles）
+   */
   @Override
   public String toString() {
     return "MessageHistory{size="
