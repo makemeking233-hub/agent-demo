@@ -8,8 +8,11 @@ package com.example.agent.permission;
 public record PermissionDecision(Behavior behavior) {
   /** 行为枚举 */
   public enum Behavior {
+    /** 放行（直接执行工具） */
     ALLOW,
+    /** 询问用户（弹确认） */
     ASK,
+    /** 拒绝（终态，不可覆盖） */
     DENY
   }
 
