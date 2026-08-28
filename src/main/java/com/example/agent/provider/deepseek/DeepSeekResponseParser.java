@@ -12,6 +12,7 @@ import java.util.Optional;
  * <p>职责单一：把单行 SSE payload 解析为一个 {@link StreamChunk}。 请求体构造由 {@link DeepSeekRequestMapper} 负责。
  */
 public class DeepSeekResponseParser {
+  /** JSON 解析器（SSE payload → JsonNode） */
   private final ObjectMapper json = new ObjectMapper();
 
   /**

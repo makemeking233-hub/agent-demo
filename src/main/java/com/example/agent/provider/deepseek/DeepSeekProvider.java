@@ -20,7 +20,10 @@ public class DeepSeekProvider implements LlmProvider {
   /** DeepSeek-chat 最大输出（8192 tokens） */
   private static final int MAX_OUTPUT = 8_192;
 
+  /** HTTP 客户端（带 Authorization header） */
   private final WebClient client;
+
+  /** 请求/响应映射器门面 */
   private final DeepSeekMapper mapper;
 
   /**

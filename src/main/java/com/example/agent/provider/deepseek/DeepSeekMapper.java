@@ -11,7 +11,10 @@ import java.util.Optional;
  * ResponseParser。
  */
 public class DeepSeekMapper {
+  /** 请求体构造器（ChatRequest → DeepSeek HTTP body） */
   private final DeepSeekRequestMapper requestMapper = new DeepSeekRequestMapper();
+
+  /** SSE 响应解析器（单行 SSE → StreamChunk） */
   private final DeepSeekResponseParser responseParser = new DeepSeekResponseParser();
 
   /**
