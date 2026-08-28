@@ -176,7 +176,14 @@ public class ChatCommand implements Runnable {
         if (handleLine(line, ctx)) {
           continue;
         }
-        TurnResult result = ctx.loop().processTurn(new Message.User(line)).block();
+        TurnResult result = null;
+        try {
+          result = ctx.loop().processTurn(new Message.User(line)).block();
+        } catch (Exception e) {
+          // 不让单次失败退出 REPL：打印错误让用户重试（/clear 清空历史）
+          System.err.println("\n[error] " + friendlyError(e) + "\n");
+          log.debug("REPL turn failed", e);
+        }
         if (result != null) {
           ctx.totalPrompt()[0] += result.totalPromptTokens();
           ctx.totalCompletion()[0] += result.totalCompletionTokens();
@@ -185,6 +192,27 @@ public class ChatCommand implements Runnable {
     } catch (IOException e) {
       log.error("[chat] failed to read input", e);
     }
+  }
+
+  /** 把异常翻译成用户能看懂的提示（401 / 404 / 5xx / 网络等） */
+  private static String friendlyError(Throwable e) {
+    Throwable root = e;
+    while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+    String msg = root.getMessage() == null ? root.getClass().getSimpleName() : root.getMessage();
+    if (msg != null && msg.contains("401")) {
+      return "401 Unauthorized — DEEPSEEK_API_KEY 未设或失效。设环境变量后重启：\n"
+          + "  set DEEPSEEK_API_KEY=sk-... （Windows: $env:DEEPSEEK_API_KEY='sk-...'）";
+    }
+    if (msg != null && msg.contains("404")) {
+      return "404 Not Found — baseUrl 或 model 名错（默认 https://api.deepseek.com / deepseek-chat）";
+    }
+    if (msg != null && (msg.contains("429") || msg.contains("rate limit"))) {
+      return "429 限流 — 稍等 30s 再试，或检查账户余额";
+    }
+    if (msg != null && (msg.contains("connect") || msg.contains("timeout"))) {
+      return "网络错误 — 检查 baseUrl / 代理 / 防火墙";
+    }
+    return msg;
   }
 
   /**
