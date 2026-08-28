@@ -4,9 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.example.agent.agent.Message;
-import com.example.agent.provider.ChatRequest;
-import com.example.agent.provider.StreamChunk;
+import com.example.agent.core.Message;
+import com.example.agent.llm.ChatRequest;
+import com.example.agent.llm.StreamChunk;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;

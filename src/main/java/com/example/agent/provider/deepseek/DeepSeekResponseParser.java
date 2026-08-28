@@ -1,7 +1,7 @@
 package com.example.agent.provider.deepseek;
 
-import com.example.agent.provider.FinishReason;
-import com.example.agent.provider.StreamChunk;
+import com.example.agent.llm.FinishReason;
+import com.example.agent.llm.StreamChunk;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;

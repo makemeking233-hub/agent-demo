@@ -1,6 +1,6 @@
 package com.example.agent.cli;
 
-import com.example.agent.agent.MessageHistory;
+import com.example.agent.core.MessageHistory;
 import java.util.List;
 
 /**

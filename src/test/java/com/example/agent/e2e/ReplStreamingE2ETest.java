@@ -5,7 +5,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.example.agent.provider.StreamChunk;
+import com.example.agent.llm.StreamChunk;
 import com.example.agent.provider.deepseek.DeepSeekProvider;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ class ReplStreamingE2ETest extends E2ETestBase {
     StepVerifier.create(
             provider
                 .streamChat(
-                    new com.example.agent.provider.ChatRequest(
+                    new com.example.agent.llm.ChatRequest(
                         "deepseek-chat",
                         null,
                         java.util.List.of(),

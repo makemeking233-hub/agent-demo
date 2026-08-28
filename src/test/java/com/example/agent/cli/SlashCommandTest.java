@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.example.agent.agent.MessageHistory;
-import com.example.agent.provider.TokenEstimator;
+import com.example.agent.core.MessageHistory;
+import com.example.agent.llm.TokenEstimator;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

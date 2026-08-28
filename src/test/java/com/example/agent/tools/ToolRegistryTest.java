@@ -3,6 +3,8 @@ package com.example.agent.tools;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.example.agent.tools.file.ReadFileTool;
+import com.example.agent.tools.file.LsTool;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

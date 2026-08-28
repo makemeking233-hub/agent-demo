@@ -1,0 +1,269 @@
+package com.example.agent.core;
+
+import com.example.agent.core.exception.MaxIterationsExceededException;
+import com.example.agent.permission.PermissionManager;
+import com.example.agent.llm.ChatRequest;
+import com.example.agent.llm.LlmProvider;
+import com.example.agent.llm.StreamChunk;
+import com.example.agent.llm.ToolCall;
+import com.example.agent.llm.ToolSpec;
+import com.example.agent.render.StreamingPrinter;
+import com.example.agent.tools.Tool;
+import com.example.agent.tools.ToolRegistry;
+import com.example.agent.tools.ToolResult;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+/**
+ * Agent 主循环：单轮对话 → 流式响应 → 工具调度 → 续推（详见 design.md §7）。
+ *
+ * <p>关键约束：
+ *
+ * <ul>
+ *   <li>{@code maxToolIterations} 强制熔断，防止模型/工具诱导无限循环（§7）
+ *   <li>assistant(tool_calls) 必须先入 history，再 append tool_results（§7 消息顺序约束）
+ *   <li>流式打印统一在 {@link #printChunk} 内部，processTurn 外层不再打印（避免双打）
+ *   <li>history 字段 mutable，{@link #setHistory} 支持 /clear 切换（详见 ChatCommand）
+ *   <li>所有工具调用共享 {@link #toolContext}（含 workingDirectory + PermissionManager + AbortSignal）
+ * </ul>
+ */
+public class AgentLoop {
+  private static final Logger log = LoggerFactory.getLogger(AgentLoop.class);
+
+  /** 默认模型（v0.1 单 provider；从 cfg 传入覆盖） */
+  private static final String DEFAULT_MODEL = "deepseek-chat";
+
+  /** 默认 temperature（DeepSeek 推荐 1.0） */
+  private static final double DEFAULT_TEMPERATURE = 1.0;
+
+  /** 默认 max_tokens（DeepSeek-chat 上限 8192） */
+  private static final int DEFAULT_MAX_TOKENS = 8192;
+
+  /** LLM Provider 实例（注入） */
+  private final LlmProvider provider;
+
+  /** 工具注册表（按 name 索引） */
+  private final ToolRegistry tools;
+
+  /** 工具执行上下文（含 workingDirectory + PermissionManager + AbortSignal） */
+  private final Tool.ToolContext toolContext;
+
+  /** 当前消息历史（{@code volatile}：/clear 时由 {@link #setHistory} 切换） */
+  private volatile MessageHistory history;
+
+  /** 流式打印机（stdout 输出） */
+  private final StreamingPrinter printer;
+
+  /** 单轮最大工具调用次数（超过则抛 {@link MaxIterationsExceededException}） */
+  private final int maxToolIterations;
+
+  /** 模型名（{@code null} 时回落到 {@link #DEFAULT_MODEL}） */
+  private final String model;
+
+  /**
+   * 构造 Agent 主循环。
+   *
+   * @param provider LLM provider
+   * @param tools 工具注册表
+   * @param history 初始消息历史
+   * @param printer 流式打印机
+   * @param maxToolIterations 单轮最大工具调用次数（超过熔断）
+   * @param model 模型名（{@code null} 用默认 deepseek-chat）
+   * @param workingDir 工作目录（所有相对路径的基准）
+   */
+  public AgentLoop(
+      LlmProvider provider,
+      ToolRegistry tools,
+      MessageHistory history,
+      StreamingPrinter printer,
+      int maxToolIterations,
+      String model,
+      Path workingDir) {
+    this.provider = provider;
+    this.tools = tools;
+    this.history = history;
+    this.printer = printer;
+    this.maxToolIterations = maxToolIterations;
+    this.model = model;
+    this.toolContext = new Tool.ToolContext(workingDir, new PermissionManager(), () -> false);
+  }
+
+  /**
+   * 切换历史容器（/clear 时调用，详见 ChatCommand）。
+   *
+   * @param history 新的消息历史
+   */
+  public void setHistory(MessageHistory history) {
+    this.history = history;
+  }
+
+  /**
+   * 处理单轮用户输入：追加 user 消息 → 调 LLM → 工具调度 → 返回拼接结果。
+   *
+   * @param userMsg 用户消息
+   * @return 该轮拼接后的 {@link TurnResult}（finalMessage + token 累计）
+   */
+  public Mono<TurnResult> processTurn(Message.User userMsg) {
+    history.append(userMsg);
+    return streamUntilToolsSettled(0).next().map(this::buildTurnResult);
+  }
+
+  /**
+   * 流式对话循环：直到模型不再产生 tool_calls 或达到 {@link #maxToolIterations}。
+   *
+   * @param iteration 当前递归深度（首次为 0，每次工具调用后 +1）
+   * @return 该次完整流的 chunk 列表
+   */
+  private Flux<List<StreamChunk>> streamUntilToolsSettled(int iteration) {
+    if (iteration >= maxToolIterations) {
+      log.warn("hit maxToolIterations={}, stopping turn", iteration);
+      return Flux.error(new MaxIterationsExceededException(iteration));
+    }
+    return provider
+        .streamChat(toRequest())
+        .doOnNext(this::printChunk)
+        .collectList()
+        .flatMapMany(
+            chunks -> {
+              Message.Assistant assistant = extractAssistant(chunks);
+              history.append(assistant);
+              if (assistant.toolCalls() == null || assistant.toolCalls().isEmpty()) {
+                printer.onFinished();
+                return Flux.just(chunks);
+              }
+              return executeTools(assistant.toolCalls())
+                  .flatMap(
+                      results -> {
+                        history.appendToolResults(toEnvelopes(results));
+                        return streamUntilToolsSettled(iteration + 1);
+                      });
+            });
+  }
+
+  /**
+   * 组装当前 {@link ChatRequest}：工具 schema + 历史消息 + 默认采样参数。
+   *
+   * @return 当前轮的聊天请求
+   */
+  private ChatRequest toRequest() {
+    List<ToolSpec> specs = new ArrayList<>();
+    for (var t : tools.list()) {
+      specs.add(new ToolSpec(t.name(), t.description(), t.inputSchema()));
+    }
+    List<com.example.agent.core.Message> msgs = new ArrayList<>(history.all());
+    return new ChatRequest(
+        model != null ? model : DEFAULT_MODEL,
+        null,
+        msgs,
+        specs,
+        DEFAULT_TEMPERATURE,
+        DEFAULT_MAX_TOKENS,
+        null);
+  }
+
+  /**
+   * 单 chunk 路由：根据 chunk 类型分发到 {@link StreamingPrinter}。 Finished / Usage 不打印。
+   *
+   * @param chunk 流式 chunk
+   */
+  private void printChunk(StreamChunk chunk) {
+    if (chunk instanceof StreamChunk.TextDelta t) {
+      printer.onTextDelta(t.text());
+    } else if (chunk instanceof StreamChunk.ToolCallStart s) {
+      printer.onToolCallStart(s.id(), s.name());
+    } else if (chunk instanceof StreamChunk.ToolCallDelta d) {
+      printer.onToolCallArgs(d.id(), d.argumentsDelta());
+    } else if (chunk instanceof StreamChunk.ToolCallEnd e) {
+      printer.onToolCallEnd(e.id(), e.name(), e.arguments());
+    } else if (chunk instanceof StreamChunk.Error err) {
+      printer.onError(err.message());
+    }
+    // Finished / Usage 不打印
+  }
+
+  /**
+   * 从完整 chunk 序列提取 {@link Message.Assistant}：拼接所有 {@link StreamChunk.TextDelta} 内容 + 累积工具调用。
+   *
+   * @param chunks 完整 chunk 序列
+   * @return 提取出的 assistant 消息
+   */
+  private Message.Assistant extractAssistant(List<StreamChunk> chunks) {
+    StringBuilder content = new StringBuilder();
+    for (StreamChunk c : chunks) {
+      if (c instanceof StreamChunk.TextDelta t) content.append(t.text());
+    }
+    List<ToolCall> calls = StreamChunk.aggregate(chunks);
+    return new Message.Assistant(content.toString(), calls);
+  }
+
+  /**
+   * 并行执行模型产生的所有工具调用。
+   *
+   * @param calls 模型返回的工具调用列表
+   * @return 每个工具的执行结果（错误时返回 error 结果）
+   */
+  @SuppressWarnings("unchecked")
+  private Flux<List<ToolResult<Object>>> executeTools(List<ToolCall> calls) {
+    return Flux.fromIterable(calls)
+        .flatMap(
+            call -> {
+              Tool tool = tools.getRaw(call.name());
+              if (tool == null) {
+                ToolResult<Object> err = ToolResult.<Object>error("工具不存在: " + call.name());
+                return Mono.just(List.of(err));
+              }
+              return tool.execute(call.argumentsJson(), toolContext)
+                  .map(
+                      r -> {
+                        ToolResult<Object> typed = (ToolResult<Object>) r;
+                        return List.of(typed);
+                      })
+                  .flux();
+            });
+  }
+
+  /**
+   * 把工具结果列表转为 {@link MessageHistory.ToolResultEnvelope}（回流给模型的格式）。
+   *
+   * @param results 工具结果列表
+   * @return 历史信封列表
+   */
+  private List<MessageHistory.ToolResultEnvelope> toEnvelopes(List<ToolResult<Object>> results) {
+    return results.stream()
+        .map(
+            r ->
+                new MessageHistory.ToolResultEnvelope(
+                    r.toolCallId(), r.toModelContent(), r.isError()))
+        .toList();
+  }
+
+  /**
+   * 从完整 chunk 序列组装 {@link TurnResult}：拼接文本 + 累计 token。
+   *
+   * @param chunks 完整 chunk 序列
+   * @return 单轮结果
+   */
+  private TurnResult buildTurnResult(List<StreamChunk> chunks) {
+    String text =
+        chunks.stream()
+            .filter(c -> c instanceof StreamChunk.TextDelta)
+            .map(c -> ((StreamChunk.TextDelta) c).text())
+            .reduce("", String::concat);
+    int prompt = 0, completion = 0;
+    for (StreamChunk c : chunks) {
+      if (c instanceof StreamChunk.Usage u) {
+        prompt += u.promptTokens();
+        completion += u.completionTokens();
+      } else if (c instanceof StreamChunk.Finished f && f.usage() != null) {
+        prompt += f.usage().promptTokens();
+        completion += f.usage().completionTokens();
+      }
+    }
+    return new TurnResult(text, prompt, completion, 0);
+  }
+}

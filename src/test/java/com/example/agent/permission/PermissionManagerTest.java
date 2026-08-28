@@ -2,10 +2,10 @@ package com.example.agent.permission;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.example.agent.tools.LsTool;
-import com.example.agent.tools.ReadFileTool;
+import com.example.agent.tools.file.LsTool;
+import com.example.agent.tools.file.ReadFileTool;
 import com.example.agent.tools.Tool;
-import com.example.agent.tools.WriteFileTool;
+import com.example.agent.tools.file.WriteFileTool;
 import java.nio.file.Paths;
 import org.junit.jupiter.api.Test;
 

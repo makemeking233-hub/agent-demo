@@ -1,6 +1,6 @@
 package com.example.agent.provider.deepseek;
 
-import com.example.agent.provider.ChatRequest;
+import com.example.agent.llm.ChatRequest;
 import java.util.Map;
 import java.util.Optional;
 
@@ -33,7 +33,7 @@ public class DeepSeekMapper {
    * @param line SSE data 行
    * @return 解析出的 chunk（[DONE] / 空行 / 非 data 返回 empty）
    */
-  public Optional<com.example.agent.provider.StreamChunk> parseSseLine(String line) {
+  public Optional<com.example.agent.llm.StreamChunk> parseSseLine(String line) {
     return responseParser.parseSseLine(line);
   }
 }

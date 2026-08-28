@@ -6,9 +6,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.example.agent.agent.Message;
-import com.example.agent.provider.ChatRequest;
-import com.example.agent.provider.StreamChunk;
+import com.example.agent.core.Message;
+import com.example.agent.llm.ChatRequest;
+import com.example.agent.llm.StreamChunk;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import java.util.List;

@@ -1,8 +1,8 @@
 package com.example.agent.provider.deepseek;
 
-import com.example.agent.provider.ChatRequest;
-import com.example.agent.provider.LlmProvider;
-import com.example.agent.provider.StreamChunk;
+import com.example.agent.llm.ChatRequest;
+import com.example.agent.llm.LlmProvider;
+import com.example.agent.llm.StreamChunk;
 import java.util.Optional;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;

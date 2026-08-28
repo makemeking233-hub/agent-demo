@@ -1,5 +1,8 @@
 package com.example.agent.tools;
 
+import com.example.agent.tools.file.ReadFileTool;
+import com.example.agent.tools.file.WriteFileTool;
+import com.example.agent.tools.file.EditFileTool;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

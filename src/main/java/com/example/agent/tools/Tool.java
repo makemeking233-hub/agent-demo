@@ -87,7 +87,7 @@ public interface Tool<I, O> {
   Mono<ToolResult<O>> execute(I input, ToolContext ctx);
 
   /**
-   * 工具上下文总线（在 {@link com.example.agent.agent.AgentLoop#executeTools} 时组装）。
+   * 工具上下文总线（在 {@link com.example.agent.core.AgentLoop#executeTools} 时组装）。
    *
    * @param workingDirectory 工作目录（所有路径相对此解析）
    * @param permissions 权限管理器

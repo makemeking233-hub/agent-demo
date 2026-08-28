@@ -118,7 +118,7 @@ public class PermissionManager {
    */
   private String extractPath(Object input) {
     if (input instanceof Tool.ToolContext) return null;
-    if (input instanceof com.example.agent.tools.ToolInput ti) return ti.path();
+    if (input instanceof com.example.agent.tools.file.ToolInput ti) return ti.path();
     return null;
   }
 }

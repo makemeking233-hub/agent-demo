@@ -1,16 +1,16 @@
 package com.example.agent.cli;
 
 import com.example.agent.AbortSignal;
-import com.example.agent.agent.AgentLoop;
-import com.example.agent.agent.ContextCompressor;
-import com.example.agent.agent.Message;
-import com.example.agent.agent.MessageHistory;
-import com.example.agent.agent.TurnResult;
+import com.example.agent.core.AgentLoop;
+import com.example.agent.core.ContextCompressor;
+import com.example.agent.core.Message;
+import com.example.agent.core.MessageHistory;
+import com.example.agent.core.TurnResult;
 import com.example.agent.config.AgentConfig;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.permission.PermissionManager;
-import com.example.agent.provider.LlmProvider;
-import com.example.agent.provider.TokenEstimator;
+import com.example.agent.llm.LlmProvider;
+import com.example.agent.llm.TokenEstimator;
 import com.example.agent.provider.deepseek.DeepSeekProvider;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.ToolRegistry;

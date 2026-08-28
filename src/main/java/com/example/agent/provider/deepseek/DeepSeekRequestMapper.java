@@ -1,6 +1,6 @@
 package com.example.agent.provider.deepseek;
 
-import com.example.agent.provider.ChatRequest;
+import com.example.agent.llm.ChatRequest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,12 +59,12 @@ public class DeepSeekRequestMapper {
   }
 
   /**
-   * 把内部 {@link com.example.agent.agent.Message} 列表转为 OpenAI 格式 Map 数组（通过 sealed {@code Message.toMap()} 多态分发）。
+   * 把内部 {@link com.example.agent.core.Message} 列表转为 OpenAI 格式 Map 数组（通过 sealed {@code Message.toMap()} 多态分发）。
    *
    * @param messages 内部消息列表
    * @return OpenAI 格式 messages 数组
    */
-  private List<Map<String, Object>> toMessageArray(List<com.example.agent.agent.Message> messages) {
+  private List<Map<String, Object>> toMessageArray(List<com.example.agent.core.Message> messages) {
     List<Map<String, Object>> arr = new ArrayList<>();
     for (var m : messages) arr.add(m.toMap());
     return arr;

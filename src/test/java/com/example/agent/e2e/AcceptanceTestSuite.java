@@ -10,10 +10,10 @@ import com.example.agent.memory.MemoryRecall;
 import com.example.agent.permission.PermissionDecision;
 import com.example.agent.permission.PermissionManager;
 import com.example.agent.permission.PermissionPolicy;
-import com.example.agent.provider.TokenEstimator;
-import com.example.agent.tools.BashAdapter;
-import com.example.agent.tools.ReadFileTool;
-import com.example.agent.tools.ShellTool;
+import com.example.agent.llm.TokenEstimator;
+import com.example.agent.tools.shell.BashAdapter;
+import com.example.agent.tools.file.ReadFileTool;
+import com.example.agent.tools.shell.ShellTool;
 import com.example.agent.tools.Tool;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,7 +61,7 @@ class AcceptanceTestSuite {
 
   @Test
   void shellToolExecutes(@TempDir Path tmp) {
-    var tool = new ShellTool(new com.example.agent.tools.CmdAdapter(), 5, 10000, false);
+    var tool = new ShellTool(new com.example.agent.tools.shell.CmdAdapter(), 5, 10000, false);
     var result =
         tool.execute(
                 new ShellTool.Input("echo hello"),
