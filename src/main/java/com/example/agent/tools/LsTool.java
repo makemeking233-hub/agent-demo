@@ -53,8 +53,8 @@ public class LsTool implements Tool<LsTool.Input, String> {
 
   @Override
   public PermissionDecision checkPermissions(Input i, ToolContext ctx) {
-    if (i.path() != null && i.path().contains("..")) return PermissionDecision.deny();
-    return PermissionDecision.allow();
+    PermissionDecision guard = PathGuard.denyIfTraversal(i.path());
+    return guard != null ? guard : PermissionDecision.allow();
   }
 
   @Override

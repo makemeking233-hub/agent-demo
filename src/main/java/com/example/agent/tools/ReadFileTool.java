@@ -55,8 +55,8 @@ public class ReadFileTool implements Tool<ReadFileTool.Input, String> {
 
   @Override
   public PermissionDecision checkPermissions(Input i, ToolContext ctx) {
-    if (i.path() == null || i.path().contains("..")) return PermissionDecision.deny();
-    return PermissionDecision.allow();
+    PermissionDecision guard = PathGuard.denyIfTraversal(i.path());
+    return guard != null ? guard : PermissionDecision.allow();
   }
 
   @Override

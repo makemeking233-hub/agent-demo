@@ -55,8 +55,8 @@ public class WriteFileTool implements Tool<WriteFileTool.Input, String> {
 
   @Override
   public PermissionDecision checkPermissions(Input i, ToolContext ctx) {
-    if (i.path() == null || i.path().contains("..")) return PermissionDecision.deny();
-    return PermissionDecision.ask();
+    PermissionDecision guard = PathGuard.denyIfTraversal(i.path());
+    return guard != null ? guard : PermissionDecision.ask();
   }
 
   @Override

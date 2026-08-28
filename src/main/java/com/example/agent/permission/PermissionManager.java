@@ -82,14 +82,10 @@ public class PermissionManager {
    */
   private String extractPath(Object input) {
     if (input instanceof Tool.ToolContext) return null;
-    try {
-      if (input instanceof com.example.agent.tools.ReadFileTool.Input i) return i.path();
-      if (input instanceof com.example.agent.tools.WriteFileTool.Input i) return i.path();
-      if (input instanceof com.example.agent.tools.EditFileTool.Input i) return i.path();
-      if (input instanceof com.example.agent.tools.LsTool.Input i) return i.path();
-    } catch (Exception ignored) {
-      /* instanceof 不会抛，防御性 */
-    }
+    if (input instanceof com.example.agent.tools.ReadFileTool.Input i) return i.path();
+    if (input instanceof com.example.agent.tools.WriteFileTool.Input i) return i.path();
+    if (input instanceof com.example.agent.tools.EditFileTool.Input i) return i.path();
+    if (input instanceof com.example.agent.tools.LsTool.Input i) return i.path();
     return null;
   }
 }
