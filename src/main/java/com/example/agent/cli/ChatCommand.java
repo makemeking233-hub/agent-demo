@@ -56,27 +56,35 @@ public class ChatCommand implements Runnable {
   /** Default max tool iterations per turn (aligns with Claude Code) */
   private static final int DEFAULT_MAX_TOOL_ITERATIONS = 25;
 
+  /** --model：覆盖默认模型名 */
   @Option(
       names = {"--model"},
       description = "Override default model")
   String model;
 
+  /** --api-key：覆盖 API key（本次会话优先） */
   @Option(
       names = {"--api-key"},
       description = "Override API key (this session only)")
   String apiKey;
 
+  /** --system-prompt：覆盖默认 system prompt */
   @Option(
       names = {"--system-prompt"},
       description = "Override default system prompt")
   String systemPrompt;
 
+  /** --input：E2E 测试用一次性输入（跳过 REPL 循环） */
   @Option(names = "--input", description = "TEST: inject one-shot input (skips REPL loop)")
   String injectedInput;
 
+  /** --auto-approve-write：E2E 测试用（跳过写权限确认） */
   @Option(names = "--auto-approve-write", description = "TEST: skip write permission confirmation")
   boolean autoApproveWrite;
 
+  /**
+   * picocli 入口：装配 Provider / Tools / AgentLoop / Permission，启动 REPL。
+   */
   @Override
   public void run() {
     AgentConfig cfg = loadConfig();
@@ -133,7 +141,18 @@ public class ChatCommand implements Runnable {
     return new ConfigLoader().load(cfgPath);
   }
 
-  /** REPL main loop: read stdin -> dispatch slash or AgentLoop (extracted to reduce run() lines) */
+  /**
+   * REPL 主循环：读取 stdin → 派发 slash 命令或 AgentLoop。
+   *
+   * @param history 当前消息历史（/clear 时切换）
+   * @param estimator token 估算器
+   * @param loop Agent 主循环
+   * @param slash slash 命令分发器
+   * @param totalPrompt 累计 prompt token 累加器
+   * @param totalCompletion 累计 completion token 累加器
+   * @param resolvedModel 解析后的模型名
+   * @param aborted 中断标志（Ctrl+C 置 true）
+   */
   private void runReplLoop(
       AtomicReference<MessageHistory> history,
       TokenEstimator estimator,
@@ -195,6 +214,12 @@ public class ChatCommand implements Runnable {
         });
   }
 
+  /**
+   * 取第一个非空白字符串（用于多源配置优先级：CLI flag &gt; env &gt; config.yaml）。
+   *
+   * @param candidates 候选项
+   * @return 第一个非 null 且非空白的值；全部为空时返回 {@code null}
+   */
   private static String pickFirstNonBlank(String... candidates) {
     for (String s : candidates) {
       if (s != null && !s.isBlank()) return s;
