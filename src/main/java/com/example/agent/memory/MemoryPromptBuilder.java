@@ -1,14 +1,21 @@
 package com.example.agent.memory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 
 /**
  * 把 Memory 拼到 system prompt（详见 design.md §5.4）。
  *
  * <p>v0.1 简化：只拼 MEMORY.md 索引内容到 system prompt；不注入文件级内容。
+ *
+ * <p>模板从 {@code /prompts/memory-system.txt} 加载，含三个占位符：{@code {memoryDir}} / {@code
+ * {extraGuidelines}} / {@code {indexContent}}。
  */
 public class MemoryPromptBuilder {
+  /** 模板资源路径（classpath） */
+  private static final String TEMPLATE_PATH = "/prompts/memory-system.txt";
+
   /** memory 目录管理器（用于读 MEMORY.md 索引） */
   private final MemoryDir dir;
 
@@ -28,25 +35,29 @@ public class MemoryPromptBuilder {
    * @return 完整 system prompt 片段
    */
   public String build(String extraGuidelines) {
-    StringBuilder sb = new StringBuilder();
-    sb.append("# Persistent Agent Memory\n\n");
-    sb.append("You have a persistent, file-based memory system at ")
-        .append(dir.dir())
-        .append(".\n\n");
-    sb.append("## How to Save Memory\n");
-    sb.append("1. Create a topic file `~/.agent-demo/memory/<name>.md`\n");
-    sb.append("2. Update MEMORY.md index with `- [Title](filename) — description`\n\n");
-    sb.append("## What Not to Save\n");
-    sb.append("- Code-derived knowledge (read the code)\n");
-    sb.append("- Duplicate entries\n\n");
-    if (extraGuidelines != null && !extraGuidelines.isBlank()) {
-      sb.append(extraGuidelines).append("\n\n");
-    }
-
     String indexContent = readIndex();
-    sb.append("## MEMORY.md\n\n")
-        .append(indexContent.isEmpty() ? "Your MEMORY.md is currently empty." : indexContent);
-    return sb.toString();
+    String indexSection =
+        indexContent.isEmpty() ? "Your MEMORY.md is currently empty." : indexContent;
+    String extra = extraGuidelines != null && !extraGuidelines.isBlank() ? extraGuidelines : "";
+    String template = loadTemplate();
+    return template
+        .replace("{memoryDir}", dir.dir().toString())
+        .replace("{extraGuidelines}", extra)
+        .replace("{indexContent}", indexSection);
+  }
+
+  /**
+   * 从 classpath 加载 memory prompt 模板（缺失时回退到内置最小模板）。
+   *
+   * @return 模板字符串
+   */
+  private String loadTemplate() {
+    try (var in = getClass().getResourceAsStream(TEMPLATE_PATH)) {
+      if (in == null) return "# Persistent Agent Memory\n{memoryDir}\n{indexContent}";
+      return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    } catch (IOException e) {
+      return "# Persistent Agent Memory\n{memoryDir}\n{indexContent}";
+    }
   }
 
   /**
