@@ -43,14 +43,38 @@ public class AgentLoop {
   /** 默认 max_tokens（DeepSeek-chat 上限 8192） */
   private static final int DEFAULT_MAX_TOKENS = 8192;
 
+  /** LLM Provider 实例（注入） */
   private final LlmProvider provider;
+
+  /** 工具注册表（按 name 索引） */
   private final ToolRegistry tools;
+
+  /** 工具执行上下文（含 workingDirectory + PermissionManager + AbortSignal） */
   private final Tool.ToolContext toolContext;
+
+  /** 当前消息历史（{@code volatile}：/clear 时由 {@link #setHistory} 切换） */
   private volatile MessageHistory history;
+
+  /** 流式打印机（stdout 输出） */
   private final StreamingPrinter printer;
+
+  /** 单轮最大工具调用次数（超过则抛 {@link MaxIterationsExceededException}） */
   private final int maxToolIterations;
+
+  /** 模型名（{@code null} 时回落到 {@link #DEFAULT_MODEL}） */
   private final String model;
 
+  /**
+   * 构造 Agent 主循环。
+   *
+   * @param provider LLM provider
+   * @param tools 工具注册表
+   * @param history 初始消息历史
+   * @param printer 流式打印机
+   * @param maxToolIterations 单轮最大工具调用次数（超过熔断）
+   * @param model 模型名（{@code null} 用默认 deepseek-chat）
+   * @param workingDir 工作目录（所有相对路径的基准）
+   */
   public AgentLoop(
       LlmProvider provider,
       ToolRegistry tools,
@@ -68,17 +92,33 @@ public class AgentLoop {
     this.toolContext = new Tool.ToolContext(workingDir, new PermissionManager(), () -> false);
   }
 
-  /** /clear 时切换历史容器（详见 ChatCommand） */
+  /**
+   * 切换历史容器（/clear 时调用，详见 ChatCommand）。
+   *
+   * @param history 新的消息历史
+   */
   public void setHistory(MessageHistory history) {
     this.history = history;
   }
 
+  /**
+   * 处理单轮用户输入：追加 user 消息 → 调 LLM → 工具调度 → 返回拼接结果。
+   *
+   * @param userMsg 用户消息
+   * @return 该轮拼接后的 {@link TurnResult}（finalMessage + token 累计）
+   */
   public Mono<TurnResult> processTurn(Message.User userMsg) {
     history.append(userMsg);
-    return streamUntilStable(0).next().map(this::buildTurnResult);
+    return streamUntilToolsSettled(0).next().map(this::buildTurnResult);
   }
 
-  private Flux<List<StreamChunk>> streamUntilStable(int iteration) {
+  /**
+   * 流式对话循环：直到模型不再产生 tool_calls 或达到 {@link #maxToolIterations}。
+   *
+   * @param iteration 当前递归深度（首次为 0，每次工具调用后 +1）
+   * @return 该次完整流的 chunk 列表
+   */
+  private Flux<List<StreamChunk>> streamUntilToolsSettled(int iteration) {
     if (iteration >= maxToolIterations) {
       log.warn("hit maxToolIterations={}, stopping turn", iteration);
       return Flux.error(new MaxIterationsExceededException(iteration));
@@ -99,11 +139,16 @@ public class AgentLoop {
                   .flatMap(
                       results -> {
                         history.appendToolResults(toEnvelopes(results));
-                        return streamUntilStable(iteration + 1);
+                        return streamUntilToolsSettled(iteration + 1);
                       });
             });
   }
 
+  /**
+   * 组装当前 {@link ChatRequest}：工具 schema + 历史消息 + 默认采样参数。
+   *
+   * @return 当前轮的聊天请求
+   */
   private ChatRequest toRequest() {
     List<ToolSpec> specs = new ArrayList<>();
     for (var t : tools.list()) {
@@ -120,6 +165,11 @@ public class AgentLoop {
         null);
   }
 
+  /**
+   * 单 chunk 路由：根据 chunk 类型分发到 {@link StreamingPrinter}。 Finished / Usage 不打印。
+   *
+   * @param chunk 流式 chunk
+   */
   private void printChunk(StreamChunk chunk) {
     if (chunk instanceof StreamChunk.TextDelta t) {
       printer.onTextDelta(t.text());
@@ -135,6 +185,12 @@ public class AgentLoop {
     // Finished / Usage 不打印
   }
 
+  /**
+   * 从完整 chunk 序列提取 {@link Message.Assistant}：拼接所有 {@link StreamChunk.TextDelta} 内容 + 累积工具调用。
+   *
+   * @param chunks 完整 chunk 序列
+   * @return 提取出的 assistant 消息
+   */
   private Message.Assistant extractAssistant(List<StreamChunk> chunks) {
     StringBuilder content = new StringBuilder();
     for (StreamChunk c : chunks) {
@@ -144,6 +200,12 @@ public class AgentLoop {
     return new Message.Assistant(content.toString(), calls);
   }
 
+  /**
+   * 并行执行模型产生的所有工具调用。
+   *
+   * @param calls 模型返回的工具调用列表
+   * @return 每个工具的执行结果（错误时返回 error 结果）
+   */
   @SuppressWarnings("unchecked")
   private Flux<List<ToolResult<Object>>> executeTools(List<ToolCall> calls) {
     return Flux.fromIterable(calls)
@@ -164,6 +226,12 @@ public class AgentLoop {
             });
   }
 
+  /**
+   * 把工具结果列表转为 {@link MessageHistory.ToolResultEnvelope}（回流给模型的格式）。
+   *
+   * @param results 工具结果列表
+   * @return 历史信封列表
+   */
   private List<MessageHistory.ToolResultEnvelope> toEnvelopes(List<ToolResult<Object>> results) {
     return results.stream()
         .map(
@@ -173,6 +241,12 @@ public class AgentLoop {
         .toList();
   }
 
+  /**
+   * 从完整 chunk 序列组装 {@link TurnResult}：拼接文本 + 累计 token。
+   *
+   * @param chunks 完整 chunk 序列
+   * @return 单轮结果
+   */
   private TurnResult buildTurnResult(List<StreamChunk> chunks) {
     String text =
         chunks.stream()
