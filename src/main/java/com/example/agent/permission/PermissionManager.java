@@ -75,17 +75,14 @@ public class PermissionManager {
   }
 
   /**
-   * 从工具输入抽取文件路径（支持 ReadFileTool/WriteFileTool/EditFileTool/LsTool.Input）。
+   * 从工具输入抽取文件路径（sealed {@link com.example.agent.tools.ToolInput} 多态分发）。
    *
    * @param input 工具输入
-   * @return 路径字符串；类型不匹配时返回 {@code null}
+   * @return 路径字符串；类型不匹配或 ToolContext 时返回 {@code null}
    */
   private String extractPath(Object input) {
     if (input instanceof Tool.ToolContext) return null;
-    if (input instanceof com.example.agent.tools.ReadFileTool.Input i) return i.path();
-    if (input instanceof com.example.agent.tools.WriteFileTool.Input i) return i.path();
-    if (input instanceof com.example.agent.tools.EditFileTool.Input i) return i.path();
-    if (input instanceof com.example.agent.tools.LsTool.Input i) return i.path();
+    if (input instanceof com.example.agent.tools.ToolInput ti) return ti.path();
     return null;
   }
 }

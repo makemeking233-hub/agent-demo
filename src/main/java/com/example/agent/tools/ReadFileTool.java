@@ -25,7 +25,7 @@ public class ReadFileTool implements Tool<ReadFileTool.Input, String> {
    *
    * @param path 文件相对路径
    */
-  public record Input(String path) {}
+  public record Input(String path) implements ToolInput {}
 
   @Override
   public String name() {

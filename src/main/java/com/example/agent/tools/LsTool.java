@@ -23,7 +23,7 @@ public class LsTool implements Tool<LsTool.Input, String> {
    *
    * @param path 目录相对路径（{@code null} 或空表示当前目录）
    */
-  public record Input(String path) {}
+  public record Input(String path) implements ToolInput {}
 
   @Override
   public String name() {

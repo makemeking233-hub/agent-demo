@@ -23,7 +23,7 @@ public class WriteFileTool implements Tool<WriteFileTool.Input, String> {
    * @param path 文件相对路径
    * @param content 写入内容
    */
-  public record Input(String path, String content) {}
+  public record Input(String path, String content) implements ToolInput {}
 
   @Override
   public String name() {
