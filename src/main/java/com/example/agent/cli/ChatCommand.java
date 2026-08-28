@@ -50,9 +50,6 @@ import picocli.CommandLine.Option;
 public class ChatCommand implements Runnable {
   private static final Logger log = LoggerFactory.getLogger(ChatCommand.class);
 
-  /** Default DeepSeek API base URL */
-  private static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
-
   /** Default max tool iterations per turn (aligns with Claude Code) */
   private static final int DEFAULT_MAX_TOOL_ITERATIONS = 25;
 
@@ -92,11 +89,18 @@ public class ChatCommand implements Runnable {
         pickFirstNonBlank(apiKey, System.getenv("DEEPSEEK_API_KEY"), cfg.provider().apiKey());
     String resolvedModel =
         pickFirstNonBlank(model, System.getenv("AGENT_MODEL"), cfg.provider().model());
-    String baseUrl =
-        pickFirstNonBlank(System.getenv("DEEPSEEK_BASE_URL"), cfg.provider().baseUrl());
-    if (baseUrl == null || baseUrl.isBlank()) baseUrl = DEFAULT_BASE_URL;
+    // baseUrl 由具体 Provider 内部决定（DeepSeek / MiniMax 各自硬编码），此处不再读 cfg
+    // 环境变量 base URL 暂时未使用（v0.2 可加 provider-specific 覆盖）
 
-    LlmProvider provider = new DeepSeekProvider(resolvedKey, baseUrl);
+    // 按 provider.type() 路由到具体实现
+    LlmProvider provider =
+        switch (cfg.provider().type() == null ? "deepseek" : cfg.provider().type().toLowerCase()) {
+          case "deepseek" -> new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey);
+          case "minimax" -> new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey);
+          default ->
+              throw new IllegalArgumentException(
+                  "未知 provider 类型: " + cfg.provider().type() + "（支持 deepseek / minimax）");
+        };
     TokenEstimator estimator = new TokenEstimator();
     // AtomicReference: lambda-friendly mutable holder for the active MessageHistory
     // (AtomicReference replaces single-element MessageHistory[] array used in v0.1)

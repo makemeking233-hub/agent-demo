@@ -22,7 +22,20 @@ spring:
 
 agent:
   provider:
+    # ============================================================
+    # 在这里切换 provider（deepseek 或 minimax）+ 配置对应 API key
+    # ============================================================
+    type: "deepseek"    # 可选值: deepseek | minimax
+
+    # --- DeepSeek 配置（type=deepseek 时生效）---
     api-key: "REPLACE_ME_WITH_YOUR_DEEPSEEK_KEY"
     base-url: "https://api.deepseek.com"
-    model: "deepseek-chat"
+    model: "deepseek-chat"          # 或 "deepseek-reasoner"
     max-output-tokens: 8192
+
+    # --- MiniMax 配置（type=minimax 时生效）---
+    # 如需切换到 MiniMax，把上面的 type 改为 "minimax"，并填入 MiniMax key：
+    # api-key: "REPLACE_ME_WITH_YOUR_MINIMAX_KEY"
+    # base-url: "https://api.minimaxi.com"
+    # model: "MiniMax-Text-01"
+    # max-output-tokens: 8192
