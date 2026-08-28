@@ -42,6 +42,15 @@ public interface Tool<I, O> {
   }
 
   /**
+   * 工具语义分类（用于 {@code PermissionManager} 策略决策，默认 {@link ToolCategory#OTHER}）。
+   *
+   * @return 工具分类
+   */
+  default ToolCategory category() {
+    return ToolCategory.OTHER;
+  }
+
+  /**
    * 工具级权限裁决（详见 design.md §6.5 Q9：deny 是终态，不可覆盖）。
    *
    * @param input 工具输入

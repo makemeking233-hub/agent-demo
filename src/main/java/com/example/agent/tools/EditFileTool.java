@@ -58,6 +58,11 @@ public class EditFileTool extends AbstractFileTool<EditFileTool.Input> {
   }
 
   @Override
+  public ToolCategory category() {
+    return ToolCategory.WRITE;
+  }
+
+  @Override
   public PermissionDecision checkPermissions(Input i, ToolContext ctx) {
     return PermissionDecision.ask();
   }

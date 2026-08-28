@@ -111,25 +111,25 @@ sequenceDiagram
     participant Map as DeepSeekMapper
     participant API as DeepSeek API (HTTPS/SSE)
 
-    U->>REPL: 输入 prompt
-    REPL->>Loop: processTurn(userMsg)
-    Loop->>Hist: append(User)
-    Loop->>Compressor: compactIfNeeded (如超阈值)
-    Compressor-->>Loop: history (可能已坍缩)
-    Loop->>Map: toRequestBody
-    Map-->>Loop: {model, messages, tools, stream_options}
-    Loop->>LLM: streamChat(req)
-    LLM->>API: POST /v1/chat/completions
-    API-->>LLM: SSE chunks
-    LLM-->>Loop: Flux[StreamChunk]
-    Loop->>Hist: append(Assistant)
+    U->REPL: 输入 prompt
+    REPL->MainLoop: processTurn(userMsg)
+    MainLoop->Hist: append(User)
+    MainLoop->Compressor: compactIfNeeded (如超阈值)
+    Compressor-->MainLoop: history (可能已坍缩)
+    MainLoop->Map: toRequestBody
+    Map-->MainLoop: {model, messages, tools, stream_options}
+    MainLoop->LLM: streamChat(req)
+    LLM->API: POST /v1/chat/completions
+    API-->LLM: SSE chunks
+    LLM-->MainLoop: Flux of StreamChunk
+    MainLoop->Hist: append(Assistant)
     alt 含 tool_calls
-        Loop->>Loop: executeTools() 串行调用
-        Loop->>Hist: append(ToolResult)
-        Loop->>Loop: streamUntilStable(iteration+1)
+        MainLoop->MainLoop: executeTools() 串行调用
+        MainLoop->Hist: append(ToolResult)
+        MainLoop->MainLoop: streamUntilStable(iteration+1)
     end
-    Loop-->>REPL: TurnResult
-    REPL-->>U: 流式打印
+    MainLoop-->REPL: TurnResult
+    REPL-->U: 流式打印
 ```
 
 要点：
@@ -149,7 +149,7 @@ stateDiagram-v2
     读取用户输入 --> 调用LLM
     调用LLM --> 解析chunks
     解析chunks --> 含toolCalls?
-    含toolCalls? --> 否: 写入Assistant: 返回TurnResult
+    含toolCalls? --> 否: 写入Assistant 再返回TurnResult
     含toolCalls? --> 是: 写入Assistant
     是: 写入Assistant --> 串行执行tools
     串行执行tools --> 写入ToolResult
@@ -199,12 +199,12 @@ stateDiagram-v2
     发起请求 --> 失败: 捕获异常
     失败 --> 判断类型
     判断类型 --> 瞬时(IO/5xx): 退避后重试
-    判断类型 --> 429: 按Retry-After退避
+    判断类型 --> 429: 按RetryAfter退避
     判断类型 --> 4xx_非429: 直接抛错
     退避后重试 --> 达上限?: 抛错
     达上限? --> 否: 发起请求
     达上限? --> 是: 抛错
-    按Retry-After退避 --> 达上限?
+    按RetryAfter退避 --> 达上限?
 ```
 
 注意：Reactor 3.4+ 才有 `Retry` 工具类，Spring Boot 3.2 自带 Reactor 3.2.x，**手写递归实现**（详见 `LlmRetry.java`）。
@@ -269,34 +269,34 @@ Fail-Closed 默认：所有工具 `isConcurrencySafe / isReadOnly / isDestructiv
 ```mermaid
 sequenceDiagram
     participant LLM as "模型"
-    participant Loop as AgentLoop
+    participant MainLoop as AgentLoop
     participant Shell as ShellTool
     participant Adapter as "ShellAdapter (Bash/Cmd/PowerShell)"
     participant OS as "操作系统"
 
-    LLM->>Loop: streamChat 返回 tool_call
-    Loop->>Shell: execute(command, ctx)
-    Shell->>Shell: 黑名单匹配? (isDenylisted)
+    LLM->MainLoop: streamChat 返回 tool_call
+    MainLoop->Shell: execute(command, ctx)
+    Shell->Shell: 黑名单匹配? (isDenylisted)
     alt 命中黑名单
-        Shell-->>Loop: isError=true
+        Shell-->MainLoop: isError=true
     else 未命中
-        Shell->>Adapter: commandLine(command)
-        Adapter-->>Shell: ["/bin/bash","-c",cmd]
-        Shell->>Shell: sanitizeEnv(env) 移除 *KEY*/*TOKEN*/*SECRET*
-        Shell->>OS: ProcessBuilder.start()
-        Shell->>Shell: 创建线程池读 stdout(4096 字节块)
-        OS-->>Shell: 流式 stdout
+        Shell->Adapter: commandLine(command)
+        Adapter-->Shell: ['/bin/bash', '-c', cmd]
+        Shell->Shell: sanitizeEnv(env) 移除 \*KEY\* / \*TOKEN\* / \*SECRET\*
+        Shell->OS: ProcessBuilder.start()
+        Shell->Shell: 创建线程池读 stdout(4096 字节块)
+        OS-->Shell: 流式 stdout
         alt 累计 > maxOutputBytes
-            Shell->>OS: killProcessTree 杀进程
-            Shell-->>Loop: 截断 + [truncated] 标记
+            Shell->OS: killProcessTree 杀进程
+            Shell-->MainLoop: 截断 + [truncated] 标记
         else 超时 timeoutSec
-            Shell->>OS: killProcessTree 杀进程
-            Shell-->>Loop: [TIMEOUT after Xs] 错误
+            Shell->OS: killProcessTree 杀进程
+            Shell-->MainLoop: [TIMEOUT after Xs] 错误
         else 正常退出
-            Shell-->>Loop: output + toolCallId
+            Shell-->MainLoop: output + toolCallId
         end
     end
-    Loop->>Loop: appendToolResult
+    MainLoop->MainLoop: appendToolResult
 ```
 
 四道防线：黑名单匹配 → env 清理 → 资源限制（超时 + 输出上限） → 进程树回收（Unix descendants / Windows taskkill）。
@@ -345,27 +345,27 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    participant Loop as AgentLoop
+    participant MainLoop as AgentLoop
     participant Store as SessionStore
     participant Queue as BlockingQueue
     participant Sched as "后台线程"
     participant File as "JSONL 文件"
     participant Channel as FileChannel
 
-    Loop->>Store: append(User entry)
-    Store->>Queue: offer(entry)
+    MainLoop->Store: append(User entry)
+    Store->Queue: offer(entry)
     Note over Store,Queue: 队列满 flushBatchSize=50<br/>或距上次 flush>200ms<br/>触发 flushAsync()
-    Queue->>Sched: schedule
-    Sched->>Store: flushAsync()
-    Store->>Queue: drainTo(drained)
-    Store->>Channel: write(drained, force)
-    Channel-->>File: 追加 JSONL
+    Queue->Sched: schedule
+    Sched->Store: flushAsync()
+    Store->Queue: drainTo(drained)
+    Store->Channel: write(drained, force)
+    Channel-->File: 追加 JSONL
 
-    Note over Loop,Store: 关键节点（用户提交 / Finished / 工具完成）触发 syncFlush
-    Loop->>Store: syncFlush()
-    Store->>Queue: drainTo(drained)
-    Store->>Channel: synchronized 写 + force
-    Channel-->>File: 追加 JSONL
+    Note over MainLoop,Store: 关键节点（用户提交 / Finished / 工具完成）触发 syncFlush
+    MainLoop->Store: syncFlush()
+    Store->Queue: drainTo(drained)
+    Store->Channel: synchronized 写 + force
+    Channel-->File: 追加 JSONL
 ```
 
 双路径都用 `synchronized (writeLock)` 保护 `channel.write + force`，避免并发写交叉或丢失（code review 修复点 C2）。失败时把 entry 重入队列头部下次重试。
@@ -378,19 +378,19 @@ sequenceDiagram
 flowchart LR
     subgraph write["写入路径"]
         Agent[Agent] --> ReadTool[ReadFileTool]
-        ReadTool -->|读到 memory 文件| File[/memory/topic.md]
-        WriteTool[WriteFileTool] -->|写入新 memory| File
-        EditFileTool[EditFileTool] -->|更新 MEMORY.md 索引| Index[MEMORY.md<br/>标题 + 一行描述]
+        ReadTool -->|读到 memory 文件| MemFile[memory/topic.md]
+        WriteTool[WriteFileTool] -->|写入新 memory| MemFile
+        EditFileTool[EditFileTool] -->|更新 MEMORY.md 索引| Index[MEMORY.md]
     end
 
     subgraph read["召回路径 (每轮对话)"]
         PromptBuilder[MemoryPromptBuilder] --> Index
-        Recall[MemoryRecall] -->|token 重叠评分 ≥ 0.3| File
+        Recall[MemoryRecall] -->|token 重叠评分 >= 0.3| MemFile
         PromptBuilder --> System[system prompt]
     end
 
     Index -.-> PromptBuilder
-    File -.-> Recall
+    MemFile -.-> Recall
 ```
 
 写路径：Agent 通过 ReadFile/WriteFile/EditFile 直接操作 `~/.agent-demo/memory/`。

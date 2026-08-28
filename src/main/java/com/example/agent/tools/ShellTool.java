@@ -108,6 +108,11 @@ public class ShellTool implements Tool<ShellTool.Input, String> {
   }
 
   @Override
+  public ToolCategory category() {
+    return ToolCategory.SHELL;
+  }
+
+  @Override
   public PermissionDecision checkPermissions(Input i, ToolContext ctx) {
     return PermissionDecision.ask(); // AgentLoop 会基于黑名单再次二次确认
   }

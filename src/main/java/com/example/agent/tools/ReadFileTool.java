@@ -52,6 +52,11 @@ public class ReadFileTool extends AbstractFileTool<ReadFileTool.Input> {
   }
 
   @Override
+  public ToolCategory category() {
+    return ToolCategory.READ;
+  }
+
+  @Override
   public PermissionDecision checkPermissions(Input i, ToolContext ctx) {
     PermissionDecision guard = PathGuard.denyIfTraversal(i.path());
     return guard != null ? guard : PermissionDecision.allow();

@@ -52,6 +52,11 @@ public class WriteFileTool extends AbstractFileTool<WriteFileTool.Input> {
   }
 
   @Override
+  public ToolCategory category() {
+    return ToolCategory.WRITE;
+  }
+
+  @Override
   public PermissionDecision checkPermissions(Input i, ToolContext ctx) {
     PermissionDecision guard = PathGuard.denyIfTraversal(i.path());
     return guard != null ? guard : PermissionDecision.ask();
