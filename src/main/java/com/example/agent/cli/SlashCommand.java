@@ -48,11 +48,20 @@ public class SlashCommand {
     return true;
   }
 
+  /** 打印可用 slash 命令列表到 stdout */
   private void printHelp() {
     System.out.println("可用命令:");
     for (String c : COMMANDS) System.out.println("  " + c);
   }
 
+  /**
+   * 打印当前会话统计（消息数 + token + 估算费用）到 stdout。
+   *
+   * @param hist 当前消息历史
+   * @param prompt 累计 prompt token
+   * @param completion 累计 completion token
+   * @param model 当前模型名
+   */
   private void printHistory(MessageHistory hist, int prompt, int completion, String model) {
     int cost = estimateCost(prompt, completion, model);
     System.out.println(

@@ -11,6 +11,7 @@ import java.util.Map;
  * #registerMemoryTools} 完成。
  */
 public class ToolRegistry {
+  /** 工具表（按 {@link Tool#name()} 索引；插入顺序 = 列表顺序） */
   private final Map<String, Tool<?, ?>> tools = new LinkedHashMap<>();
 
   /** 注册一个工具（按 {@link Tool#name()} 索引，重复注册会覆盖）。 */

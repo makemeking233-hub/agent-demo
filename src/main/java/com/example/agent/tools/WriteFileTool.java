@@ -17,6 +17,12 @@ import reactor.core.publisher.Mono;
 public class WriteFileTool implements Tool<WriteFileTool.Input, String> {
   private static final Logger log = LoggerFactory.getLogger(WriteFileTool.class);
 
+  /**
+   * WriteFile 工具输入。
+   *
+   * @param path 文件相对路径
+   * @param content 写入内容
+   */
   public record Input(String path, String content) {}
 
   @Override

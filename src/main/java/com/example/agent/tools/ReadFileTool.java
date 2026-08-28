@@ -20,6 +20,11 @@ import reactor.core.publisher.Mono;
 public class ReadFileTool implements Tool<ReadFileTool.Input, String> {
   private static final Logger log = LoggerFactory.getLogger(ReadFileTool.class);
 
+  /**
+   * ReadFile 工具输入。
+   *
+   * @param path 文件相对路径
+   */
   public record Input(String path) {}
 
   @Override

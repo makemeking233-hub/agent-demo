@@ -12,6 +12,7 @@ import com.knuddels.jtokkit.api.EncodingType;
  * <p>v0.2 改进：校准系数（在 {@code DeepSeekProviderTest} 测真实 usage vs 估算值，偏差 &gt; 5% 时引入）。
  */
 public class TokenEstimator {
+  /** CL100K_BASE 编码器（DeepSeek 中英文混合输入误差 &lt; 10%） */
   private final Encoding encoding =
       Encodings.newDefaultEncodingRegistry().getEncoding(EncodingType.CL100K_BASE);
 

@@ -18,6 +18,11 @@ import reactor.core.publisher.Mono;
 public class LsTool implements Tool<LsTool.Input, String> {
   private static final Logger log = LoggerFactory.getLogger(LsTool.class);
 
+  /**
+   * Ls 工具输入。
+   *
+   * @param path 目录相对路径（{@code null} 或空表示当前目录）
+   */
   public record Input(String path) {}
 
   @Override

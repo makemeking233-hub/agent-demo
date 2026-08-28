@@ -36,10 +36,22 @@ public sealed interface ToolResult<O> {
     return isError() ? "[ERROR] " + ((Err<?>) this).message() : String.valueOf(output());
   }
 
-  /** 成功结果 record */
+  /**
+   * 成功结果。
+   *
+   * @param toolCallId 关联的工具调用 ID（用于回流给模型时匹配）
+   * @param output 工具输出
+   * @param isError 恒为 {@code false}
+   */
   record Ok<O>(String toolCallId, O output, boolean isError) implements ToolResult<O> {}
 
-  /** 错误结果 record */
+  /**
+   * 错误结果。
+   *
+   * @param toolCallId 关联的工具调用 ID（{@link #error(String)} 构造时为 {@code null}）
+   * @param message 错误信息
+   * @param isError 恒为 {@code true}
+   */
   record Err<O>(String toolCallId, String message, boolean isError) implements ToolResult<O> {
     @Override
     public O output() {

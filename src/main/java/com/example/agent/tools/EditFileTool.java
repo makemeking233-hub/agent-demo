@@ -21,6 +21,13 @@ import reactor.core.publisher.Mono;
 public class EditFileTool implements Tool<EditFileTool.Input, String> {
   private static final Logger log = LoggerFactory.getLogger(EditFileTool.class);
 
+  /**
+   * EditFile 工具输入。
+   *
+   * @param path 目标文件相对路径
+   * @param oldText 待替换字符串（必须精确且唯一）
+   * @param newText 新字符串
+   */
   public record Input(String path, String oldText, String newText) {}
 
   @Override
