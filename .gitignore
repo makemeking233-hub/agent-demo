@@ -21,3 +21,16 @@ docs/test-design.md.corrupt.bak
 # Local tools (e.g. google-java-format jar for manual formatting)
 # 注意：必须用 /tools/ 而非 tools/，否则会误匹配 src/main/java/com/example/agent/tools/
 /tools/
+
+# 本地密钥 / 私密配置（Spring Boot 标准 local profile + 兜底匹配常见命名）
+application-local.yml
+application-local.yaml
+application-local.properties
+*-local.yml
+*-local.yaml
+*.local.yml
+*.local.yaml
+secrets.yml
+secrets.yaml
+.env
+.env.local
