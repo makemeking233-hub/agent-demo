@@ -22,6 +22,9 @@ docs/test-design.md.corrupt.bak
 # 注意：必须用 /tools/ 而非 tools/，否则会误匹配 src/main/java/com/example/agent/tools/
 /tools/
 
+# Node.js dependencies（mermaid 验证脚本等需要）
+node_modules/
+
 # 本地密钥 / 私密配置（Spring Boot 标准 local profile + 兜底匹配常见命名）
 application-local.yml
 application-local.yaml
