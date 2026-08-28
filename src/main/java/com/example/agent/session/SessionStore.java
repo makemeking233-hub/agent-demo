@@ -38,17 +38,44 @@ import org.slf4j.LoggerFactory;
 public class SessionStore implements AutoCloseable {
   private static final Logger log = LoggerFactory.getLogger(SessionStore.class);
 
+  /** JSONL 文件路径 */
   private final Path file;
+
+  /** 待写入条目队列（生产者-消费者模型） */
   private final BlockingQueue<SessionEntry> queue = new LinkedBlockingQueue<>();
+
+  /** 定时 flush 调度器（daemon 单线程） */
   private final ScheduledExecutorService flushScheduler;
+
+  /** 队列达到此大小立即触发 flush */
   private final int flushBatchSize;
+
+  /** 后台 flush 间隔（毫秒） */
   private final long flushIntervalMs;
+
+  /** JSON 序列化器 */
   private final ObjectMapper json = new ObjectMapper();
+
+  /** 文件通道（append 模式） */
   private final FileChannel channel;
+
+  /** 写锁（保证 flushAsync + syncFlush 不并发写） */
   private final Object writeLock = new Object();
+
+  /** 已持久化的字节偏移（外部可观察的进度） */
   private final AtomicLong lastSyncedOffset = new AtomicLong(0);
+
+  /** 是否已关闭（关闭后不再 flush） */
   private volatile boolean closed = false;
 
+  /**
+   * 构造会话存储：建父目录、设置 0700/0600 权限、打开 append 通道、启动定时 flush。
+   *
+   * @param file JSONL 文件路径
+   * @param flushBatchSize 队列阈值（达到立即 flush）
+   * @param flushIntervalMs 后台 flush 间隔（毫秒）
+   * @throws IOException 文件打开或权限设置失败
+   */
   public SessionStore(Path file, int flushBatchSize, long flushIntervalMs) throws IOException {
     this.file = file;
     this.flushBatchSize = flushBatchSize;
@@ -98,6 +125,11 @@ public class SessionStore implements AutoCloseable {
     return new ScheduledThreadPoolExecutor(1, tf);
   }
 
+  /**
+   * 追加条目到队列；队列满则立即触发 flush。
+   *
+   * @param entry 待追加条目
+   */
   public void append(SessionEntry entry) {
     queue.add(entry);
     if (queue.size() >= flushBatchSize) flushAsync();
@@ -112,6 +144,7 @@ public class SessionStore implements AutoCloseable {
     }
   }
 
+  /** 后台定时 flush（{@link #flushScheduler} 周期调用） */
   private void flushAsync() {
     if (closed) return;
     List<SessionEntry> drained = new ArrayList<>();
@@ -125,6 +158,11 @@ public class SessionStore implements AutoCloseable {
     }
   }
 
+  /**
+   * 把条目序列化为 JSONL 写入文件；失败时回滚条目到队首。
+   *
+   * @param entries 待写入条目列表
+   */
   private void writeIfAny(List<SessionEntry> entries) {
     if (entries.isEmpty()) return;
     try {
@@ -144,14 +182,25 @@ public class SessionStore implements AutoCloseable {
     }
   }
 
+  /**
+   * @return JSONL 文件路径
+   */
   public Path file() {
     return file;
   }
 
+  /**
+   * @return 已持久化的字节偏移（用于断点续写 / 进度观察）
+   */
   public long lastSyncedOffset() {
     return lastSyncedOffset.get();
   }
 
+  /**
+   * 关闭存储：标记 closed → 同步 flush 剩余 → 关闭调度器 → 关闭通道。
+   *
+   * @throws IOException 通道关闭失败
+   */
   @Override
   public void close() throws IOException {
     closed = true;
@@ -160,6 +209,9 @@ public class SessionStore implements AutoCloseable {
     channel.close();
   }
 
+  /**
+   * @return 调试用字符串（含 file / lastSyncedOffset / batchSize / intervalMs）
+   */
   @Override
   public String toString() {
     return "SessionStore{file="
