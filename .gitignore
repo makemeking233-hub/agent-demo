@@ -19,4 +19,5 @@ Thumbs.db
 docs/test-design.md.corrupt.bak
 
 # Local tools (e.g. google-java-format jar for manual formatting)
-tools/
+# 注意：必须用 /tools/ 而非 tools/，否则会误匹配 src/main/java/com/example/agent/tools/
+/tools/
