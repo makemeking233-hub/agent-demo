@@ -5,18 +5,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
  * 写入文件（覆盖）。
  *
  * <p>权限：默认 ask；路径含 {@code ..} 一律 deny。 父目录不存在时自动创建。
+ *
+ * <p>路径 normalize + 越界检查继承自 {@link AbstractFileTool}，本类仅实现 {@link #doExecute}。
  */
-public class WriteFileTool implements Tool<WriteFileTool.Input, String> {
-  private static final Logger log = LoggerFactory.getLogger(WriteFileTool.class);
-
+public class WriteFileTool extends AbstractFileTool<WriteFileTool.Input> {
   /**
    * WriteFile 工具输入。
    *
@@ -70,14 +68,9 @@ public class WriteFileTool implements Tool<WriteFileTool.Input, String> {
   }
 
   @Override
-  public Mono<ToolResult<String>> execute(Input input, ToolContext ctx) {
+  protected Mono<ToolResult<String>> doExecute(Input input, Path p, ToolContext ctx) {
     return Mono.fromCallable(
         () -> {
-          Path base = ctx.workingDirectory();
-          Path p = base.resolve(input.path()).normalize();
-          if (!p.startsWith(base)) {
-            return ToolResult.<String>error("路径越界: " + input.path());
-          }
           try {
             if (p.getParent() != null) Files.createDirectories(p.getParent());
             Files.writeString(p, input.content());

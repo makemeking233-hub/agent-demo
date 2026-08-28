@@ -6,18 +6,17 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
  * 列出目录下文件与子目录。
  *
  * <p>权限：默认 allow；路径含 {@code ..} 一律 deny。
+ *
+ * <p>路径 normalize + 越界检查继承自 {@link AbstractFileTool}，本类仅实现 {@link #doExecute}。 输入 {@code path} 为 {@code null}/空
+ * 时，{@link AbstractFileTool} 的 resolve 已回退到 {@code workingDirectory}。
  */
-public class LsTool implements Tool<LsTool.Input, String> {
-  private static final Logger log = LoggerFactory.getLogger(LsTool.class);
-
+public class LsTool extends AbstractFileTool<LsTool.Input> {
   /**
    * Ls 工具输入。
    *
@@ -68,17 +67,9 @@ public class LsTool implements Tool<LsTool.Input, String> {
   }
 
   @Override
-  public Mono<ToolResult<String>> execute(Input input, ToolContext ctx) {
+  protected Mono<ToolResult<String>> doExecute(Input input, Path p, ToolContext ctx) {
     return Mono.fromCallable(
         () -> {
-          Path base = ctx.workingDirectory();
-          Path p =
-              (input.path() == null || input.path().isEmpty())
-                  ? base
-                  : base.resolve(input.path()).normalize();
-          if (!p.startsWith(base)) {
-            return ToolResult.<String>error("路径越界");
-          }
           try (var stream = Files.list(p)) {
             String listing =
                 stream

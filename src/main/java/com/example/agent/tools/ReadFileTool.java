@@ -8,18 +8,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
  * 读取文件内容（UTF-8 优先，失败回退 GBK；详见 design.md §17.2 三重防御第 3 层）。
  *
  * <p>权限：默认 allow；路径含 {@code ..} 一律 deny（防止路径越界）。
+ *
+ * <p>路径 normalize + 越界检查继承自 {@link AbstractFileTool}，本类仅实现 {@link #doExecute}。
  */
-public class ReadFileTool implements Tool<ReadFileTool.Input, String> {
-  private static final Logger log = LoggerFactory.getLogger(ReadFileTool.class);
-
+public class ReadFileTool extends AbstractFileTool<ReadFileTool.Input> {
   /**
    * ReadFile 工具输入。
    *
@@ -70,14 +68,9 @@ public class ReadFileTool implements Tool<ReadFileTool.Input, String> {
   }
 
   @Override
-  public Mono<ToolResult<String>> execute(Input input, ToolContext ctx) {
+  protected Mono<ToolResult<String>> doExecute(Input input, Path p, ToolContext ctx) {
     return Mono.fromCallable(
         () -> {
-          Path base = ctx.workingDirectory();
-          Path p = base.resolve(input.path()).normalize();
-          if (!p.startsWith(base)) {
-            return ToolResult.<String>error("路径越界: " + input.path());
-          }
           try {
             byte[] bytes = Files.readAllBytes(p);
             return ToolResult.ok(new String(bytes, StandardCharsets.UTF_8), "<auto>");

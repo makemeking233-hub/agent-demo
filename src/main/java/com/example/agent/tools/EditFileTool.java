@@ -7,8 +7,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 /**
@@ -17,10 +15,10 @@ import reactor.core.publisher.Mono;
  * <p>权限：默认 ask。多次匹配时报错（避免歧义替换，详见 test-design.md R11 决议）。
  *
  * <p>v0.2 起改为原子写：先写到 {@code target.tmp}，再 {@code Files.move} 覆盖原文件。 失败时原文件保持不变（要么旧版本，要么新版本，不会半截写入）。
+ *
+ * <p>路径 normalize + 越界检查继承自 {@link AbstractFileTool}，本类仅实现 {@link #doExecute}。
  */
-public class EditFileTool implements Tool<EditFileTool.Input, String> {
-  private static final Logger log = LoggerFactory.getLogger(EditFileTool.class);
-
+public class EditFileTool extends AbstractFileTool<EditFileTool.Input> {
   /**
    * EditFile 工具输入。
    *
@@ -79,14 +77,9 @@ public class EditFileTool implements Tool<EditFileTool.Input, String> {
   }
 
   @Override
-  public Mono<ToolResult<String>> execute(Input input, ToolContext ctx) {
+  protected Mono<ToolResult<String>> doExecute(Input input, Path target, ToolContext ctx) {
     return Mono.fromCallable(
         () -> {
-          Path base = ctx.workingDirectory();
-          Path target = base.resolve(input.path()).normalize();
-          if (!target.startsWith(base)) {
-            return ToolResult.<String>error("路径越界: " + input.path());
-          }
           Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
           try {
             String content = Files.readString(target, StandardCharsets.UTF_8);
