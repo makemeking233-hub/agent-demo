@@ -33,11 +33,26 @@ public class ContextCompressor {
   /** summary 失败的熔断阈值 */
   private static final int DEFAULT_MAX_FAILURES = 3;
 
+  /** LLM Provider（调 summary 模型用） */
   private final LlmProvider provider;
+
+  /** 提前压缩的 token buffer（threshold = contextWindow - maxOutput - buffer） */
   private final int autoCompactBuffer;
+
+  /** 连续压缩失败熔断阈值（达到则抛 {@link CompactCircuitBrokenException}） */
   private final int maxConsecutiveFailures;
+
+  /** summary 模型名（{@code null} 时复用主模型） */
   private final String summaryModel;
 
+  /**
+   * 构造上下文压缩器。
+   *
+   * @param provider LLM provider
+   * @param autoCompactBuffer 提前压缩 buffer（tokens）
+   * @param maxConsecutiveFailures 连续失败熔断阈值
+   * @param summaryModel summary 模型名
+   */
   public ContextCompressor(
       LlmProvider provider,
       int autoCompactBuffer,
@@ -49,6 +64,12 @@ public class ContextCompressor {
     this.summaryModel = summaryModel;
   }
 
+  /**
+   * 按需压缩：超过 threshold 触发 {@link #compact}；连续失败达阈值则熔断。
+   *
+   * @param hist 当前消息历史
+   * @return 压缩后（或原样）的 {@link MessageHistory}
+   */
   public Mono<MessageHistory> compactIfNeeded(MessageHistory hist) {
     int threshold = provider.contextWindow() - provider.maxOutputTokens() - autoCompactBuffer;
     if (hist.estimateTokens() < threshold) return Mono.just(hist);
@@ -77,6 +98,12 @@ public class ContextCompressor {
             });
   }
 
+  /**
+   * 调 summary 模型生成历史摘要（流式拼接）。
+   *
+   * @param hist 待压缩的历史
+   * @return summary 文本
+   */
   private Mono<String> requestSummary(MessageHistory hist) {
     String prompt = loadPrompt().replace("[消息历史 JSONL]", serializeHistory(hist));
     ChatRequest req =
@@ -97,6 +124,11 @@ public class ContextCompressor {
         .map(parts -> String.join("", parts));
   }
 
+  /**
+   * 从 classpath 加载 summary prompt 模板；缺失时回退到内置默认。
+   *
+   * @return prompt 模板（含 {@code [消息历史 JSONL]} 占位符）
+   */
   private String loadPrompt() {
     try (var in = getClass().getResourceAsStream("/prompts/summarize.txt")) {
       if (in == null) return "请将以下对话压缩为摘要：\n\n[消息历史 JSONL]";
@@ -107,6 +139,12 @@ public class ContextCompressor {
     }
   }
 
+  /**
+   * 把历史序列化为简单文本（{@code [role] content} 每行一条）。
+   *
+   * @param hist 待序列化的历史
+   * @return 序列化字符串
+   */
   private String serializeHistory(MessageHistory hist) {
     StringBuilder sb = new StringBuilder();
     for (var m : hist.all()) {
@@ -119,6 +157,13 @@ public class ContextCompressor {
     return sb.toString();
   }
 
+  /**
+   * 坍缩消息：保留 system + 最近 N 条，其余用 summary 替换。
+   *
+   * @param hist 原始历史
+   * @param summary 摘要文本
+   * @return 坍缩后的新历史
+   */
   private MessageHistory collapseMessages(MessageHistory hist, String summary) {
     var all = hist.all();
     if (all.size() <= 6) return hist; // 不够多，不压缩
@@ -144,8 +189,13 @@ public class ContextCompressor {
     return newHist;
   }
 
+  /**
+   * 从 history 头部提取以 {@code [SUMMARY]} 开头的 system 消息内容。
+   *
+   * @param hist 已坍缩的历史
+   * @return summary 文本；未找到时返回空串
+   */
   private String summaryFrom(MessageHistory hist) {
-    // 取第一条 system 作为 summary 内容
     Optional<Message> first =
         hist.all().stream()
             .filter(m -> m instanceof Message.System s && s.content().startsWith("[SUMMARY]"))
@@ -153,11 +203,20 @@ public class ContextCompressor {
     return first.map(m -> ((Message.System) m).content()).orElse("");
   }
 
+  /**
+   * v0.1 PTL fallback 占位（仅记日志后继续抛原异常）。
+   *
+   * @param e 原始错误
+   * @return 始终返回 {@code Mono.error(e)}
+   */
   private Mono<MessageHistory> ptlFallback(Throwable e) {
     log.warn("PTL fallback not implemented in v0.1: {}", e.toString());
     return Mono.error(e);
   }
 
+  /**
+   * @return 调试用字符串（含 buffer / maxFailures / summaryModel）
+   */
   @Override
   public String toString() {
     return "ContextCompressor{buffer="
