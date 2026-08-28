@@ -46,13 +46,33 @@ public class ShellTool implements Tool<ShellTool.Input, String> {
   /** pool keep-alive 时间（核心线程不超时） */
   private static final long POOL_KEEP_ALIVE_SEC = 60L;
 
+  /**
+   * Shell 工具输入。
+   *
+   * @param command 用户输入的完整 shell 命令
+   */
   public record Input(String command) {}
 
+  /** 跨平台 shell 适配器（bash / cmd / powershell） */
   private final ShellAdapter adapter;
+
+  /** 单次命令超时（秒） */
   private final int timeoutSec;
+
+  /** 单次命令 stdout+stderr 输出上限（字节） */
   private final int maxOutputBytes;
+
+  /** 超时/异常时是否递归 kill 子进程树 */
   private final boolean killProcessTree;
 
+  /**
+   * 构造 Shell 工具。
+   *
+   * @param adapter 跨平台 shell 适配器
+   * @param timeoutSec 单次超时（秒）
+   * @param maxOutputBytes 输出上限（字节）
+   * @param killProcessTree 是否 kill 进程树
+   */
   public ShellTool(
       ShellAdapter adapter, int timeoutSec, int maxOutputBytes, boolean killProcessTree) {
     this.adapter = adapter;
@@ -158,6 +178,13 @@ public class ShellTool implements Tool<ShellTool.Input, String> {
         });
   }
 
+  /**
+   * 流式读取 InputStream 直到 EOF 或达到 {@link #maxOutputBytes} 上限（按 UTF-8 解码）。
+   *
+   * @param in 进程 stdout 流
+   * @return 已读取的字符串
+   * @throws IOException IO 异常
+   */
   private String readBounded(InputStream in) throws IOException {
     ByteArrayOutputStream buf = new ByteArrayOutputStream();
     // 循环外分配缓冲区（规范 13.2：循环内不创建对象）
@@ -191,6 +218,11 @@ public class ShellTool implements Tool<ShellTool.Input, String> {
   }
 
   /** 剥离敏感环境变量（详见 design.md §6.6） */
+  /**
+   * 剥离敏感环境变量（详见 design.md §6.6）。
+   *
+   * @param env 进程环境变量映射（原地修改）
+   */
   private void sanitizeEnv(Map<String, String> env) {
     env.keySet()
         .removeIf(
@@ -204,6 +236,12 @@ public class ShellTool implements Tool<ShellTool.Input, String> {
             });
   }
 
+  /**
+   * 限时等待 future；超时/失败返回空串（用于超时分支拿部分输出）。
+   *
+   * @param f 输出读取 future
+   * @return 已读输出；超时/失败时返回 {@code ""}
+   */
   private String safeGet(Future<String> f) {
     try {
       return f.get(FUTURE_WAIT_SEC, TimeUnit.SECONDS);
@@ -213,6 +251,11 @@ public class ShellTool implements Tool<ShellTool.Input, String> {
     }
   }
 
+  /**
+   * 终止进程（含子进程）：Unix 用 {@link ProcessHandle#descendants()}，Windows 额外调 {@code taskkill /T /F}。
+   *
+   * @param proc 待终止进程
+   */
   private void killTree(Process proc) {
     if (!killProcessTree) {
       proc.destroy();
