@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+// Message.toMap() 由 sealed Message 各 record 实现，不再需要 instanceof 分支
 
 /**
  * DeepSeek 请求体构造（详见 design.md §7.1 + §6.1）。
@@ -58,35 +59,14 @@ public class DeepSeekRequestMapper {
   }
 
   /**
-   * 把内部 {@link com.example.agent.agent.Message} 列表转为 OpenAI 格式 Map 数组（含 tool_calls / tool_call_id）。
+   * 把内部 {@link com.example.agent.agent.Message} 列表转为 OpenAI 格式 Map 数组（通过 sealed {@code Message.toMap()} 多态分发）。
    *
    * @param messages 内部消息列表
    * @return OpenAI 格式 messages 数组
    */
   private List<Map<String, Object>> toMessageArray(List<com.example.agent.agent.Message> messages) {
     List<Map<String, Object>> arr = new ArrayList<>();
-    for (var m : messages) {
-      Map<String, Object> entry = new LinkedHashMap<>();
-      entry.put("role", m.role());
-      entry.put("content", m.content());
-      if (m instanceof com.example.agent.agent.Message.Assistant a
-          && a.toolCalls() != null
-          && !a.toolCalls().isEmpty()) {
-        List<Map<String, Object>> tcs = new ArrayList<>();
-        for (var tc : a.toolCalls()) {
-          tcs.add(
-              Map.of(
-                  "id", tc.id(),
-                  "type", "function",
-                  "function", Map.of("name", tc.name(), "arguments", tc.argumentsJson())));
-        }
-        entry.put("tool_calls", tcs);
-      }
-      if (m instanceof com.example.agent.agent.Message.ToolResult tr) {
-        entry.put("tool_call_id", tr.toolCallId());
-      }
-      arr.add(entry);
-    }
+    for (var m : messages) arr.add(m.toMap());
     return arr;
   }
 }
