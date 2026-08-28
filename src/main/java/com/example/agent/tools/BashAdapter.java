@@ -22,6 +22,6 @@ public class BashAdapter implements ShellAdapter {
    */
   @Override
   public List<String> defaultDenylist() {
-    return List.of("rm -rf", "mkfs", "dd if=", "shutdown", "reboot");
+    return ShellDefaults.BASH;
   }
 }

@@ -22,6 +22,6 @@ public class CmdAdapter implements ShellAdapter {
    */
   @Override
   public List<String> defaultDenylist() {
-    return List.of("format", "diskpart", "bcdedit", "rmdir /s /q", "del /f /s /q");
+    return ShellDefaults.CMD;
   }
 }

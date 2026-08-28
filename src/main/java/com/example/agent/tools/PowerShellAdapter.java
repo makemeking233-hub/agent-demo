@@ -22,6 +22,6 @@ public class PowerShellAdapter implements ShellAdapter {
    */
   @Override
   public List<String> defaultDenylist() {
-    return List.of("Format-Volume", "Remove-Item -Recurse -Force", "diskpart", "bcdedit");
+    return ShellDefaults.POWERSHELL;
   }
 }
