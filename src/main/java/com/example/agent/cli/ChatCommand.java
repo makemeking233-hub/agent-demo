@@ -189,6 +189,7 @@ public class ChatCommand implements Runnable {
                         resolvedModel);
 
         Path workingDir = Paths.get(System.getProperty("user.dir"));
+        Path agentDataDir = Paths.get(userHome, ".agent-demo");
         // 会话日志 + 会话落盘（只读配置；失败降级为 no-op，不阻断对话）
         SessionRecorder recorder = buildRecorder(cfg, userHome);
         AgentLoop loop =
@@ -201,7 +202,8 @@ public class ChatCommand implements Runnable {
                         resolvedModel,
                         workingDir,
                         systemPrompt,
-                        recorder);
+                        recorder,
+                        agentDataDir);
 
         AtomicBoolean aborted = new AtomicBoolean(false);
         AbortSignal abortSignal = () -> aborted.get();

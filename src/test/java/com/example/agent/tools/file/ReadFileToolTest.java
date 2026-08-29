@@ -65,4 +65,35 @@ class ReadFileToolTest {
                 .assertNext(r -> assertTrue(r.isError()))
                 .verifyComplete();
     }
+
+    @Test
+    void readsFileUnderAgentDataDir() throws Exception {
+        Path dataDir = tmp.resolve("data");
+        Files.createDirectories(dataDir);
+        Files.writeString(dataDir.resolve("app.log"), "log line", StandardCharsets.UTF_8);
+        // workingDirectory = tmp，agentDataDir = tmp/data；绝对路径落在数据目录下应放行
+        var ctx = new Tool.ToolContext(tmp, new PermissionManager(), () -> false, dataDir);
+        var tool = new ReadFileTool();
+        StepVerifier.create(
+                        tool.execute(
+                                new ReadFileTool.Input(dataDir.resolve("app.log").toString()), ctx))
+                .assertNext(
+                        r -> {
+                            assertFalse(r.isError());
+                            assertTrue(r.output().contains("log line"));
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void rejectsAbsolutePathOutsideAllowedRoots() {
+        Path dataDir = tmp.resolve("data");
+        Path outside =
+                tmp.getParent().resolve("agent-demo-outside-" + System.nanoTime()).resolve("x.txt");
+        var ctx = new Tool.ToolContext(tmp, new PermissionManager(), () -> false, dataDir);
+        var tool = new ReadFileTool();
+        StepVerifier.create(tool.execute(new ReadFileTool.Input(outside.toString()), ctx))
+                .assertNext(r -> assertTrue(r.isError()))
+                .verifyComplete();
+    }
 }

@@ -168,6 +168,25 @@ public class AgentLoop {
             Path workingDir,
             String systemPrompt,
             SessionLogSink sink) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, systemPrompt, sink, null);
+    }
+
+    /**
+     * 构造 Agent 主循环（带会话日志观察者 + agent 数据目录）。
+     *
+     * @param agentDataDir agent 数据目录（{@code ~/.agent-demo}，memory/logs/sessions 所在；文件工具额外放行，可空）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt,
+            SessionLogSink sink,
+            Path agentDataDir) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
@@ -176,7 +195,8 @@ public class AgentLoop {
         this.model = model;
         this.systemPrompt = systemPrompt;
         this.sink = sink != null ? sink : SessionLogSink.NOOP;
-        this.toolContext = new Tool.ToolContext(workingDir, new PermissionManager(), () -> false);
+        this.toolContext =
+                new Tool.ToolContext(workingDir, new PermissionManager(), () -> false, agentDataDir);
     }
 
     /**

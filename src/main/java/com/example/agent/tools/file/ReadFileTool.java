@@ -99,11 +99,11 @@ public class ReadFileTool extends AbstractFileTool<ReadFileTool.Input> {
                                             java.nio.charset.Charset.forName("GBK")),
                                     "<auto>");
                         } catch (IOException ex) {
-                            log.warn("UTF-8/GBK 都失败: {}", p, ex);
+                            log.warn("UTF-8/GBK 都失败: {} ({})", p, ex.getMessage());
                             return ToolResult.<String>error("UTF-8/GBK 都失败: " + ex.getMessage());
                         }
                     } catch (IOException e) {
-                        log.warn("读取文件失败: {}", p, e);
+                        log.warn("读取文件失败: {} ({})", p, e.getMessage());
                         return ToolResult.<String>error("读取失败: " + e.getMessage());
                     }
                 });

@@ -105,10 +105,19 @@ public interface Tool<I, O> {
     /**
      * 工具上下文总线（在 {@link com.example.agent.core.AgentLoop#executeTools} 时组装）。
      *
-     * @param workingDirectory 工作目录（所有路径相对此解析）
+     * @param workingDirectory 工作目录（所有相对路径的基准）
      * @param permissions 权限管理器
      * @param abortSignal 中断信号（M9 InterruptController 接入 Ctrl+C）
+     * @param agentDataDir agent 数据目录（{@code ~/.agent-demo}，memory/logs/sessions 所在；文件工具额外放行，可空）
      */
     record ToolContext(
-            Path workingDirectory, PermissionManager permissions, AbortSignal abortSignal) {}
+            Path workingDirectory,
+            PermissionManager permissions,
+            AbortSignal abortSignal,
+            Path agentDataDir) {
+        /** 3 参便捷构造：{@code agentDataDir} 为 {@code null}（不额外放行任何目录）。 */
+        public ToolContext(Path workingDirectory, PermissionManager permissions, AbortSignal abortSignal) {
+            this(workingDirectory, permissions, abortSignal, null);
+        }
+    }
 }

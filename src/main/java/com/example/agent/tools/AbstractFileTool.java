@@ -84,12 +84,18 @@ public abstract class AbstractFileTool<I extends ToolInput> implements Tool<I, S
      * @return {@link PathResult}（错误时 error 非空）
      */
     private PathResult resolve(I input, Tool.ToolContext ctx) {
+        String raw = input.path() == null ? "" : input.path();
         Path base = ctx.workingDirectory();
-        Path p = base.resolve(input.path() == null ? "" : input.path()).normalize();
-        if (!p.startsWith(base)) {
-            return PathResult.error(ToolResult.<String>error("路径越界: " + input.path()));
+        Path p = base.resolve(raw).normalize();
+        if (p.startsWith(base)) {
+            return PathResult.ok(p);
         }
-        return PathResult.ok(p);
+        // 第二允许根：agent 数据目录（~/.agent-demo，memory/logs/sessions 所在），放行其下的绝对路径
+        Path data = ctx.agentDataDir();
+        if (data != null && p.startsWith(data.normalize())) {
+            return PathResult.ok(p);
+        }
+        return PathResult.error(ToolResult.<String>error("路径越界: " + raw));
     }
 
     /** 路径解析结果（路径 + 可选错误） */
