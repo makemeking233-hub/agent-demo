@@ -4,6 +4,7 @@ import com.example.agent.signal.AbortSignal;
 import com.example.agent.config.AgentConfig;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
+import com.example.agent.core.AgentLoopFactory;
 import com.example.agent.core.ContextCompressor;
 import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
@@ -13,10 +14,7 @@ import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogger;
 import com.example.agent.log.SessionRecorder;
 import com.example.agent.log.SessionId;
-import com.example.agent.memory.MemoryDir;
-import com.example.agent.memory.MemoryPromptBuilder;
 import com.example.agent.permission.PermissionConfirmer;
-import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.session.SessionStore;
 import com.example.agent.tools.ToolRegistry;
@@ -65,11 +63,6 @@ import java.util.concurrent.atomic.AtomicReference;
         description = "Start interactive REPL with multi-turn dialog")
 public class ChatCommand implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(ChatCommand.class);
-
-    /**
-     * Default max tool iterations per turn (aligns with Claude Code)
-     */
-    private static final int DEFAULT_MAX_TOOL_ITERATIONS = 25;
 
     /**
      * --model：覆盖默认模型名
@@ -140,50 +133,24 @@ public class ChatCommand implements Runnable {
         // baseUrl 由具体 Provider 内部决定（DeepSeek / MiniMax 各自硬编码），此处不再读 cfg
         // 环境变量 base URL 暂时未使用（v0.2 可加 provider-specific 覆盖）
 
-        // 按 provider.type() 路由到具体实现
-        LlmProvider provider =
-                switch (cfg.provider().type() == null
-                        ? "deepseek"
-                        : cfg.provider().type().toLowerCase()) {
-                    case "deepseek" -> new com.example.agent.provider.deepseek.DeepSeekProvider(
-                            resolvedKey);
-                    case "minimax" -> new com.example.agent.provider.minimax.MiniMaxProvider(
-                            resolvedKey);
-                    default -> throw new IllegalArgumentException(
-                            "未知 provider 类型: " + cfg.provider().type() + "（支持 deepseek / minimax）");
-                };
-        TokenEstimator estimator = new TokenEstimator();
-
-        // 组装系统提示词：模型无关默认模板 + provider/model 元数据 + 长期记忆 + 用户 --system-prompt 覆盖
-        // （SystemPromptBuilder 内部对占位符做替换；后续新增 provider 无需改此处，除非要注入 provider 特有段）
-        String providerName =
-                cfg.provider().type() == null ? "deepseek" : cfg.provider().type().toLowerCase();
         String userHome =
                 System.getenv("AGENT_DEMO_HOME") != null
                                 && !System.getenv("AGENT_DEMO_HOME").isBlank()
                         ? System.getenv("AGENT_DEMO_HOME")
                         : System.getProperty("user.home");
-        MemoryDir memoryDir = new MemoryDir(Paths.get(userHome, ".agent-demo", "memory"));
-        String memorySection =
-                new MemoryPromptBuilder(memoryDir).build(String.join("\n", cfg.memoryInject()));
-        String storageSection = buildStorageSection(cfg, userHome);
-        String systemPrompt =
-                new SystemPromptBuilder()
-                        .build(
-                                providerName,
-                                resolvedModel,
-                                memorySection,
-                                storageSection,
-                                List.of(),
-                                this.systemPrompt);
+
+        // 按 provider.type() 路由到具体实现（CLI 与 web 共用 AgentLoopFactory）
+        LlmProvider provider = AgentLoopFactory.buildProvider(cfg, resolvedKey);
+        TokenEstimator estimator = new TokenEstimator();
+
+        // 组装系统提示词：模型无关默认模板 + provider/model 元数据 + 长期记忆 + 用户 --system-prompt 覆盖
+        String systemPrompt = AgentLoopFactory.buildSystemPrompt(cfg, resolvedModel, this.systemPrompt);
 
         // AtomicReference: lambda-friendly mutable holder for the active MessageHistory
         // (AtomicReference replaces single-element MessageHistory[] array used in v0.1)
         AtomicReference<MessageHistory> history =
                 new AtomicReference<>(new MessageHistory(estimator));
-        ToolRegistry tools = new ToolRegistry();
-        ToolRegistry.registerMemoryTools(tools);
-        registerShellAndLs(tools, cfg);
+        ToolRegistry tools = AgentLoopFactory.buildTools(cfg);
         StreamingPrinter printer = new StreamingPrinter();
 
         ContextCompressor compressor =
@@ -203,15 +170,13 @@ public class ChatCommand implements Runnable {
         BufferedReader reader = createReader();
         PermissionConfirmer confirmer = buildConfirmer(reader);
         AgentLoop loop =
-                new AgentLoop(
+                AgentLoopFactory.buildLoop(
+                        cfg,
                         provider,
                         tools,
                         history.get(),
                         printer,
-                        DEFAULT_MAX_TOOL_ITERATIONS,
                         resolvedModel,
-                        workingDir,
-                        systemPrompt,
                         recorder,
                         agentDataDir,
                         confirmer);
