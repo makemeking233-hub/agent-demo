@@ -20,7 +20,7 @@ class SessionLoggerTest {
     @TempDir Path tmp;
 
     private AgentConfig.Logging logging() {
-        return new AgentConfig.Logging(true, tmp.toString(), 100);
+        return new AgentConfig.Logging(true, tmp.toString(), 100, 2000, 30, 50);
     }
 
     @Test
@@ -167,6 +167,27 @@ class SessionLoggerTest {
             assertTrue(session.contains("\"beforeTokens\":5000"));
             assertTrue(session.contains("\"type\":\"permission/decision\""));
             assertTrue(session.contains("\"decision\":\"ask\""));
+        }
+    }
+
+    @Test
+    void contextSnapshotSystemPromptIsTruncated() throws Exception {
+        // 用很小的 snapshotMaxChars 验证截断
+        AgentConfig.Logging logging =
+                new AgentConfig.Logging(true, tmp.toString(), 100, 20, 30, 50);
+        try (SessionLogger l = new SessionLogger(logging, "sess-011")) {
+            l.onContextSnapshot(
+                    new ContextSnapshot(
+                            0,
+                            "x".repeat(100),
+                            false,
+                            false,
+                            java.util.List.of(),
+                            java.util.List.of(),
+                            0,
+                            0));
+            String session = Files.readString(l.sessionDir().resolve("session.jsonl"));
+            assertTrue(session.contains("truncated"), "超长 systemPrompt 应带截断标记");
         }
     }
 }

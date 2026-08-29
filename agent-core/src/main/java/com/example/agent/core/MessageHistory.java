@@ -160,6 +160,15 @@ public class MessageHistory {
     }
 
     /**
+     * 最近读过的文件路径（只读视图；可观测性 context/snapshot 用）。
+     *
+     * @return 最近 ReadFileTool 读过的文件路径列表（插入序）
+     */
+    public List<String> recentFilePaths() {
+        return List.copyOf(recentFileContents.keySet());
+    }
+
+    /**
      * 工具调用结果传输信封（仅内部包内可见，避免污染公共 API）。
      *
      * @param toolCallId 关联的工具调用 ID（用于回流给模型时匹配 assistant.tool_calls）

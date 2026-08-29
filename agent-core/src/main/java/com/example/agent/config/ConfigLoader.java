@@ -120,7 +120,17 @@ public class ConfigLoader {
         int resultMaxChars = m.containsKey("resultMaxChars")
                 ? intVal(m, "resultMaxChars", base.resultMaxChars())
                 : base.resultMaxChars();
-        return new AgentConfig.Logging(enabled, dir, resultMaxChars);
+        int snapshotMaxChars = m.containsKey("snapshotMaxChars")
+                ? intVal(m, "snapshotMaxChars", base.snapshotMaxChars())
+                : base.snapshotMaxChars();
+        int retentionMaxAgeDays = m.containsKey("retentionMaxAgeDays")
+                ? intVal(m, "retentionMaxAgeDays", base.retentionMaxAgeDays())
+                : base.retentionMaxAgeDays();
+        int retentionKeepSessions = m.containsKey("retentionKeepSessions")
+                ? intVal(m, "retentionKeepSessions", base.retentionKeepSessions())
+                : base.retentionKeepSessions();
+        return new AgentConfig.Logging(
+                enabled, dir, resultMaxChars, snapshotMaxChars, retentionMaxAgeDays, retentionKeepSessions);
     }
 
     /**

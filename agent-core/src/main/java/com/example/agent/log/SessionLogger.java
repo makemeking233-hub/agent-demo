@@ -66,6 +66,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
 
     private final Path sessionDir;
     private final int resultMaxChars;
+    private final int snapshotMaxChars;
 
     private final BufferedWriter sessionWriter;
     private final BufferedWriter chatWriter;
@@ -86,6 +87,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
     public SessionLogger(AgentConfig.Logging logging, String sessionId) throws IOException {
         this.sessionDir = Path.of(logging.dir()).resolve("sessions").resolve(sessionId);
         this.resultMaxChars = logging.resultMaxChars();
+        this.snapshotMaxChars = logging.snapshotMaxChars();
         Files.createDirectories(sessionDir);
         try {
             Files.setPosixFilePermissions(
@@ -247,7 +249,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("type", "context/snapshot");
             data.put("turn", snapshot.turn());
-            data.put("systemPrompt", truncate(snapshot.systemPrompt()));
+            data.put("systemPrompt", truncateSnapshot(snapshot.systemPrompt()));
             data.put("memoryInjected", snapshot.memoryInjected());
             data.put("compacted", snapshot.compacted());
             data.put("recentFiles", snapshot.recentFiles());
@@ -283,6 +285,14 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
         if (s == null) return "";
         if (s.length() <= resultMaxChars) return s;
         return s.substring(0, resultMaxChars) + "\n[... truncated: " + (s.length() - resultMaxChars) + " chars omitted ...]";
+    }
+
+    /** context/snapshot 的 systemPrompt 截断（按 snapshotMaxChars） */
+    private String truncateSnapshot(String s) {
+        if (s == null) return "";
+        if (s.length() <= snapshotMaxChars) return s;
+        return s.substring(0, snapshotMaxChars)
+                + "\n[... truncated: " + (s.length() - snapshotMaxChars) + " chars omitted ...]";
     }
 
     /** 统一异常包装：日志故障只 warn，不向上抛 */

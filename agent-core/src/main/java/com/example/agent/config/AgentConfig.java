@@ -82,8 +82,17 @@ public record AgentConfig(
      * @param enabled 是否写会话结构化日志；关闭时 {@code SessionLogger} 为 no-op
      * @param dir 会话日志根目录（默认 {@code ~/.agent-demo/logs/}）
      * @param resultMaxChars 工具结果在 {@code session.jsonl} / {@code tools.log} 中的截断上限（字符）
+     * @param snapshotMaxChars context/snapshot 事件中 systemPrompt 的截断上限（字符，默认 2000）
+     * @param retentionMaxAgeDays 会话日志目录保留天数（超过则清理，默认 30）
+     * @param retentionKeepSessions 会话日志目录数量上限（超限删最旧，默认 50）
      */
-    public record Logging(boolean enabled, String dir, int resultMaxChars) {}
+    public record Logging(
+            boolean enabled,
+            String dir,
+            int resultMaxChars,
+            int snapshotMaxChars,
+            int retentionMaxAgeDays,
+            int retentionKeepSessions) {}
 
     /**
      * v0.1 内置默认配置。
@@ -115,6 +124,9 @@ public record AgentConfig(
                 new Logging(
                         true,
                         System.getProperty("user.home") + "/.agent-demo/logs/",
-                        30_000));
+                        30_000,
+                        2_000,
+                        30,
+                        50));
     }
 }

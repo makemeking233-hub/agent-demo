@@ -109,6 +109,11 @@ public class AgentLoop {
     private final PermissionConfirmer confirmer;
 
     /**
+     * 当前轮次序号（context/snapshot 与 turn 事件用；每轮成功后自增）
+     */
+    private int currentTurn = 0;
+
+    /**
      * 构造 Agent 主循环（无系统提示词；等价于 {@code systemPrompt = null}）。
      *
      * @param provider          LLM provider
@@ -273,13 +278,17 @@ public class AgentLoop {
      * @return 该轮拼接后的 {@link TurnResult}（finalMessage + token 累计）
      */
     public Mono<TurnResult> processTurn(Message.User userMsg) {
-        sink.onTurnStart(0);
+        sink.onTurnStart(currentTurn);
         sink.onUser(userMsg);
         history.append(userMsg);
         return streamUntilToolsSettled(0)
                 .next()
                 .map(this::buildTurnResult)
-                .doOnSuccess(sink::onTurnEnd)
+                .doOnSuccess(
+                        r -> {
+                            sink.onTurnEnd(r);
+                            currentTurn++;
+                        })
                 .doOnError(
                         e -> {
                             // 回合级异常广播 system/error（message 截断 500 字符）
@@ -291,6 +300,7 @@ public class AgentLoop {
                                             "message",
                                             truncate(e.getMessage())));
                             sink.onTurnEnd(new TurnResult("", 0, 0, 0));
+                            currentTurn++;
                         });
     }
 
@@ -344,6 +354,7 @@ public class AgentLoop {
             specs.add(new ToolSpec(t.name(), t.description(), t.inputSchema()));
         }
         List<com.example.agent.core.Message> msgs = new ArrayList<>(history.all());
+        sink.onContextSnapshot(buildSnapshot(specs));
         return new ChatRequest(
                 model != null ? model : DEFAULT_MODEL,
                 systemPrompt,
@@ -352,6 +363,36 @@ public class AgentLoop {
                 DEFAULT_TEMPERATURE,
                 DEFAULT_MAX_TOKENS,
                 null);
+    }
+
+    /**
+     * 组装每轮上下文快照（observability 事件 {@code context/snapshot}）。
+     *
+     * <p>只记元数据 + system prompt 原文（截断在 SessionLogger 侧按 {@code snapshotMaxChars} 处理）；
+     * 消息正文由 user/message 与 assistant/message 事件覆盖，不在此重复。
+     *
+     * @param specs 本轮暴露的工具 schema 列表
+     * @return 上下文快照
+     */
+    private com.example.agent.log.ContextSnapshot buildSnapshot(List<ToolSpec> specs) {
+        List<String> toolNames = specs.stream().map(ToolSpec::name).toList();
+        boolean memoryInjected =
+                systemPrompt != null && systemPrompt.contains("Persistent Agent Memory");
+        boolean compacted =
+                history.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.System s
+                                                && s.content().startsWith("[COMPACTED]"));
+        return new com.example.agent.log.ContextSnapshot(
+                currentTurn,
+                systemPrompt,
+                memoryInjected,
+                compacted,
+                history.recentFilePaths(),
+                toolNames,
+                history.size(),
+                history.estimateTokens());
     }
 
     /**
