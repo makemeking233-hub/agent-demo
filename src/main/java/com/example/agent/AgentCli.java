@@ -21,8 +21,7 @@ import picocli.CommandLine.Command;
 @Command(
         name = "agent-demo",
         mixinStandardHelpOptions = true,
-        version = "agent-demo 0.1.0",
-        subcommands = {ChatCommand.class, InitCommand.class})
+        version = "agent-demo 0.1.0")
 public class AgentCli implements CommandLineRunner {
 
     private ApplicationContext context;

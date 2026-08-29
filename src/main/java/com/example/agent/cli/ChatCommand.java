@@ -99,7 +99,7 @@ public class ChatCommand implements Runnable {
     /**
      * Spring profile 注入的 api-key（来自 application-local.yml）
      */
-    @Value("${agent.provider.apiKey:}")
+    @Value("${agent.provider.api-key:}")
     String springApiKey;
 
     /**
@@ -121,13 +121,6 @@ public class ChatCommand implements Runnable {
                         System.getenv("DEEPSEEK_API_KEY"),
                         springApiKey,
                         cfg.provider().apiKey());
-        log.info(
-                "[chat] api-key 来源: cli={}, env={}, spring={}, home={}, resolved.len={}",
-                apiKey != null,
-                System.getenv("DEEPSEEK_API_KEY") != null,
-                springApiKey != null && !springApiKey.isBlank(),
-                cfg.provider().apiKey() != null && !cfg.provider().apiKey().isBlank(),
-                resolvedKey == null ? 0 : resolvedKey.length());
         String resolvedModel =
                 pickFirstNonBlank(
                         model, System.getenv("AGENT_MODEL"), springModel, cfg.provider().model());

@@ -16,9 +16,12 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.EnumSet;
 
+import org.springframework.stereotype.Component;
+
 /**
  * 生成默认 ~/.agent-demo/config.yaml + memory / sessions / cache / logs 目录（v0.1 init 子命令）。
  */
+@Component
 @Command(name = "init", description = "在 ~/.agent-demo/ 生成默认 config.yaml")
 public class InitCommand implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(InitCommand.class);
