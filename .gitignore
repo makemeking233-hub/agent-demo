@@ -33,6 +33,9 @@ gitleaks-report*.json
 # Node.js dependencies（mermaid 验证脚本等需要）
 node_modules/
 
+# OpenSpec 生成的 Claude Code 工具文件（本项目用 DSH，工具已复制到 .dsh/）
+.claude/
+
 # 本地密钥 / 私密配置（Spring Boot 标准 local profile + 兜底匹配常见命名）
 application-local.yml
 application-local.yaml
