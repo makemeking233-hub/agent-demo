@@ -61,7 +61,8 @@ public class ChatStreamService {
             long startedAt,
             Sinks.Many<ServerSentEvent<Object>> sink,
             AgentLoop loop,
-            SseSessionLogSink sinkAdapter) {}
+            SseSessionLogSink sinkAdapter,
+            java.util.concurrent.atomic.AtomicBoolean aborted) {}
 
     public ActiveStream create(String sessionId, String model) {
         String streamId = UUID.randomUUID().toString();
@@ -69,6 +70,7 @@ public class ChatStreamService {
         // 支撑 spec §resume/Last-Event-ID 与测试中 send→stream 的先后时序。
         Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().replay().all();
         SseSessionLogSink adapter = new SseSessionLogSink(this, streamId);
+        java.util.concurrent.atomic.AtomicBoolean aborted = new java.util.concurrent.atomic.AtomicBoolean(false);
         // 权限桥包装成 PermissionConfirmer：confirm(prompt) 阻塞等待前端决策。
         PermissionConfirmer confirmer =
                 prompt ->
@@ -76,10 +78,11 @@ public class ChatStreamService {
                                 .equals(
                                         permissionBridge.waitForDecision(
                                                 permissionBridge.newPermissionId(), null, prompt, prompt, null));
-        AgentLoop loop = runtime.createLoop(streamId, adapter, confirmer);
+        // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
+        AgentLoop loop = runtime.createLoop(streamId, adapter, confirmer, aborted::get);
         ActiveStream meta =
                 new ActiveStream(
-                        streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter);
+                        streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted);
         actives.put(streamId, meta);
         emit(meta, new SseEvent.MessageStart(streamId, sessionId, model, System.currentTimeMillis()));
         return meta;
@@ -167,6 +170,10 @@ public class ChatStreamService {
     public void abort(String streamId) {
         ActiveStream meta = actives.get(streamId);
         if (meta == null) return;
+        // 置中断信号, 让 AgentLoop 工具执行感知并尽快停止
+        if (meta.aborted() != null) {
+            meta.aborted().set(true);
+        }
         emit(meta, new SseEvent.Error("aborted", "turn aborted by user"));
         stop(streamId, "aborted");
     }

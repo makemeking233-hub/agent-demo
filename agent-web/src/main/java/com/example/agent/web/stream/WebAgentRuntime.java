@@ -10,6 +10,7 @@ import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.render.StreamingPrinter;
+import com.example.agent.signal.AbortSignal;
 import com.example.agent.tools.ToolRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -80,7 +81,8 @@ public class WebAgentRuntime {
      * @param confirmer 权限确认器（可 null = fail-closed 拒绝）
      * @return 装配好的 {@link AgentLoop}
      */
-    public AgentLoop createLoop(String streamId, SessionLogSink sink, PermissionConfirmer confirmer) {
+    public AgentLoop createLoop(
+            String streamId, SessionLogSink sink, PermissionConfirmer confirmer, AbortSignal abortSignal) {
         return AgentLoopFactory.buildLoop(
                 cfg,
                 provider,
@@ -90,7 +92,8 @@ public class WebAgentRuntime {
                 model,
                 sink,
                 agentDataDir,
-                confirmer);
+                confirmer,
+                abortSignal);
     }
 
     public ToolRegistry tools() {

@@ -52,7 +52,7 @@ class ChatStreamServiceTest {
     void createThenStartRunsTurnAndClosesStream() throws Exception {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
         // mock 接受 runtime 传入的 sink，确保 SSE 事件确实被 ChatStreamService 下发
-        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any()))
+        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
                 .thenAnswer(
                         inv -> {
                             SessionLogSink sink = inv.getArgument(1);

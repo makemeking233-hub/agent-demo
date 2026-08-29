@@ -11,6 +11,7 @@ import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionDecision;
 import com.example.agent.permission.PermissionManager;
 import com.example.agent.render.StreamingPrinter;
+import com.example.agent.signal.AbortSignal;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.ToolResult;
@@ -215,6 +216,30 @@ public class AgentLoop {
             SessionLogSink sink,
             Path agentDataDir,
             PermissionConfirmer confirmer) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, systemPrompt, sink,
+                agentDataDir, confirmer, null);
+    }
+
+    /**
+     * 构造 Agent 主循环（带会话日志观察者 + agent 数据目录 + 权限确认器 + 中断信号）。
+     *
+     * @param agentDataDir agent 数据目录（{@code ~/.agent-demo}，memory/logs/sessions 所在；文件工具额外放行，可空）
+     * @param confirmer    权限交互确认器（ASK 时调用；{@code null} = fail-closed 拒绝）
+     * @param abortSignal  中断信号（{@code null} = 永不中断；CLI 用 Ctrl+C 的 AtomicBoolean，web 用 abort 请求）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt,
+            SessionLogSink sink,
+            Path agentDataDir,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
@@ -224,8 +249,9 @@ public class AgentLoop {
         this.systemPrompt = systemPrompt;
         this.sink = sink != null ? sink : SessionLogSink.NOOP;
         this.confirmer = confirmer;
+        AbortSignal signal = abortSignal != null ? abortSignal : () -> false;
         this.toolContext =
-                new Tool.ToolContext(workingDir, new PermissionManager(), () -> false, agentDataDir);
+                new Tool.ToolContext(workingDir, new PermissionManager(), signal, agentDataDir);
     }
 
     /**

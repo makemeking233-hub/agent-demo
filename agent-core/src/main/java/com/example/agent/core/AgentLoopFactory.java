@@ -2,6 +2,7 @@ package com.example.agent.core;
 
 import com.example.agent.config.AgentConfig;
 import com.example.agent.core.Message;
+import com.example.agent.signal.AbortSignal;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogSink;
@@ -131,6 +132,25 @@ public final class AgentLoopFactory {
             SessionLogSink sink,
             Path agentDataDir,
             PermissionConfirmer confirmer) {
+        return buildLoop(cfg, provider, tools, history, printer, model, sink, agentDataDir, confirmer, null);
+    }
+
+    /**
+     * 装配 {@link AgentLoop}（带中断信号，web abort 用）。
+     *
+     * @param abortSignal 中断信号（可 null = 永不中断）
+     */
+    public static AgentLoop buildLoop(
+            AgentConfig cfg,
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            String model,
+            SessionLogSink sink,
+            Path agentDataDir,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal) {
         return new AgentLoop(
                 provider,
                 tools,
@@ -142,7 +162,8 @@ public final class AgentLoopFactory {
                 buildSystemPrompt(cfg, model, null),
                 sink,
                 agentDataDir,
-                confirmer);
+                confirmer,
+                abortSignal);
     }
 
     /**

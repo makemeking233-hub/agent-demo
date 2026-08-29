@@ -52,6 +52,16 @@ class WebIntegrationTest {
                                 .delayElements(java.time.Duration.ofMillis(200)));
     }
 
+    private void stubSlowChunks(String text) {
+        // 慢速: 让 turn 保持进行中, 便于测 abort 端点(流仍活动)
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any(ChatRequest.class)))
+                .thenReturn(
+                        Flux.just((StreamChunk) new StreamChunk.TextDelta(text))
+                                .delayElements(java.time.Duration.ofSeconds(5)));
+    }
+
     @Test
     void healthReturns200() {
         client.get()
@@ -145,5 +155,47 @@ class WebIntegrationTest {
                         data -> true,
                         data -> {})
                 .verifyComplete();
+    }
+
+    @Test
+    void abortReturns200ForActiveStream() throws Exception {
+        stubSlowChunks("slow");
+
+        String body =
+                client.post()
+                        .uri("/api/chat/send")
+                        .bodyValue(Map.of("content", "go"))
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(String.class)
+                        .returnResult()
+                        .getResponseBody();
+
+        String streamId =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(body)
+                        .path("stream_id")
+                        .asText();
+        assertThat(streamId).as("stream_id from send").isNotEmpty();
+
+        // abort 原生流 (slow turn 仍在进行) → 200 {aborted:true}
+        client.post()
+                .uri("/api/chat/abort/{id}", streamId)
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.aborted")
+                .isEqualTo(true);
+    }
+
+    @Test
+    void abortUnknownStreamReturns404() {
+        client.post()
+                .uri("/api/chat/abort/{id}", "unknown-id")
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.NOT_FOUND);
     }
 }
