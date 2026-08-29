@@ -32,10 +32,10 @@
 
 ## 5. 日志驱动测试基建
 
-- [ ] 5.1 新增测试工具 `SessionEventAssertions`：读 JSONL、按 type 过滤、按 seq 断言顺序、字段断言、易变字段归一化（timestamp/seq/callId）（测试：工具自身单测）
-- [ ] 5.2 golden 事件样例：`src/test/resources/e2e/events/` 下放"读文件 → 工具调用 → 回复"的规范化事件序列（测试：样例可被断言工具解析）
-- [ ] 5.3 E2E 用例：wiremock 跑一轮含工具调用的对话，断言事件类型序列与 golden 一致（归一化后）（测试：E2E 通过）
-- [ ] 5.4 本组完成后 `mvn test` 全绿 + commit + push
+- [x] 5.1 新增测试工具 `SessionEventAssertions`：读 JSONL、按 type 过滤、按 seq 断言顺序、字段断言、易变字段归一化（timestamp/seq/callId）（测试：工具自身单测）
+- [x] 5.2 golden 事件样例：`src/test/resources/e2e/events/` 下放"读文件 → 工具调用 → 回复"的规范化事件序列（测试：样例可被断言工具解析）
+- [x] 5.3 E2E 用例：wiremock 跑一轮含工具调用的对话，断言事件类型序列与 golden 一致（归一化后）（测试：E2E 通过）
+- [x] 5.4 本组完成后 `mvn test` 全绿 + commit + push
 
 ## 6. 会话回放
 
@@ -55,4 +55,5 @@
 - [ ] 8.2 更新 `docs/test-agent-demo/test-design.md`：日志驱动测试与回放的测试设计
 - [ ] 8.3 全量 `mvn verify`（含 jacoco LINE≥80% / BRANCH≥70%）通过
 - [ ] 8.4 最终 commit + push，汇报里程碑
+
 
