@@ -58,16 +58,6 @@ useDefault = true
     '''sk-(?:test|fake|mock|demo|example|placeholder)[-_a-zA-Z0-9]*''',
   ]
 
-# git SHA-1 在文档中的引用 (经常被误判为 secret)
-# 用 regexTarget="match": 只有被 gitleaks 捕获的 match 本身是 SHA-1 才放行,
-# 避免 path 命中即跳过整文件。
-[[allowlists]]
-  description = "git SHA-1 引用 (在文档中被误判为 secret)"
-  condition = "AND"
-  regexTarget = "match"
-  regexes = ['''\b[a-f0-9]{7,40}\b''']
-  paths = ['''docs/.*\.md$''']
-
 # ──────────── 自定义规则 ────────────
 # 强化 DeepSeek API key 检测 (32 字符 hex, 比 generic 更精确)
 [[rules]]
