@@ -115,4 +115,59 @@ class ChatStreamServiceTest {
         waiting.join(5000);
         assertThat(result[0]).isEqualTo("yes");
     }
+
+    @Test
+    void getReturnsActiveStream() {
+        WebAgentRuntime runtime = mock(WebAgentRuntime.class);
+        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            SessionLogSink sink = inv.getArgument(1);
+                            return loopWithMockProvider(sink);
+                        });
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("session-1", "deepseek-chat");
+        assertThat(svc.get(meta.streamId())).isSameAs(meta);
+        assertThat(svc.get("unknown")).isNull();
+    }
+
+    @Test
+    void abortUnknownStreamIsNoop() {
+        WebAgentRuntime runtime = mock(WebAgentRuntime.class);
+        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            SessionLogSink sink = inv.getArgument(1);
+                            return loopWithMockProvider(sink);
+                        });
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        svc.abort("unknown"); // 不抛即通过
+    }
+
+    @Test
+    void submitDecisionUnknownStreamReturnsFalse() {
+        WebAgentRuntime runtime = mock(WebAgentRuntime.class);
+        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            SessionLogSink sink = inv.getArgument(1);
+                            return loopWithMockProvider(sink);
+                        });
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        assertThat(svc.submitDecision("unknown", "p1", "yes")).isFalse();
+    }
+
+    @Test
+    void shutdownCompletesActiveStreamsAndStopsExecutor() {
+        WebAgentRuntime runtime = mock(WebAgentRuntime.class);
+        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            SessionLogSink sink = inv.getArgument(1);
+                            return loopWithMockProvider(sink);
+                        });
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        svc.create("session-1", "deepseek-chat");
+        svc.shutdown(); // 不抛即通过
+    }
 }

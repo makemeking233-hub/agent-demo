@@ -40,13 +40,9 @@ public class SseSessionLogSink implements SessionLogSink {
     @Override
     public void onToolResult(ToolResult<?> result, long elapsedMs) {
         boolean ok = !result.isError();
-        Object resultPayload;
-        if (ok) {
-            resultPayload = result.output();
-        } else if (result instanceof ToolResult.Err<?> err) {
+        Object resultPayload = result.output();
+        if (result instanceof ToolResult.Err<?> err) {
             resultPayload = err.message();
-        } else {
-            resultPayload = "unknown error";
         }
         stream.emit(streamId, new SseEvent.ToolCallEnd(result.toolCallId(), "unknown", ok, resultPayload, elapsedMs));
     }
