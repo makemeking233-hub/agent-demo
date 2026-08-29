@@ -39,9 +39,9 @@
 
 ## 6. 会话回放
 
-- [ ] 6.1 新增 `log/SessionReplay.java`：读 `session.jsonl` 重建 `MessageHistory`（跳过 context/snapshot 与 system/*；未知 type 跳过不报错）（测试：单轮重建、工具轮重建、未知事件跳过）
-- [ ] 6.2 回放工具集成测试：真实 SessionLogger 写一轮 → SessionReplay 读回 → 消息顺序一致（测试：通过）
-- [ ] 6.3 本组完成后 `mvn test` 全绿 + commit + push
+- [x] 6.1 新增 `log/SessionReplay.java`：读 `session.jsonl` 重建 `MessageHistory`（跳过 context/snapshot 与 system/*；未知 type 跳过不报错）（测试：单轮重建、工具轮重建、未知事件跳过）
+- [x] 6.2 回放工具集成测试：真实 SessionLogger 写一轮 → SessionReplay 读回 → 消息顺序一致（测试：通过）
+- [x] 6.3 本组完成后 `mvn test` 全绿 + commit + push
 
 ## 7. Web UI 日志查看
 
@@ -54,7 +54,8 @@
 - [x] 8.1 更新 `docs/design/logging-design.md`：新事件类型表、context 快照、脱敏、保留策略、回放、Web 日志 API
 - [x] 8.2 更新 `docs/test-agent-demo/test-design.md`：日志驱动测试与回放的测试设计
 - [x] 8.3 全量 `mvn verify`（含 jacoco LINE≥80% / BRANCH≥70%）通过
-- [ ] 8.4 最终 commit + push，汇报里程碑
+- [x] 8.4 最终 commit + push，汇报里程碑
+
 
 
 
