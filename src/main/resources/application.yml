@@ -1,9 +1,0 @@
-spring:
-  main:
-    banner-mode: console
-    web-application-type: none   # CLI 不需要 Web 服务器；避免占用 8080
-  profiles:
-    active: local                # 默认激活 local profile（读取 application-local.yml）
-
-agent:
-  version: 0.1.0

@@ -1,0 +1,14 @@
+# agent-web profile 配置（OpenSpec add-web-ui-v0-1）
+# 通过 -Dspring.profiles.active=web 激活；与 CLI profile 共存于同一 Spring 上下文
+
+server:
+  port: 8080
+  # bind 到 loopback；v0.1 显式拒绝 0.0.0.0（spec §Trusted Host Auth / Scenario: Bind to 0.0.0.0 rejected）
+
+agent:
+  web:
+    # 默认绑 127.0.0.1；CLI -Dagent.web.host=192.168.x.x 可改 LAN IP
+    host: 127.0.0.1
+    # trusted-hosts: list of CIDR / 单 IP；空 = 仅 loopback
+    # 例: 192.168.1.0/24 或 192.168.1.42
+    trusted-hosts: []

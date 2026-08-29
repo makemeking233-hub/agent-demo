@@ -1,0 +1,41 @@
+# ============================================================
+# 本地敏感配置模板（请复制为 application-local.yml 后填入真实值）
+# ============================================================
+#
+# 使用步骤：
+#   1. 复制本文件为 application-local.yml：
+#      cp application-local.yml.example application-local.yml
+#      （Windows: copy application-local.yml.example application-local.yml）
+#   2. 编辑 application-local.yml，把 REPLACE_ME 替换成真实 key
+#   3. 启动时激活 local profile：
+#      mvn spring-boot:run -D"spring-boot.run.arguments=chat --spring.profiles.active=local"
+#      或在环境变量设：SPRING_PROFILES_ACTIVE=local
+#
+# ⚠️ application-local.yml 已在 .gitignore 中，永远不会被提交。
+# ⚠️ 本文件 (.example 后缀) 是模板，会提交到 git 供他人参考。
+# ============================================================
+
+spring:
+  config:
+    activate:
+      on-profile: local
+
+agent:
+  provider:
+    # ============================================================
+    # 在这里切换 provider（deepseek 或 minimax）+ 配置对应 API key
+    # ============================================================
+    type: "deepseek"    # 可选值: deepseek | minimax
+
+    # --- DeepSeek 配置（type=deepseek 时生效）---
+    api-key: "REPLACE_ME_WITH_YOUR_DEEPSEEK_KEY"
+    base-url: "https://api.deepseek.com"
+    model: "deepseek-chat"          # 或 "deepseek-reasoner"
+    max-output-tokens: 8192
+
+    # --- MiniMax 配置（type=minimax 时生效）---
+    # 如需切换到 MiniMax，把上面的 type 改为 "minimax"，并填入 MiniMax key：
+    # api-key: "REPLACE_ME_WITH_YOUR_MINIMAX_KEY"
+    # base-url: "https://api.minimaxi.com"
+    # model: "MiniMax-Text-01"
+    # max-output-tokens: 8192
