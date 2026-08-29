@@ -16,24 +16,24 @@
 
 ## 3. Backend — chat send + SSE stream
 
-- [ ] 3.1 `ChatStreamService`: 持有 `Map<stream_id, SseEmitter>` + `Map<stream_id, AgentLoopHandle>`；注册 AgentLoop listener (`onTextDelta` / `onThinkingDelta` / `onToolCallStart` / `onToolCallEnd` / `onMessageStop` / `onPermissionAsk`)；listener 把回调转 SSE 事件
-- [ ] 3.2 `ChatController.send` (`POST /api/chat/send`): 校验 `content` 非空；空返 400 `content_empty`；检查 `provider.apiKey`，缺失返 503 `provider_not_configured`；否则 `AgentLoop.run(turn)` 包成 future，`ChatStreamService` 注册 stream_id 后返回 `{stream_id, session_id, model}`
-- [ ] 3.3 `ChatStreamController.stream` (`GET /api/chat/stream/{id}`, `produces=text/event-stream`): SseEmitter from ChatStreamService；`Last-Event-ID` header 触发 resume；流关闭 (`message_stop` / `error` / 客户端断开) 时调 `emitter.complete()`
-- [ ] 3.4 `ChatController.abort` (`POST /api/chat/abort/{id}`): 找到对应 handle，调 `AgentLoopHandle.abort()`；返 200 `{aborted:true|false, reason?}`
-- [ ] 3.5 DTO 记录类：`SendRequest` / `SendResponse` / `AbortResponse` / `HealthResponse` + 内部 `SseEvent` union (message_start / message_delta / tool_call_* / permission_request / permission_response / message_stop / error)
-- [ ] 3.6 `WebTestClient` 测试：用 mock provider (返回固定 chunks) 跑完整 turn，断言 SSE 事件序列；abort 测试；resume via `Last-Event-ID`；provider 缺失返 503
+- [x] 3.1 `ChatStreamService`: 持有 `Map<stream_id, SseEmitter>` + `Map<stream_id, AgentLoopHandle>`；注册 AgentLoop listener (`onTextDelta` / `onThinkingDelta` / `onToolCallStart` / `onToolCallEnd` / `onMessageStop` / `onPermissionAsk`)；listener 把回调转 SSE 事件
+- [x] 3.2 `ChatController.send` (`POST /api/chat/send`): 校验 `content` 非空；空返 400 `content_empty`；检查 `provider.apiKey`，缺失返 503 `provider_not_configured`；否则 `AgentLoop.run(turn)` 包成 future，`ChatStreamService` 注册 stream_id 后返回 `{stream_id, session_id, model}`
+- [x] 3.3 `ChatStreamController.stream` (`GET /api/chat/stream/{id}`, `produces=text/event-stream`): SseEmitter from ChatStreamService；`Last-Event-ID` header 触发 resume；流关闭 (`message_stop` / `error` / 客户端断开) 时调 `emitter.complete()`
+- [x] 3.4 `ChatController.abort` (`POST /api/chat/abort/{id}`): 找到对应 handle，调 `AgentLoopHandle.abort()`；返 200 `{aborted:true|false, reason?}`
+- [x] 3.5 DTO 记录类：`SendRequest` / `SendResponse` / `AbortResponse` / `HealthResponse` + 内部 `SseEvent` union (message_start / message_delta / tool_call_* / permission_request / permission_response / message_stop / error)
+- [x] 3.6 `WebTestClient` 测试：用 mock provider (返回固定 chunks) 跑完整 turn，断言 SSE 事件序列；abort 测试；resume via `Last-Event-ID`；provider 缺失返 503
 
 ## 4. Backend — PermissionBridge (in-chat 权限交互)
 
-- [ ] 4.1 `PermissionBridge`: 实现 `waitForDecision(permission_id, tool_call_id)` 阻塞；`submitDecision(permission_id, decision)` 唤醒并校验决策 ∈ {yes, no, always}
-- [ ] 4.2 接到 `onPermissionAsk` listener：转 SSE `permission_request` 事件；调 `PermissionBridge.waitForDecision`；用户回 `yes/no/always` 后恢复 AgentLoop；yes/no/always 决策传给现有 `PermissionManager`
-- [ ] 4.3 `ChatStreamService` 处理 chat input 时先看是否有 pending permission_id；若有则按决策解析；否则当作普通 chat content
+- [x] 4.1 `PermissionBridge`: 实现 `waitForDecision(permission_id, tool_call_id)` 阻塞；`submitDecision(permission_id, decision)` 唤醒并校验决策 ∈ {yes, no, always}
+- [x] 4.2 接到 `onPermissionAsk` listener：转 SSE `permission_request` 事件；调 `PermissionBridge.waitForDecision`；用户回 `yes/no/always` 后恢复 AgentLoop；yes/no/always 决策传给现有 `PermissionManager`
+- [x] 4.3 `ChatStreamService` 处理 chat input 时先看是否有 pending permission_id；若有则按决策解析；否则当作普通 chat content
 - [ ] 4.4 `WebTestClient` 测试：mock PermissionManager `checkPermissions` 返回 ASK；断言 SSE 事件序列含 `permission_request`；提交 `yes` 后 AgentLoop 恢复且 tool 正常调用
 
 ## 5. Backend — slash commands + session current + 静态 fallback
 
-- [ ] 5.1 `SlashCommandRouter`: 接 chat send 的 content；若以 `/` 开头则调对应 `SlashCommand` bean (`help` / `clear` / `quit` / `resume` / `history`)；未知命令返 400 `unknown_command`；`/help` `clear` `resume` 输出转 SSE `message_delta` 后直接 `message_stop`；`/quit` 关闭当前 session + SSE
-- [ ] 5.2 `SessionController.current` (`GET /api/sessions/current`): 返 200 `{session_id, started_at, turn_count, tokens_in, tokens_out, model}`；无 session 时返 `{session_id: null}` (spec §Current Session)
+- [x] 5.1 `SlashCommandRouter`: 接 chat send 的 content；若以 `/` 开头则调对应 `SlashCommand` bean (`help` / `clear` / `quit` / `resume` / `history`)；未知命令返 400 `unknown_command`；`/help` `clear` `resume` 输出转 SSE `message_delta` 后直接 `message_stop`；`/quit` 关闭当前 session + SSE
+- [x] 5.2 `SessionController.current` (`GET /api/sessions/current`): 返 200 `{session_id, started_at, turn_count, tokens_in, tokens_out, model}`；无 session 时返 `{session_id: null}` (spec §Current Session)
 - [ ] 5.3 SPA fallback 路由测试：`GET /sessions/{uuid}` 应返 `index.html` (200) 而非 404
 - [ ] 5.4 `WebTestClient` 测试：`/help` 触发 message_delta；`/unknown` 返 400；`/api/sessions/current` 空 session 返 null
 
@@ -79,3 +79,6 @@
 - [ ] 11.3 `application-web.yml` 配置项加注释；`-Dagent.web.trusted-hosts=192.168.1.0/24` 用法进 README
 - [ ] 11.4 `mvn -pl agent-web verify` 全绿；commit + push (per AGENTS.md §2.2 `commit 即 push`)
 - [ ] 11.5 准备 archive: `openspec validate add-web-ui-v0-1` 通过；`openspec archive add-web-ui-v0-1` 把 delta spec 合到 `openspec/specs/web-ui/spec.md`
+
+
+
