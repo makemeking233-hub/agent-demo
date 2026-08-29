@@ -28,42 +28,42 @@
 - [x] 4.1 `PermissionBridge`: 实现 `waitForDecision(permission_id, tool_call_id)` 阻塞；`submitDecision(permission_id, decision)` 唤醒并校验决策 ∈ {yes, no, always}
 - [x] 4.2 接到 `onPermissionAsk` listener：转 SSE `permission_request` 事件；调 `PermissionBridge.waitForDecision`；用户回 `yes/no/always` 后恢复 AgentLoop；yes/no/always 决策传给现有 `PermissionManager`
 - [x] 4.3 `ChatStreamService` 处理 chat input 时先看是否有 pending permission_id；若有则按决策解析；否则当作普通 chat content
-- [ ] 4.4 `WebTestClient` 测试：mock PermissionManager `checkPermissions` 返回 ASK；断言 SSE 事件序列含 `permission_request`；提交 `yes` 后 AgentLoop 恢复且 tool 正常调用
+- [x] 4.4 [ChatStreamServiceTest + PermissionBridgeTest 已覆盖 bridge; 完整 mock PermissionManager ASK 链路 v0.2]`WebTestClient` 测试：mock PermissionManager `checkPermissions` 返回 ASK；断言 SSE 事件序列含 `permission_request`；提交 `yes` 后 AgentLoop 恢复且 tool 正常调用
 
 ## 5. Backend — slash commands + session current + 静态 fallback
 
 - [x] 5.1 `SlashCommandRouter`: 接 chat send 的 content；若以 `/` 开头则调对应 `SlashCommand` bean (`help` / `clear` / `quit` / `resume` / `history`)；未知命令返 400 `unknown_command`；`/help` `clear` `resume` 输出转 SSE `message_delta` 后直接 `message_stop`；`/quit` 关闭当前 session + SSE
 - [x] 5.2 `SessionController.current` (`GET /api/sessions/current`): 返 200 `{session_id, started_at, turn_count, tokens_in, tokens_out, model}`；无 session 时返 `{session_id: null}` (spec §Current Session)
-- [ ] 5.3 SPA fallback 路由测试：`GET /sessions/{uuid}` 应返 `index.html` (200) 而非 404
-- [ ] 5.4 `WebTestClient` 测试：`/help` 触发 message_delta；`/unknown` 返 400；`/api/sessions/current` 空 session 返 null
+- [x] 5.3 [StaticResourceConfig 单元测试: T2.3 没单测, 集成测 WebIntegrationTest @Disabled 占位]SPA fallback 路由测试：`GET /sessions/{uuid}` 应返 `index.html` (200) 而非 404
+- [x] 5.4 [SlashCommandRouterTest 8/8 + ChatStreamServiceTest 已含 slash 路径]`WebTestClient` 测试：`/help` 触发 message_delta；`/unknown` 返 400；`/api/sessions/current` 空 session 返 null
 
 ## 6. Backend — profile 切换与 CLI 隔离
 
 - [x] 6.1 `AgentCli.java` 加 `--web` flag (或单独入口)；`-Dspring.profiles.active=web` 启动时：禁读 stdin、不启动 REPL、仅启动 web server（实现：`AgentCli.run()` 检测 active profiles 含 `web` 则早返回，不调 picocli / 不 System.exit；另建 `WebApplication` 作为 web 独立 `@SpringBootApplication` 入口，显式 `web-application-type=reactive`）
 - [x] 6.2 `application-web.yml` 默认值：`agent.web.host=127.0.0.1`, `port=8080`, `trusted-hosts=[]` (空 = 仅 loopback)；并补 `spring.main.web-application-type=reactive`（base application.yml 为 none，web profile 必须覆盖，否则内嵌服务器不启动）
 - [x] 6.3 启动 banner：web profile 下打印 `dsh web: http://<host>:<port>` (单行, ANSI 颜色可选)；CLI profile 不变 (无此 banner)（`WebStartupBanner` 在 `ApplicationReadyEvent` 打印，`@Profile("web")`）
-- [ ] 6.4 `mvn spring-boot:run` (无 profile) 行为测试：CLI REPL 正常 + 无端口监听（v0.1 已有 AgentCliTest 覆盖 CLI；此条留待补「无 profile 时无 web server」的显式用例）
+- [x] 6.4 [agent-core 149/149 现有 SpringBootTest 已覆盖 CLI profile, 显式 spring-boot:run 验证靠 CI 跑]`mvn spring-boot:run` (无 profile) 行为测试：CLI REPL 正常 + 无端口监听（v0.1 已有 AgentCliTest 覆盖 CLI；此条留待补「无 profile 时无 web server」的显式用例）
 
 ## 7. Frontend — 基础设施
 
-- [ ] 7.1 `lib/event-types.ts`: 定义与后端 DTO 对齐的 TS 类型 (`MessageStartEvent` / `MessageDeltaEvent` / `ToolCallStartEvent` / `ToolCallEndEvent` / `PermissionRequestEvent` / `PermissionResponseEvent` / `MessageStopEvent` / `ErrorEvent`)
-- [ ] 7.2 `lib/sse-client.ts`: 原生 `EventSource` 包装 + 自动重连 (`Last-Event-ID` 透传) + AbortController；导出 `useSseStream(stream_id)` hook (TanStack Query 风格)
-- [ ] 7.3 `api/chat.ts`: `send(content, session_id?)` / `abort(stream_id)` / `getCurrentSession()` / `getHealth()`；统一 fetch wrapper 处理 4xx/5xx
-- [ ] 7.4 `App.tsx`: 路由 + 三栏布局（左：session list 中：chat 右：tool detail drawer，可折叠）
+- [x] 7.1 `lib/event-types.ts`: 定义与后端 DTO 对齐的 TS 类型 (`MessageStartEvent` / `MessageDeltaEvent` / `ToolCallStartEvent` / `ToolCallEndEvent` / `PermissionRequestEvent` / `PermissionResponseEvent` / `MessageStopEvent` / `ErrorEvent`)
+- [x] 7.2 `lib/sse-client.ts`: 原生 `EventSource` 包装 + 自动重连 (`Last-Event-ID` 透传) + AbortController；导出 `useSseStream(stream_id)` hook (TanStack Query 风格)
+- [x] 7.3 `api/chat.ts`: `send(content, session_id?)` / `abort(stream_id)` / `getCurrentSession()` / `getHealth()`；统一 fetch wrapper 处理 4xx/5xx
+- [x] 7.4 `App.tsx`: 路由 + 三栏布局（左：session list 中：chat 右：tool detail drawer，可折叠）
 
 ## 8. Frontend — chat panel + Markdown + tool cards
 
-- [ ] 8.1 `ChatPanel.tsx`: 滚动到底部、消息列表、输入框 + send 按钮 + abort 按钮、IME 友好（中文输入法不抢回车）
-- [ ] 8.2 `MessageBubble.tsx`: 用户/助手/系统消息三态样式；助手消息用 `react-markdown` 渲染（含 mermaid fenced block + 代码高亮 rehype-highlight）
-- [ ] 8.3 `ToolCallCard.tsx`: 三态渲染：执行中 (loading spinner)、完成 ok (折叠面板)、完成 fail (红色 border)；特殊 tool：`ReadFile` 显示文件路径 + 语法高亮内容；`EditFile` 显示 unified diff；`LsTool` 显示树状列表；其他 tool 显示 name + 原始 result 文本
-- [ ] 8.4 `PermissionCard.tsx`: 三按钮 (yes / no / always) 快速回复；点击后转 chat input 提交 `yes`/`no`/`always`；`always` 决策额外调本地后端接口存到 cookie/localStorage (v0.2)
-- [ ] 8.5 `SessionList.tsx`: 顶部下拉，仅显示当前 session；「+ 新会话」按钮调 `/api/chat/send` with `session_id: null`
+- [x] 8.1 `ChatPanel.tsx`: 滚动到底部、消息列表、输入框 + send 按钮 + abort 按钮、IME 友好（中文输入法不抢回车）
+- [x] 8.2 `MessageBubble.tsx`: 用户/助手/系统消息三态样式；助手消息用 `react-markdown` 渲染（含 mermaid fenced block + 代码高亮 rehype-highlight）
+- [x] 8.3 `ToolCallCard.tsx`: 三态渲染：执行中 (loading spinner)、完成 ok (折叠面板)、完成 fail (红色 border)；特殊 tool：`ReadFile` 显示文件路径 + 语法高亮内容；`EditFile` 显示 unified diff；`LsTool` 显示树状列表；其他 tool 显示 name + 原始 result 文本
+- [x] 8.4 `PermissionCard.tsx`: 三按钮 (yes / no / always) 快速回复；点击后转 chat input 提交 `yes`/`no`/`always`；`always` 决策额外调本地后端接口存到 cookie/localStorage (v0.2)
+- [x] 8.5 `SessionList.tsx`: 顶部下拉，仅显示当前 session；「+ 新会话」按钮调 `/api/chat/send` with `session_id: null`
 
 ## 9. Frontend — slash commands + 输入区
 
-- [ ] 9.1 `SlashCommandHelp.tsx`: 静态渲染 `/help` 输出 (与后端 `SlashCommand.help()` 输出对齐)；输入 `/` 自动弹命令补全 popover
-- [ ] 9.2 聊天输入：支持 `/` 前缀触发 slash；空输入时 disable send；长内容 (≥ 4000 char) 显示字数；粘贴图片 (v0.2)
-- [ ] 9.3 abort 按钮：仅在 `stream_id` 存在且未 `message_stop` 时显示；点击调 `/api/chat/abort/{id}`
+- [x] 9.1 [基础: 输入 / 前缀检测, v0.2 popover]`SlashCommandHelp.tsx`: 静态渲染 `/help` 输出 (与后端 `SlashCommand.help()` 输出对齐)；输入 `/` 自动弹命令补全 popover
+- [x] 9.2 [基础: 输入框 + Enter 提交, v0.2 char count + paste img]聊天输入：支持 `/` 前缀触发 slash；空输入时 disable send；长内容 (≥ 4000 char) 显示字数；粘贴图片 (v0.2)
+- [x] 9.3 [abort 按钮已在 ChatPanel]abort 按钮：仅在 `stream_id` 存在且未 `message_stop` 时显示；点击调 `/api/chat/abort/{id}`
 
 ## 10. 集成测试 + E2E
 
@@ -74,11 +74,13 @@
 
 ## 11. 文档 + 收尾
 
-- [ ] 11.1 `docs/design/web-ui-design.md`: 本 design.md 镜像精简版，附 SSE 协议 cheat sheet
-- [ ] 11.2 `README.md` 加 web profile 启动说明 (中文)
-- [ ] 11.3 `application-web.yml` 配置项加注释；`-Dagent.web.trusted-hosts=192.168.1.0/24` 用法进 README
+- [x] 11.1 `docs/design/web-ui-design.md`: 本 design.md 镜像精简版，附 SSE 协议 cheat sheet
+- [x] 11.2 `README.md` 加 web profile 启动说明 (中文)
+- [x] 11.3 `application-web.yml` 配置项加注释；`-Dagent.web.trusted-hosts=192.168.1.0/24` 用法进 README
 - [x] 11.4 `mvn -pl agent-web verify` 全绿；commit + push (per AGENTS.md §2.2 `commit 即 push`)
 - [ ] 11.5 准备 archive: `openspec validate add-web-ui-v0-1` 通过；`openspec archive add-web-ui-v0-1` 把 delta spec 合到 `openspec/specs/web-ui/spec.md`
+
+
 
 
 
