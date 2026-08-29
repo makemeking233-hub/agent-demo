@@ -1,6 +1,13 @@
 # agent-web profile 配置（OpenSpec add-web-ui-v0-1）
 # 通过 -Dspring.profiles.active=web 激活；与 CLI profile 共存于同一 Spring 上下文
 
+# 关键：base application.yml 里 spring.main.web-application-type=none（CLI 不需要 web server）。
+# web profile 必须显式覆盖为 reactive，否则 Spring 不会启动任何嵌入服务器，
+# 端口永不监听 → /api/** 全部 connection refused（WebIntegrationTest 此前卡住的根因）。
+spring:
+  main:
+    web-application-type: reactive
+
 server:
   port: 8080
   # bind 到 loopback；v0.1 显式拒绝 0.0.0.0（spec §Trusted Host Auth / Scenario: Bind to 0.0.0.0 rejected）
