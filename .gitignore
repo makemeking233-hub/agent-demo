@@ -33,6 +33,10 @@ gitleaks-report*.json
 # Node.js dependencies（mermaid 验证脚本等需要）
 node_modules/
 
+# frontend-maven-plugin 下载的 Node.js 二进制（~70MB，需 Git LFS 才能提交；本项目不要）
+agent-web/frontend/node/
+agent-web/frontend/package-lock.json
+
 # OpenSpec 生成的 Claude Code 工具文件（本项目用 DSH，工具已复制到 .dsh/）
 .claude/
 
