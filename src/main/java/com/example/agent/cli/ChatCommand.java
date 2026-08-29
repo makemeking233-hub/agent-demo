@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -78,14 +79,25 @@ public class ChatCommand implements Runnable {
   @Option(names = "--auto-approve-write", description = "TEST: skip write permission confirmation")
   boolean autoApproveWrite;
 
+  /** Spring profile 注入的 api-key（来自 application-local.yml） */
+  @Value("${agent.provider.api-key:}")
+  String springApiKey;
+
+  /** Spring profile 注入的 model（来自 application-local.yml） */
+  @Value("${agent.provider.model:}")
+  String springModel;
+
   /** picocli 入口：装配 Provider / Tools / AgentLoop / Permission，启动 REPL。 */
   @Override
   public void run() {
     AgentConfig cfg = loadConfig();
+    // 优先级：CLI flag > env > application-local.yml > ~/.agent-demo/config.yaml
     String resolvedKey =
-        pickFirstNonBlank(apiKey, System.getenv("DEEPSEEK_API_KEY"), cfg.provider().apiKey());
+        pickFirstNonBlank(
+            apiKey, System.getenv("DEEPSEEK_API_KEY"), springApiKey, cfg.provider().apiKey());
     String resolvedModel =
-        pickFirstNonBlank(model, System.getenv("AGENT_MODEL"), cfg.provider().model());
+        pickFirstNonBlank(
+            model, System.getenv("AGENT_MODEL"), springModel, cfg.provider().model());
     // baseUrl 由具体 Provider 内部决定（DeepSeek / MiniMax 各自硬编码），此处不再读 cfg
     // 环境变量 base URL 暂时未使用（v0.2 可加 provider-specific 覆盖）
 
@@ -184,13 +196,15 @@ public class ChatCommand implements Runnable {
   }
 
   /** 把异常翻译成用户能看懂的提示（401 / 404 / 5xx / 网络等） */
-  private static String friendlyError(Throwable e) {
+  static String friendlyError(Throwable e) {
     Throwable root = e;
     while (root.getCause() != null && root.getCause() != root) root = root.getCause();
     String msg = root.getMessage() == null ? root.getClass().getSimpleName() : root.getMessage();
     if (msg != null && msg.contains("401")) {
-      return "401 Unauthorized — DEEPSEEK_API_KEY 未设或失效。设环境变量后重启：\n"
-          + "  set DEEPSEEK_API_KEY=sk-... （Windows: $env:DEEPSEEK_API_KEY='sk-...'）";
+      return "401 Unauthorized — API key 未设或失效。三种配置方式（任选其一）：\n"
+          + "  1. 环境变量: $env:DEEPSEEK_API_KEY='sk-...'  (PowerShell)\n"
+          + "  2. 项目 yaml: src/main/resources/application-local.yml (agent.provider.api-key)\n"
+          + "  3. HOME yaml: ~/.agent-demo/config.yaml    (provider.apiKey)";
     }
     if (msg != null && msg.contains("404")) {
       return "404 Not Found — baseUrl 或 model 名错（默认 https://api.deepseek.com / deepseek-chat）";
