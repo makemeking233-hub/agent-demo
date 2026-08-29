@@ -127,7 +127,7 @@ public class EditFileTool extends AbstractFileTool<EditFileTool.Input> {
                                 target,
                                 StandardCopyOption.REPLACE_EXISTING,
                                 StandardCopyOption.ATOMIC_MOVE);
-                        return ToolResult.ok("已编辑 " + target, "<auto>");
+                        return ToolResult.ok("已编辑 " + target);
                     } catch (Exception e) {
                         log.warn("编辑文件失败: {}", target, e);
                         // 清理残留 .tmp（清理失败不影响主流程）

@@ -26,6 +26,11 @@ public sealed interface ToolResult<O> {
      */
     String toModelContent();
 
+    /** 构造成功结果（toolCallId 为 {@code null}；回流给模型前由 AgentLoop 补全调用 id） */
+    static <O> ToolResult<O> ok(O output) {
+        return new Ok<>(null, output, false);
+    }
+
     /** 构造成功结果 */
     static <O> ToolResult<O> ok(O output, String toolCallId) {
         return new Ok<>(toolCallId, output, false);

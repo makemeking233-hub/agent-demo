@@ -346,11 +346,9 @@ public class AgentLoop {
                 // raw cast 隔离到 executeTool，主链保持强类型，onErrorResume 的 e 才能正确推断为 Throwable
                 .flatMap(input -> executeTool(tool, input))
                 .map(r -> {
-                    // error 结果缺 toolCallId 时补全调用 id（否则回流 400: tool_call_id 不能为 null）
-                    ToolResult<Object> typed = (ToolResult<Object>) r;
-                    if (typed.toolCallId() == null && typed instanceof ToolResult.Err<?> err) {
-                        typed = ToolResult.error(call.id(), err.message());
-                    }
+                    // 强制用本次调用的真实 id 覆盖工具结果里的 toolCallId（工具常返回 null 或 "<auto>" 占位），
+                    // 保证回流给模型的 tool_call_id 与 assistant tool_calls[].id 一致（否则 DeepSeek 400）
+                    ToolResult<Object> typed = stampCallId(r, call.id());
                     sink.onToolResult(typed, (System.nanoTime() - startNs) / 1_000_000L);
                     return List.of(typed);
                 })
@@ -374,6 +372,24 @@ public class AgentLoop {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Mono<ToolResult<Object>> executeTool(Tool tool, Object input) {
         return (Mono<ToolResult<Object>>) (Mono) tool.execute(input, toolContext);
+    }
+
+    /**
+     * 用本次调用的真实 id 覆盖工具结果里的 toolCallId（成功 / 失败都覆盖）。
+     *
+     * <p>工具内部不持有调用 id，常以 {@code null} 或占位符 {@code "<auto>"} 返回；回流给模型的
+     * {@code tool_call_id} 必须与 assistant {@code tool_calls[].id} 一致，否则 DeepSeek 返回 400。
+     *
+     * @param r      工具返回的原始结果
+     * @param callId 本次工具调用的真实 id
+     * @return 已替换为真实 id 的结果
+     */
+    @SuppressWarnings("unchecked")
+    private static ToolResult<Object> stampCallId(ToolResult<?> r, String callId) {
+        if (r.isError()) {
+            return ToolResult.error(callId, ((ToolResult.Err<?>) r).message());
+        }
+        return (ToolResult<Object>) ToolResult.ok(((ToolResult.Ok<?>) r).output(), callId);
     }
 
     /**

@@ -96,7 +96,7 @@ public class LsTool extends AbstractFileTool<LsTool.Input> {
                                                         (Files.isDirectory(path) ? "[D] " : "[F] ")
                                                                 + path.getFileName())
                                         .collect(Collectors.joining("\n"));
-                        return ToolResult.ok(listing.isEmpty() ? "(空目录)" : listing, "<auto>");
+                        return ToolResult.ok(listing.isEmpty() ? "(空目录)" : listing);
                     } catch (Exception e) {
                         log.warn("列出目录失败: {}", p, e);
                         return ToolResult.<String>error("列出失败: " + e.getMessage());

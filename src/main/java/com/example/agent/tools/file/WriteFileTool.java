@@ -91,7 +91,7 @@ public class WriteFileTool extends AbstractFileTool<WriteFileTool.Input> {
                     try {
                         if (p.getParent() != null) Files.createDirectories(p.getParent());
                         Files.writeString(p, input.content());
-                        return ToolResult.ok("已写入 " + p, "<auto>");
+                        return ToolResult.ok("已写入 " + p);
                     } catch (Exception e) {
                         log.warn("写入文件失败: {}", p, e);
                         return ToolResult.<String>error("写入失败: " + e.getMessage());

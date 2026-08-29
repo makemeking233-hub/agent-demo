@@ -90,7 +90,7 @@ public class ReadFileTool extends AbstractFileTool<ReadFileTool.Input> {
                 () -> {
                     try {
                         byte[] bytes = Files.readAllBytes(p);
-                        return ToolResult.ok(new String(bytes, StandardCharsets.UTF_8), "<auto>");
+                        return ToolResult.ok(new String(bytes, StandardCharsets.UTF_8));
                     } catch (MalformedInputException e) {
                         try {
                             return ToolResult.ok(

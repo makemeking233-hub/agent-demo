@@ -473,4 +473,87 @@ class AgentLoopTest {
                                                 && "1".equals(t.toolCallId()));
         assertEquals(true, hasErrorWithId, "parseArguments 失败产生的 error 也必须携带调用 id");
     }
+
+    @Test
+    void toolSuccessResultCarriesToolCallId() {
+        // 工具成功结果若返回占位 toolCallId（如 "<auto>"），回流消息必须替换为真实调用 id，
+        // 否则 DeepSeek 400：assistant tool_calls 的 id 与 tool 消息的 tool_call_id 不匹配
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Tool fakeTool =
+                new Tool() {
+                    @Override
+                    public String name() {
+                        return "fake";
+                    }
+
+                    @Override
+                    public String description() {
+                        return "fake tool";
+                    }
+
+                    @Override
+                    public java.util.Map<String, Object> inputSchema() {
+                        return java.util.Map.of();
+                    }
+
+                    @Override
+                    public String renderUse(Object input) {
+                        return "fake()";
+                    }
+
+                    @Override
+                    public String renderResult(Object output) {
+                        return String.valueOf(output);
+                    }
+
+                    @Override
+                    public Object parseArguments(String argumentsJson) {
+                        return "{}";
+                    }
+
+                    @Override
+                    public Mono<ToolResult<Object>> execute(Object input, ToolContext ctx) {
+                        return Mono.just(ToolResult.ok("ok", "<auto>"));
+                    }
+                };
+
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                (StreamChunk) new StreamChunk.ToolCallStart("1", "fake", "{}"),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        doReturn(fakeTool).when(tools).getRaw("fake");
+        when(tools.list()).thenReturn(List.of());
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+
+        loop.processTurn(new Message.User("hi")).block();
+        boolean hasOkWithId =
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult t
+                                                && !t.isError()
+                                                && "1".equals(t.toolCallId()));
+        assertEquals(true, hasOkWithId, "成功 tool_result 必须用真实调用 id（不能用 \"<auto>\" 占位）");
+    }
 }
