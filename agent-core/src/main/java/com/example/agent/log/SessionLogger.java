@@ -132,7 +132,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
         sessionWriter.flush();
     }
 
-    // 事件流：写一行 JSON（不换行由 write 自行处理）
+    // 事件流：写一行 JSON（不换行由 write 自行处理）；写出前统一过 Redactor 脱敏
     private void writeSessionLine(Map<String, Object> data) throws IOException {
         Map<String, Object> line = new LinkedHashMap<>();
         line.put("seq", seq.getAndIncrement());
@@ -141,7 +141,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
         for (Map.Entry<String, Object> e : data.entrySet()) {
             if (!e.getKey().equals("timestamp") && !e.getKey().equals("seq")) line.put(e.getKey(), e.getValue());
         }
-        sessionWriter.write(JSON.writeValueAsString(line));
+        sessionWriter.write(Redactor.redact(JSON.writeValueAsString(line)));
         sessionWriter.newLine();
         sessionWriter.flush();
     }
@@ -159,7 +159,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
         safe(() -> {
             writeSessionLine(Map.of("type", "user/message", "role", "user", "content", user.content()));
             chatWriter.write("──[" + CHAT_TS.format(LocalDateTime.now()) + "] 用户 ──\n");
-            chatWriter.write(user.content());
+            chatWriter.write(Redactor.redact(user.content()));
             chatWriter.newLine();
             chatWriter.newLine();
             chatWriter.flush();
@@ -180,7 +180,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
             // chat.log 只写正文
             if (assistant.content() != null && !assistant.content().isBlank()) {
                 chatWriter.write("──[" + CHAT_TS.format(LocalDateTime.now()) + "] 助手 ──\n");
-                chatWriter.write(assistant.content());
+                chatWriter.write(Redactor.redact(assistant.content()));
                 chatWriter.newLine();
                 chatWriter.newLine();
                 chatWriter.flush();
@@ -188,7 +188,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
             // thinking.log
             if (thinking != null && !thinking.isEmpty()) {
                 for (String t : thinking) {
-                    thinkWriter.write("[" + CHAT_TS.format(LocalDateTime.now()) + "] thinking> " + t + "\n");
+                    thinkWriter.write("[" + CHAT_TS.format(LocalDateTime.now()) + "] thinking> " + Redactor.redact(t) + "\n");
                 }
                 thinkWriter.flush();
             }
@@ -205,7 +205,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
                             "name", call.name(),
                             "arguments", truncate(call.argumentsJson())));
             toolWriter.write("[" + TOOL_TS.format(LocalTime.now()) + "] TOOL> " + call.name() + "   callId=" + call.id() + "\n");
-            toolWriter.write("  args: " + truncate(call.argumentsJson()) + "\n");
+            toolWriter.write("  args: " + Redactor.redact(truncate(call.argumentsJson())) + "\n");
             toolWriter.flush();
         });
     }
@@ -223,11 +223,11 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
                             "result", content,
                             "elapsedMs", elapsedMs));
             if (result.isError()) {
-                toolWriter.write("[" + TOOL_TS.format(LocalTime.now()) + "] TOOL< ERROR in " + elapsedMs + "ms: " + content + "\n");
+                toolWriter.write("[" + TOOL_TS.format(LocalTime.now()) + "] TOOL< ERROR in " + elapsedMs + "ms: " + Redactor.redact(content) + "\n");
             } else {
                 toolWriter.write("[" + TOOL_TS.format(LocalTime.now()) + "] TOOL< done in " + elapsedMs + "ms, " + content.length() + " chars\n");
                 // 设计 §3.5/§6: tools.log 与 session.jsonl 都写截断后的结果（模型看到的同一份内容）
-                toolWriter.write("  result: " + content + "\n");
+                toolWriter.write("  result: " + Redactor.redact(content) + "\n");
             }
             toolWriter.flush();
         });

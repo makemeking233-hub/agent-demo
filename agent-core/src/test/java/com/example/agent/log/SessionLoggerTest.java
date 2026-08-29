@@ -190,4 +190,23 @@ class SessionLoggerTest {
             assertTrue(session.contains("truncated"), "超长 systemPrompt 应带截断标记");
         }
     }
+
+    @Test
+    void redactionAppliedToAllFourFiles() throws Exception {
+        String fakeKey = "sk-aBcDeFgHiJkLmNoPqRsT0123456789";
+        try (SessionLogger l = new SessionLogger(logging(), "sess-012")) {
+            l.onUser(new Message.User("我的 key 是 " + fakeKey));
+            l.onAssistant(
+                    new Message.Assistant("用 key " + fakeKey + " 调用", java.util.List.of()),
+                    java.util.List.of("思考 " + fakeKey));
+            l.onToolCall(new ToolCall("c1", "ReadFile", "{\"path\":\"x\",\"key\":\"" + fakeKey + "\"}"));
+            l.onToolResult(ToolResult.ok("内容 " + fakeKey, "c1"), 5L);
+
+            for (String name : java.util.List.of("session.jsonl", "chat.log", "thinking.log", "tools.log")) {
+                String content = Files.readString(l.sessionDir().resolve(name));
+                assertTrue(content.contains("REDACTED"), name + " 应含脱敏标记");
+                assertTrue(!content.contains(fakeKey), name + " 不应含明文 key");
+            }
+        }
+    }
 }

@@ -11,10 +11,10 @@
 
 ## 2. context 快照
 
-- [ ] 2.1 新增 `ContextSnapshot` record（turn/systemPrompt/memoryInjected/compacted/recentFiles/toolNames/messageCount/estTokens）+ 从 `ChatRequest` 提取的 builder（测试：字段映射正确）
-- [ ] 2.2 `AgentLoop.toRequest()` 后广播 `context/snapshot`（每轮一次；systemPrompt 按 `snapshotMaxChars` 截断，默认 2000）（测试：一轮含一次快照、长 systemPrompt 被截断带标记）
-- [ ] 2.3 `AgentConfig.Logging` 增加 `snapshotMaxChars`（默认 2000），ConfigLoader 解析（测试：yaml 缺省用默认值）
-- [ ] 2.4 本组完成后 `mvn test` 全绿 + commit + push
+- [x] 2.1 新增 `ContextSnapshot` record（turn/systemPrompt/memoryInjected/compacted/recentFiles/toolNames/messageCount/estTokens）+ 从 `ChatRequest` 提取的 builder（测试：字段映射正确）
+- [x] 2.2 `AgentLoop.toRequest()` 后广播 `context/snapshot`（每轮一次；systemPrompt 按 `snapshotMaxChars` 截断，默认 2000）（测试：一轮含一次快照、长 systemPrompt 被截断带标记）
+- [x] 2.3 `AgentConfig.Logging` 增加 `snapshotMaxChars`（默认 2000），ConfigLoader 解析（测试：yaml 缺省用默认值）
+- [x] 2.4 本组完成后 `mvn test` 全绿 + commit + push
 
 ## 3. 敏感信息脱敏
 
