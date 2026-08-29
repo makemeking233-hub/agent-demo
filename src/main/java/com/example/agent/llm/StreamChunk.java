@@ -18,8 +18,8 @@ import java.util.Map;
  *   <li>{@link Error} - 流错误
  * </ul>
  *
- * <p>采用 visitor 模式（{@link #accept(StreamChunkVisitor)}）：新增聚合策略时只需新增 visitor 实现，无需改动 sealed
- * 类型或 aggregate 方法。
+ * <p>采用 visitor 模式（{@link #accept(StreamChunkVisitor)}）：新增聚合策略时只需新增 visitor 实现，无需改动 sealed 类型或
+ * aggregate 方法。
  */
 public sealed interface StreamChunk
     permits StreamChunk.TextDelta,
@@ -39,25 +39,39 @@ public sealed interface StreamChunk
 
   /** Visitor 接口（默认空实现，按需 override） */
   interface StreamChunkVisitor {
-    /** @see TextDelta */
+    /**
+     * @see TextDelta
+     */
     default void visitTextDelta(TextDelta c) {}
 
-    /** @see ToolCallStart */
+    /**
+     * @see ToolCallStart
+     */
     default void visitToolCallStart(ToolCallStart c) {}
 
-    /** @see ToolCallDelta */
+    /**
+     * @see ToolCallDelta
+     */
     default void visitToolCallDelta(ToolCallDelta c) {}
 
-    /** @see ToolCallEnd */
+    /**
+     * @see ToolCallEnd
+     */
     default void visitToolCallEnd(ToolCallEnd c) {}
 
-    /** @see Usage */
+    /**
+     * @see Usage
+     */
     default void visitUsage(Usage c) {}
 
-    /** @see Finished */
+    /**
+     * @see Finished
+     */
     default void visitFinished(Finished c) {}
 
-    /** @see Error */
+    /**
+     * @see Error
+     */
     default void visitError(Error c) {}
   }
 
@@ -164,7 +178,9 @@ public sealed interface StreamChunk
       result.add(new ToolCall(e.id(), name, args));
     }
 
-    /** @return 累积的工具调用列表 */
+    /**
+     * @return 累积的工具调用列表
+     */
     List<ToolCall> result() {
       return result;
     }

@@ -29,9 +29,7 @@ public class InitCommand implements Runnable {
   @Option(names = "--force", description = "覆盖已存在配置")
   boolean force;
 
-  /**
-   * picocli 入口：创建 ~/.agent-demo/ 子目录并写入默认 config.yaml。
-   */
+  /** picocli 入口：创建 ~/.agent-demo/ 子目录并写入默认 config.yaml。 */
   @Override
   public void run() {
     try {

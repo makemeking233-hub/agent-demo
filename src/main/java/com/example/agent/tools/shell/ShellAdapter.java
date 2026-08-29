@@ -13,8 +13,8 @@ import java.util.List;
  *   <li>命中条件：命令名相同，且黑名单条目的标志集合包含于输入命令的标志集合
  * </ul>
  *
- * <p>v0.1 简化：默认实现为 {@link DefaultDenylistMatcher}（基于 flags + basename 语义）； 子类可 override {@link #denylistMatcher()} 提供
- * regex / glob / LLM 判定等更复杂策略。
+ * <p>v0.1 简化：默认实现为 {@link DefaultDenylistMatcher}（基于 flags + basename 语义）； 子类可 override {@link
+ * #denylistMatcher()} 提供 regex / glob / LLM 判定等更复杂策略。
  */
 public interface ShellAdapter {
   /**

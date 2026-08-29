@@ -48,7 +48,8 @@ class OpenAiCompatibleMapperTest {
   @Test
   void parsesUsageChunk() {
     String sse =
-        "data: {\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}";
+        "data:"
+            + " {\"choices\":[{\"delta\":{}}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}";
     Optional<StreamChunk> opt = mapper.parseSseLine(sse);
     StreamChunk chunk = opt.orElseThrow();
     assertInstanceOf(StreamChunk.Usage.class, chunk);
@@ -60,7 +61,8 @@ class OpenAiCompatibleMapperTest {
   @Test
   void parsesFinishReasonChunk() {
     String sse =
-        "data: {\"choices\":[{\"finish_reason\":\"stop\",\"delta\":{}}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2}}";
+        "data:"
+            + " {\"choices\":[{\"finish_reason\":\"stop\",\"delta\":{}}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2}}";
     Optional<StreamChunk> opt = mapper.parseSseLine(sse);
     StreamChunk chunk = opt.orElseThrow();
     assertInstanceOf(StreamChunk.Finished.class, chunk);

@@ -39,8 +39,7 @@ public class LlmRetry {
    * @param backoffMs 每次重试前的退避毫秒（超出时回落 {@link #MAX_BACKOFF_MS}）
    * @param predicate 判定异常是否可重试
    */
-  public record RetryPolicy(
-      int maxAttempts, long[] backoffMs, Predicate<Throwable> predicate) {
+  public record RetryPolicy(int maxAttempts, long[] backoffMs, Predicate<Throwable> predicate) {
     /**
      * 构造策略。
      *
@@ -93,8 +92,7 @@ public class LlmRetry {
                   policy.backoffMs()[Math.min(attempt, policy.backoffMs().length - 1)],
                   MAX_BACKOFF_MS);
           log.warn("retrying after {} attempt(s): {}", attempt + 1, e.toString());
-          return Mono.delay(Duration.ofMillis(delay))
-              .then(retry(source, policy, attempt + 1));
+          return Mono.delay(Duration.ofMillis(delay)).then(retry(source, policy, attempt + 1));
         });
   }
 

@@ -1,10 +1,5 @@
 package com.example.agent.tools.shell;
 
-
-
-
-
-
 /**
  * 黑名单匹配策略接口（详见 design.md §6.6 黑名单匹配语义）。
  *

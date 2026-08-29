@@ -1,12 +1,12 @@
 package com.example.agent.core;
 
 import com.example.agent.core.exception.MaxIterationsExceededException;
-import com.example.agent.permission.PermissionManager;
 import com.example.agent.llm.ChatRequest;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.ToolCall;
 import com.example.agent.llm.ToolSpec;
+import com.example.agent.permission.PermissionManager;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolRegistry;

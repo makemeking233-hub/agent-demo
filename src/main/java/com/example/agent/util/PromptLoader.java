@@ -7,7 +7,8 @@ import java.nio.charset.StandardCharsets;
 /**
  * Prompt 模板加载工具（统一处理 classpath 资源 + fallback 字符串）。
  *
- * <p>v0.1 之前：ContextCompressor 和 MemoryPromptBuilder 各自重复了 "open resource / readAllBytes / UTF-8 / 失败回退" 模式。
+ * <p>v0.1 之前：ContextCompressor 和 MemoryPromptBuilder 各自重复了 "open resource / readAllBytes / UTF-8 /
+ * 失败回退" 模式。
  *
  * <p>使用：
  *

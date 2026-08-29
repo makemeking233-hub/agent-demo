@@ -2,10 +2,8 @@ package com.example.agent.tools.file;
 
 import com.example.agent.permission.PermissionDecision;
 import com.example.agent.tools.AbstractFileTool;
-import com.example.agent.tools.PathGuard;
 import com.example.agent.tools.Tool.ToolContext;
 import com.example.agent.tools.ToolCategory;
-
 import com.example.agent.tools.ToolResult;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

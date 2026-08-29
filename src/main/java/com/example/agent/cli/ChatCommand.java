@@ -1,17 +1,16 @@
 package com.example.agent.cli;
 
 import com.example.agent.AbortSignal;
+import com.example.agent.config.AgentConfig;
+import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
 import com.example.agent.core.ContextCompressor;
 import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
 import com.example.agent.core.TurnResult;
-import com.example.agent.config.AgentConfig;
-import com.example.agent.config.ConfigLoader;
-import com.example.agent.permission.PermissionManager;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
-import com.example.agent.provider.deepseek.DeepSeekProvider;
+import com.example.agent.permission.PermissionManager;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.ToolRegistry;
 import java.io.BufferedReader;
@@ -79,9 +78,7 @@ public class ChatCommand implements Runnable {
   @Option(names = "--auto-approve-write", description = "TEST: skip write permission confirmation")
   boolean autoApproveWrite;
 
-  /**
-   * picocli 入口：装配 Provider / Tools / AgentLoop / Permission，启动 REPL。
-   */
+  /** picocli 入口：装配 Provider / Tools / AgentLoop / Permission，启动 REPL。 */
   @Override
   public void run() {
     AgentConfig cfg = loadConfig();
@@ -97,9 +94,8 @@ public class ChatCommand implements Runnable {
         switch (cfg.provider().type() == null ? "deepseek" : cfg.provider().type().toLowerCase()) {
           case "deepseek" -> new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey);
           case "minimax" -> new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey);
-          default ->
-              throw new IllegalArgumentException(
-                  "未知 provider 类型: " + cfg.provider().type() + "（支持 deepseek / minimax）");
+          default -> throw new IllegalArgumentException(
+              "未知 provider 类型: " + cfg.provider().type() + "（支持 deepseek / minimax）");
         };
     TokenEstimator estimator = new TokenEstimator();
     // AtomicReference: lambda-friendly mutable holder for the active MessageHistory
@@ -137,14 +133,7 @@ public class ChatCommand implements Runnable {
 
     ReplContext ctx =
         new ReplContext(
-            history,
-            estimator,
-            loop,
-            slash,
-            totalPrompt,
-            totalCompletion,
-            resolvedModel,
-            aborted);
+            history, estimator, loop, slash, totalPrompt, totalCompletion, resolvedModel, aborted);
     runReplLoop(ctx);
   }
 
@@ -220,8 +209,7 @@ public class ChatCommand implements Runnable {
    * return false so the caller passes them to AgentLoop.
    */
   private boolean handleLine(String line, ReplContext ctx) {
-    return ctx
-        .slash()
+    return ctx.slash()
         .dispatch(
             line,
             ctx.history().get(),

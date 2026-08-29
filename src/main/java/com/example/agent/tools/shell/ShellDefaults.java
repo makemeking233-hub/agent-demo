@@ -1,10 +1,5 @@
 package com.example.agent.tools.shell;
 
-
-
-
-
-
 import java.util.List;
 
 /**
@@ -17,7 +12,8 @@ public final class ShellDefaults {
   public static final List<String> BASH = List.of("rm -rf", "mkfs", "dd if=", "shutdown", "reboot");
 
   /** cmd.exe（Windows）默认黑名单 */
-  public static final List<String> CMD = List.of("format", "diskpart", "bcdedit", "rmdir /s /q", "del /f /s /q");
+  public static final List<String> CMD =
+      List.of("format", "diskpart", "bcdedit", "rmdir /s /q", "del /f /s /q");
 
   /** PowerShell（Windows）默认黑名单 */
   public static final List<String> POWERSHELL =

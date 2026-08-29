@@ -3,8 +3,8 @@ package com.example.agent.render;
 /**
  * v0.1 简化版流式打印机：把流式 chunk 直接打到 stdout（错误打到 stderr）。
  *
- * <p>stdout 与 stderr 职责分离：模型输出独占 stdout（便于 shell pipe / CI 解析）， 仅 {@link #onError(String)} 写 stderr（避免污染
- * stdout 流）。 v0.2 升级为 INLINE / CODE_FENCE 两态状态机（详见 design.md §2.3）。
+ * <p>stdout 与 stderr 职责分离：模型输出独占 stdout（便于 shell pipe / CI 解析）， 仅 {@link #onError(String)} 写
+ * stderr（避免污染 stdout 流）。 v0.2 升级为 INLINE / CODE_FENCE 两态状态机（详见 design.md §2.3）。
  */
 public class StreamingPrinter {
   /**

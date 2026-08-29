@@ -5,10 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.agent.permission.PermissionManager;
 import com.example.agent.tools.Tool;
-import com.example.agent.tools.file.ReadFileTool;
-import com.example.agent.tools.file.WriteFileTool;
-import com.example.agent.tools.file.EditFileTool;
-import com.example.agent.tools.file.LsTool;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;

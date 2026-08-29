@@ -17,9 +17,11 @@ import java.util.Map;
  *   <li>{@link System} - system prompt（注入 memory 等）
  * </ul>
  *
- * <p>每个 record 实现 sealed interface 的抽象方法 {@link #role()} + {@link #toMap()}（Jackson 反序列化不会注入，详见 design.md §6.4）。
+ * <p>每个 record 实现 sealed interface 的抽象方法 {@link #role()} + {@link #toMap()}（Jackson 反序列化不会注入，详见
+ * design.md §6.4）。
  *
- * <p>{@link #toMap()} 用于 DeepSeek wire format 序列化（OpenAI 兼容）；消除了 DeepSeekRequestMapper 的 instanceof 链。
+ * <p>{@link #toMap()} 用于 DeepSeek wire format 序列化（OpenAI 兼容）；消除了 DeepSeekRequestMapper 的 instanceof
+ * 链。
  */
 public sealed interface Message
     permits Message.User, Message.Assistant, Message.ToolResult, Message.System {
@@ -71,8 +73,7 @@ public sealed interface Message
               Map.of(
                   "id", tc.id(),
                   "type", "function",
-                  "function",
-                      Map.of("name", tc.name(), "arguments", tc.argumentsJson())));
+                  "function", Map.of("name", tc.name(), "arguments", tc.argumentsJson())));
         }
         m.put("tool_calls", tcs);
       }

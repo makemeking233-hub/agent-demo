@@ -5,7 +5,6 @@ import com.example.agent.tools.AbstractFileTool;
 import com.example.agent.tools.PathGuard;
 import com.example.agent.tools.Tool.ToolContext;
 import com.example.agent.tools.ToolCategory;
-
 import com.example.agent.tools.ToolResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,8 +18,8 @@ import reactor.core.publisher.Mono;
  *
  * <p>权限：默认 allow；路径含 {@code ..} 一律 deny。
  *
- * <p>路径 normalize + 越界检查继承自 {@link AbstractFileTool}，本类仅实现 {@link #doExecute}。 输入 {@code path} 为 {@code null}/空
- * 时，{@link AbstractFileTool} 的 resolve 已回退到 {@code workingDirectory}。
+ * <p>路径 normalize + 越界检查继承自 {@link AbstractFileTool}，本类仅实现 {@link #doExecute}。 输入 {@code path} 为
+ * {@code null}/空 时，{@link AbstractFileTool} 的 resolve 已回退到 {@code workingDirectory}。
  */
 public class LsTool extends AbstractFileTool<LsTool.Input> {
   /**

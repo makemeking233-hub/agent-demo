@@ -4,7 +4,6 @@ import com.example.agent.core.exception.CompactCircuitBrokenException;
 import com.example.agent.llm.ChatRequest;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -132,7 +131,8 @@ public class ContextCompressor {
    */
   private String loadPrompt() {
     String fallback = "请将以下对话压缩为摘要：\n\n[消息历史 JSONL]";
-    String loaded = com.example.agent.util.PromptLoader.loadOrFallback("/prompts/summarize.txt", fallback);
+    String loaded =
+        com.example.agent.util.PromptLoader.loadOrFallback("/prompts/summarize.txt", fallback);
     if (loaded.equals(fallback)) {
       log.debug("summary prompt 使用 fallback（classpath 资源不可用）");
     }

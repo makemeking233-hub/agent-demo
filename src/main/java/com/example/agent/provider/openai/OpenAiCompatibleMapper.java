@@ -22,8 +22,8 @@ import java.util.Optional;
  *   <li>{@link #parseSseLine(String)}：把单行 SSE data 解析为 {@link StreamChunk}
  * </ul>
  *
- * <p>强制规则（design.md §7.1）：每个请求体必须带 {@code stream_options.include_usage=true}， 否则
- * {@code usage.prompt_tokens} 永远为 null，压缩触发器失效。
+ * <p>强制规则（design.md §7.1）：每个请求体必须带 {@code stream_options.include_usage=true}， 否则 {@code
+ * usage.prompt_tokens} 永远为 null，压缩触发器失效。
  */
 public class OpenAiCompatibleMapper {
 
