@@ -56,7 +56,8 @@ public class ConfigLoader {
                     base.cost(),
                     base.context(),
                     base.shell(),
-                    base.memoryInject());
+                    base.memoryInject(),
+                    mergeLogging(base.logging(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -87,7 +88,8 @@ public class ConfigLoader {
                 base.cost(),
                 base.context(),
                 base.shell(),
-                base.memoryInject());
+                base.memoryInject(),
+                base.logging());
     }
 
     /**
@@ -99,6 +101,39 @@ public class ConfigLoader {
      */
     private static String firstNonBlank(String a, String b) {
         return (a != null && !a.isBlank()) ? a : b;
+    }
+
+    /**
+     * 合并 user yaml 的 {@code logging:} 段到 base（缺失段保持 base 值）。
+     *
+     * @param base 当前 logging 配置
+     * @param map user yaml 顶层字典
+     * @return 合并后的 {@link AgentConfig.Logging}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Logging mergeLogging(AgentConfig.Logging base, Map<String, Object> map) {
+        Object seg = map.get("logging");
+        if (!(seg instanceof Map<?, ?> lm)) return base;
+        Map<String, Object> m = (Map<String, Object>) lm;
+        boolean enabled = m.containsKey("enabled") ? BoolVal(m.get("enabled"), base.enabled()) : base.enabled();
+        String dir = str(m, "dir", base.dir());
+        int resultMaxChars = m.containsKey("resultMaxChars")
+                ? intVal(m, "resultMaxChars", base.resultMaxChars())
+                : base.resultMaxChars();
+        return new AgentConfig.Logging(enabled, dir, resultMaxChars);
+    }
+
+    /**
+     * 兼容布尔值（yaml 可能是 Boolean 或字符串），缺失返回默认。
+     *
+     * @param v 值
+     * @param d 默认值
+     * @return 布尔值
+     */
+    private static boolean BoolVal(Object v, boolean d) {
+        if (v instanceof Boolean b) return b;
+        if (v != null) return Boolean.parseBoolean(v.toString());
+        return d;
     }
 
     /**

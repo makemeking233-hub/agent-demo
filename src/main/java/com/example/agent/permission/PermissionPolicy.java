@@ -13,9 +13,9 @@ import java.util.List;
  *   <li>破坏性命令：合并 ShellAdapter.defaultDenylist
  * </ul>
  *
- * @param defaultRead read 工具默认策略（true=allow, false=ask）
- * @param defaultWrite write 工具默认策略
- * @param defaultShell shell 工具默认策略
+ * @param defaultRead           read 工具默认策略（true=allow, false=ask）
+ * @param defaultWrite          write 工具默认策略
+ * @param defaultShell          shell 工具默认策略
  * @param sensitivePathPatterns 敏感路径 Ant glob 列表
  */
 public record PermissionPolicy(

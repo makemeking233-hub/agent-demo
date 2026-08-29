@@ -13,6 +13,7 @@ import java.util.List;
  * @param context 上下文压缩参数
  * @param shell ShellTool 沙箱参数
  * @param memoryInject 注入到 system prompt 的额外 memory 指引
+ * @param logging 会话结构化日志配置
  */
 public record AgentConfig(
         Provider provider,
@@ -20,7 +21,8 @@ public record AgentConfig(
         Cost cost,
         Context context,
         Shell shell,
-        List<String> memoryInject) {
+        List<String> memoryInject,
+        Logging logging) {
 
     /**
      * LLM provider 配置。
@@ -73,6 +75,17 @@ public record AgentConfig(
     public record Shell(int timeoutMs, int maxOutputBytes) {}
 
     /**
+     * 会话结构化日志配置（详见 logging-design.md）。
+     *
+     * <p>{@code dir} 是会话结构化日志根目录，独立于 SLF4J 通用日志 {@code app.log}。
+     *
+     * @param enabled 是否写会话结构化日志；关闭时 {@code SessionLogger} 为 no-op
+     * @param dir 会话日志根目录（默认 {@code ~/.agent-demo/logs/}）
+     * @param resultMaxChars 工具结果在 {@code session.jsonl} / {@code tools.log} 中的截断上限（字符）
+     */
+    public record Logging(boolean enabled, String dir, int resultMaxChars) {}
+
+    /**
      * v0.1 内置默认配置。
      *
      * @return 默认 {@link AgentConfig}
@@ -98,6 +111,10 @@ public record AgentConfig(
                 new Cost(2.0, 8.0, 4.0, 5.0),
                 new Context(8000, 3),
                 new Shell(120_000, 1_000_000),
-                List.of());
+                List.of(),
+                new Logging(
+                        true,
+                        System.getProperty("user.home") + "/.agent-demo/logs/",
+                        30_000));
     }
 }

@@ -12,6 +12,7 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 
 - 详细设计：`docs/design/design.md`
 - 测试设计：`docs/design/test-design.md`
+- 日志设计：`docs/design/logging-design.md`
 - 实施计划：`docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md`
 - 使用说明：`README.md`
 

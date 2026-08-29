@@ -18,13 +18,19 @@ import java.util.regex.Pattern;
  */
 public class PermissionPathMatcher {
 
-    /** Placeholder to avoid double-star-slash replacement conflict with double-star */
+    /**
+     * Placeholder to avoid double-star-slash replacement conflict with double-star
+     */
     private static final String DOUBLE_SLASH_PLACEHOLDER = "::DOUBLESLASH::";
 
-    /** 原始 glob 模式列表（不可变副本） */
+    /**
+     * 原始 glob 模式列表（不可变副本）
+     */
     private final List<String> patterns;
 
-    /** 编译后的正则数组（与 patterns 一一对应） */
+    /**
+     * 编译后的正则数组（与 patterns 一一对应）
+     */
     private final Pattern[] compiled;
 
     /**
@@ -64,11 +70,11 @@ public class PermissionPathMatcher {
     public static String toRegex(String glob) {
         return "^"
                 + glob.replace("\\", "\\\\")
-                        .replace(".", "\\.")
-                        .replace("**/", DOUBLE_SLASH_PLACEHOLDER)
-                        .replace("**", ".*")
-                        .replace("*", "[^/]*")
-                        .replace(DOUBLE_SLASH_PLACEHOLDER, "(?:.*/)?")
+                .replace(".", "\\.")
+                .replace("**/", DOUBLE_SLASH_PLACEHOLDER)
+                .replace("**", ".*")
+                .replace("*", "[^/]*")
+                .replace(DOUBLE_SLASH_PLACEHOLDER, "(?:.*/)?")
                 + "$";
     }
 

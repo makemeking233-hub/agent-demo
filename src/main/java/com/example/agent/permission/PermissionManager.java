@@ -24,16 +24,24 @@ import java.util.Map;
  * #registerCategory(String, ToolCategory)} 或 override {@code Tool.category()}）。
  */
 public class PermissionManager {
-    /** 权限策略（read/write/shell 默认 + 敏感路径 glob） */
+    /**
+     * 权限策略（read/write/shell 默认 + 敏感路径 glob）
+     */
     private final PermissionPolicy policy;
 
-    /** 路径 glob 匹配器（敏感路径检测） */
+    /**
+     * 路径 glob 匹配器（敏感路径检测）
+     */
     private final PermissionPathMatcher pathMatcher;
 
-    /** 工具名 → 语义分类注册表（消 switch(String)） */
+    /**
+     * 工具名 → 语义分类注册表（消 switch(String)）
+     */
     private final Map<String, ToolCategory> categoryRegistry = new HashMap<>();
 
-    /** 默认策略构造（{@link PermissionPolicy#defaults()} + 内置 5 个工具分类） */
+    /**
+     * 默认策略构造（{@link PermissionPolicy#defaults()} + 内置 5 个工具分类）
+     */
     public PermissionManager() {
         this(PermissionPolicy.defaults());
         registerDefaults();
@@ -50,7 +58,9 @@ public class PermissionManager {
         registerDefaults();
     }
 
-    /** 注册 v0.1 已知的 5 个工具分类 */
+    /**
+     * 注册 v0.1 已知的 5 个工具分类
+     */
     private void registerDefaults() {
         categoryRegistry.put("ReadFile", ToolCategory.READ);
         categoryRegistry.put("Ls", ToolCategory.READ);
@@ -73,8 +83,8 @@ public class PermissionManager {
      * 主裁决方法。
      *
      * @param toolName 工具名
-     * @param input 工具输入（用于抽取路径）
-     * @param ctx 工具上下文（可空，v0.1 暂未使用）
+     * @param input    工具输入（用于抽取路径）
+     * @param ctx      工具上下文（可空，v0.1 暂未使用）
      * @return 裁决结果
      */
     public PermissionDecision decide(String toolName, Object input, Tool.ToolContext ctx) {
@@ -89,7 +99,7 @@ public class PermissionManager {
      * 兼容 stub 调用（M2 AgentLoop 用）。
      *
      * @param toolName 工具名
-     * @param input 工具输入
+     * @param input    工具输入
      * @return 裁决结果
      */
     public PermissionDecision decide(String toolName, Object input) {

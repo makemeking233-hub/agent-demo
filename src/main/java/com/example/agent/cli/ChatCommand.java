@@ -10,11 +10,15 @@ import com.example.agent.core.MessageHistory;
 import com.example.agent.core.TurnResult;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
+import com.example.agent.log.SessionLogger;
+import com.example.agent.log.SessionRecorder;
+import com.example.agent.log.SessionId;
 import com.example.agent.memory.MemoryDir;
 import com.example.agent.memory.MemoryPromptBuilder;
 import com.example.agent.permission.PermissionManager;
 import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
+import com.example.agent.session.SessionStore;
 import com.example.agent.tools.ToolRegistry;
 
 import org.slf4j.Logger;
@@ -183,6 +187,8 @@ public class ChatCommand implements Runnable {
                         resolvedModel);
 
         Path workingDir = Paths.get(System.getProperty("user.dir"));
+        // 会话日志 + 会话落盘（只读配置；失败降级为 no-op，不阻断对话）
+        SessionRecorder recorder = buildRecorder(cfg, userHome);
         AgentLoop loop =
                 new AgentLoop(
                         provider,
@@ -192,7 +198,8 @@ public class ChatCommand implements Runnable {
                         DEFAULT_MAX_TOOL_ITERATIONS,
                         resolvedModel,
                         workingDir,
-                        systemPrompt);
+                        systemPrompt,
+                        recorder);
 
         AtomicBoolean aborted = new AtomicBoolean(false);
         AbortSignal abortSignal = () -> aborted.get();
@@ -211,8 +218,57 @@ public class ChatCommand implements Runnable {
                         totalPrompt,
                         totalCompletion,
                         resolvedModel,
-                        aborted);
-        runReplLoop(ctx);
+                        aborted,
+                        recorder);
+        try {
+            runReplLoop(ctx);
+        } finally {
+            closeQuietly(recorder);
+        }
+    }
+
+    /**
+     * 组装会话录制器：读配置决定是否启用；任一组件创建失败时降级为 {@code null}（不阻断对话）。
+     *
+     * @param cfg 当前配置
+     * @param userHome 用户主目录
+     * @return {@link SessionRecorder}（可能为 null 表示未启用会话日志）
+     */
+    private SessionRecorder buildRecorder(AgentConfig cfg, String userHome) {
+        if (cfg.logging() == null || !cfg.logging().enabled()) return null;
+        String sessionId = SessionId.newSessionId();
+        SessionLogger logger = null;
+        try {
+            logger = new SessionLogger(cfg.logging(), sessionId);
+        } catch (Exception e) {
+            log.warn("初始化会话日志失败，降级为仅 app.log: {}", e.getMessage());
+        }
+        SessionStore store = null;
+        try {
+            store =
+                    new SessionStore(
+                            Paths.get(userHome, ".agent-demo", "sessions", sessionId + ".jsonl"),
+                            50,
+                            200L);
+        } catch (Exception e) {
+            log.warn("初始化会话存档失败，降级为不落盘: {}", e.getMessage());
+        }
+        if (logger == null && store == null) return null;
+        return new SessionRecorder(logger, store);
+    }
+
+    /**
+     * 静默关闭录制器（异常仅 warn，不阻断退出）。
+     *
+     * @param recorder 可空的录制器
+     */
+    private static void closeQuietly(SessionRecorder recorder) {
+        if (recorder == null) return;
+        try {
+            recorder.close();
+        } catch (Exception e) {
+            LoggerFactory.getLogger(ChatCommand.class).warn("关闭会话录制器失败: {}", e.getMessage());
+        }
     }
 
     /**
@@ -304,6 +360,7 @@ public class ChatCommand implements Runnable {
                         ctx.totalCompletion(),
                         ctx.resolvedModel(),
                         () -> {
+                            if (ctx.recorder() != null) ctx.recorder().flush();
                             MessageHistory fresh = new MessageHistory(ctx.estimator());
                             ctx.history().set(fresh);
                             ctx.loop().setHistory(fresh);
@@ -330,7 +387,8 @@ public class ChatCommand implements Runnable {
             int[] totalPrompt,
             int[] totalCompletion,
             String resolvedModel,
-            AtomicBoolean aborted) {
+            AtomicBoolean aborted,
+            SessionRecorder recorder) {
     }
 
     /**
