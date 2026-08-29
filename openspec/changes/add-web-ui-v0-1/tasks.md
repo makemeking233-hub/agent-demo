@@ -9,7 +9,7 @@
 ## 2. Backend — health + static + 配置
 
 - [x] 2.1 `WebConfig` (`@Configuration @Profile("web")`): 读 `agent.web.{host, port, trusted-hosts}`，启动时校验 host 不是 `0.0.0.0`，启动后暴露这些 bean
-- [ ] 2.2 `TrustedHostFilter` (`OncePerRequestFilter`): 对 `/api/**` 校验 RemoteAddr；loopback 永远放行；非 loopback 必须命中 trusted-hosts；不命中返回 403 + `{"error":"host_not_trusted"}`
+- [x] 2.2 `TrustedHostFilter` (`OncePerRequestFilter`): 对 `/api/**` 校验 RemoteAddr；loopback 永远放行；非 loopback 必须命中 trusted-hosts；不命中返回 403 + `{"error":"host_not_trusted"}`
 - [ ] 2.3 `StaticResourceConfig` (`WebFluxConfigurer` + `RouterFunction`): 配 `/assets/**` 永久缓存 (`Cache-Control: public, max-age=31536000, immutable`)，其他路径 SPA fallback 到 `/index.html`
 - [ ] 2.4 `HealthController` (`GET /api/health`): 返回 `{"status":"ok"|"degraded","version","uptime_s","reason"?}`；`/api/health` 跳过 TrustedHostFilter（spec §Health Check 永远 200）
 - [ ] 2.5 `WebTestClient` 测试：`/api/health` 200；未配置 trusted-hosts 时非 loopback 返 403；`--host=0.0.0.0` 启动失败
