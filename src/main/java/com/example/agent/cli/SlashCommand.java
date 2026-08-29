@@ -1,21 +1,26 @@
 package com.example.agent.cli;
 
+import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
+import com.example.agent.session.SessionStore;
 
+import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
- * Slash 命令分发（v0.1：/help /clear /quit /history）。
+ * Slash 命令分发（v0.1：/help /clear /quit /history；v0.2 加 /resume）。
  *
  * <p>v0.1 简化版：{@code /history} 费用估算硬编码 DeepSeek-chat 价格（2/8 元/M token）。 v0.2 改为读 {@code
  * AgentConfig.cost()}。
  */
 public class SlashCommand {
-    /** v0.1 支持的 slash 命令清单（用于 help 输出与补全） */
-    private static final List<String> COMMANDS = List.of("/help", "/clear", "/quit", "/history");
+    /** v0.2 支持的 slash 命令清单（用于 help 输出与补全） */
+    private static final List<String> COMMANDS =
+            List.of("/help", "/clear", "/quit", "/history", "/resume");
 
     /**
-     * 分发单行输入到 slash 命令处理。
+     * 分发单行输入到 slash 命令处理（v0.1 兼容版：不支持 /resume）。
      *
      * @param input 原始输入
      * @param hist 当前消息历史（/history 读、/clear 替换）
@@ -32,6 +37,32 @@ public class SlashCommand {
             int[] totalCompletionTokens,
             String model,
             Runnable onClear) {
+        return dispatch(
+                input, hist, totalPromptTokens, totalCompletionTokens, model, onClear, null, null);
+    }
+
+    /**
+     * 分发单行输入到 slash 命令处理（v0.2 完整版：支持 /resume）。
+     *
+     * @param input 原始输入
+     * @param hist 当前消息历史（/history 读、/clear 替换）
+     * @param totalPromptTokens 累计 prompt token
+     * @param totalCompletionTokens 累计 completion token
+     * @param model 当前模型名（/history 显示用）
+     * @param onClear /clear 触发的回调
+     * @param sessionsDir /resume 用的 sessions 目录（{@code null} 时 /resume 退化为提示信息）
+     * @param onResume /resume 触发的回调（接收加载的 entry 列表；空 list 表示无历史）
+     * @return true=该行被 slash 命令消费
+     */
+    public boolean dispatch(
+            String input,
+            MessageHistory hist,
+            int[] totalPromptTokens,
+            int[] totalCompletionTokens,
+            String model,
+            Runnable onClear,
+            Path sessionsDir,
+            Consumer<List<Message>> onResume) {
         String trimmed = input.trim();
         if (!trimmed.startsWith("/")) return false;
         switch (trimmed) {
@@ -45,6 +76,7 @@ public class SlashCommand {
             }
             case "/history" -> printHistory(
                     hist, totalPromptTokens[0], totalCompletionTokens[0], model);
+            case "/resume" -> doResume(sessionsDir, onResume);
             default -> System.out.println("[未知命令] 输入 /help 查看可用命令");
         }
         return true;
@@ -76,6 +108,48 @@ public class SlashCommand {
                         + " out"
                         + " | 估算费用: ¥"
                         + cost);
+    }
+
+    /**
+     * 执行 /resume：从 {@code sessionsDir} 加载最近 session，调 {@code onResume} 回调。 始终调回调（无历史时传空 list），便于调用方统一处理 UI 提示。
+     */
+    private void doResume(Path sessionsDir, Consumer<List<Message>> onResume) {
+        if (onResume == null) {
+            System.out.println("[/resume] 未启用（ChatCommand 未注入 onResume 回调）");
+            return;
+        }
+        if (sessionsDir == null) {
+            System.out.println("[/resume] sessions 目录未配置");
+            onResume.accept(List.of());
+            return;
+        }
+        List<com.example.agent.session.SessionEntry> entries = SessionStore.loadLatest(sessionsDir);
+        List<Message> messages =
+                entries.stream()
+                        .map(
+                                e -> {
+                                    return switch (e.type()) {
+                                        case "user" -> (Message) new Message.User(e.content());
+                                        case "assistant" ->
+                                                new Message.Assistant(
+                                                        e.content(),
+                                                        java.util.List.of());
+                                        case "tool_result" ->
+                                                new Message.ToolResult(
+                                                        "",
+                                                        e.content(),
+                                                        false);
+                                        case "system" -> new Message.System(e.content());
+                                        default -> new Message.User(e.content());
+                                    };
+                                })
+                        .toList();
+        onResume.accept(messages);
+        if (messages.isEmpty()) {
+            System.out.println("[/resume] 无历史会话");
+        } else {
+            System.out.println("[/resume] 已恢复 " + messages.size() + " 条消息");
+        }
     }
 
     /**

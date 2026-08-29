@@ -195,6 +195,8 @@ public class ChatCommand implements Runnable {
 
         Path workingDir = Paths.get(System.getProperty("user.dir"));
         Path agentDataDir = Paths.get(userHome, ".agent-demo");
+        // sessions 目录（/resume 读取用；不存在时 SlashCommand 静默返回空 list）
+        Path sessionsDir = agentDataDir.resolve("sessions");
         // 会话日志 + 会话落盘（只读配置；失败降级为 no-op，不阻断对话）
         SessionRecorder recorder = buildRecorder(cfg, userHome);
         // stdin reader：REPL 主循环与权限交互确认共用（避免双 reader 缓冲冲突）
@@ -232,7 +234,8 @@ public class ChatCommand implements Runnable {
                         totalCompletion,
                         resolvedModel,
                         aborted,
-                        recorder);
+                        recorder,
+                        sessionsDir);
         try {
             runReplLoop(ctx, reader);
         } finally {
@@ -457,11 +460,23 @@ public class ChatCommand implements Runnable {
                             MessageHistory fresh = new MessageHistory(ctx.estimator());
                             ctx.history().set(fresh);
                             ctx.loop().setHistory(fresh);
+                        },
+                        ctx.sessionsDir(),
+                        messages -> {
+                            // /resume 回调：T2 阶段仅打印（T3 将调 MessageHistory.replaceAll 真替换）
+                            if (messages.isEmpty()) {
+                                System.out.println("[/resume] 当前无可恢复会话");
+                            } else {
+                                System.out.println(
+                                        "[/resume] 准备恢复 "
+                                                + messages.size()
+                                                + " 条消息（T3 真正替换 history）");
+                            }
                         });
     }
 
     /**
-     * REPL 循环共享状态 record（聚合 8 个参数，消除 runReplLoop/handleLine 的参数列表膨胀）。
+     * REPL 循环共享状态 record（聚合 9 个参数，消除 runReplLoop/handleLine 的参数列表膨胀）。
      *
      * @param history         当前消息历史（/clear 时切换）
      * @param estimator       token 估算器
@@ -471,6 +486,8 @@ public class ChatCommand implements Runnable {
      * @param totalCompletion 累计 completion token 累加器
      * @param resolvedModel   解析后的模型名
      * @param aborted         中断标志（Ctrl+C 置 true）
+     * @param recorder        会话录制器（可空；写盘失败时降级为 null）
+     * @param sessionsDir     /resume 用的 sessions 目录（{@code ~/.agent-demo/sessions/}）
      */
     private record ReplContext(
             AtomicReference<MessageHistory> history,
@@ -481,7 +498,8 @@ public class ChatCommand implements Runnable {
             int[] totalCompletion,
             String resolvedModel,
             AtomicBoolean aborted,
-            SessionRecorder recorder) {
+            SessionRecorder recorder,
+            Path sessionsDir) {
     }
 
     /**
