@@ -161,12 +161,14 @@ public class ChatCommand implements Runnable {
         MemoryDir memoryDir = new MemoryDir(Paths.get(userHome, ".agent-demo", "memory"));
         String memorySection =
                 new MemoryPromptBuilder(memoryDir).build(String.join("\n", cfg.memoryInject()));
+        String storageSection = buildStorageSection(cfg, userHome);
         String systemPrompt =
                 new SystemPromptBuilder()
                         .build(
                                 providerName,
                                 resolvedModel,
                                 memorySection,
+                                storageSection,
                                 List.of(),
                                 this.systemPrompt);
 
@@ -269,6 +271,34 @@ public class ChatCommand implements Runnable {
         } catch (Exception e) {
             LoggerFactory.getLogger(ChatCommand.class).warn("关闭会话录制器失败: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 组装「运行时存储位置」说明段，注入 system prompt。
+     *
+     * <p>让 Agent 能直接回答「日志 / 会话 / 记忆在哪里」，无需通过文件工具探索——文件工具被沙箱在
+     * 工作目录内，够不到 {@code ~/.agent-demo}，探索会得到「路径越界」或 NoSuchFile。
+     *
+     * @param cfg      当前配置（读 logging.dir）
+     * @param userHome agent-demo home（AGENT_DEMO_HOME 或 user.home）
+     * @return 存储位置说明文本
+     */
+    private static String buildStorageSection(AgentConfig cfg, String userHome) {
+        String logsDir =
+                cfg.logging() != null && cfg.logging().dir() != null
+                        ? cfg.logging().dir()
+                        : Paths.get(userHome, ".agent-demo", "logs").toString();
+        String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
+        return "- 工作目录（文件工具的相对路径均相对此解析）: `"
+                + System.getProperty("user.dir")
+                + "`\n"
+                + "- 日志目录: `"
+                + logsDir
+                + "`（`app.log` 通用日志；每个会话的结构化日志在 `sessions/<会话ID>/` 下："
+                + "`session.jsonl` / `chat.log` / `thinking.log` / `tools.log`）\n"
+                + "- 会话存档目录: `"
+                + sessionsDir
+                + "`（`<会话ID>.jsonl`）";
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.example.agent.memory;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -27,5 +28,14 @@ class MemoryPromptBuilderTest {
         var builder = new MemoryPromptBuilder(dir);
         String prompt = builder.build(null);
         assertTrue(prompt.contains("currently empty"));
+    }
+
+    @Test
+    void saveInstructionsUseActualMemoryDir() {
+        var dir = new MemoryDir(tmp.resolve("mem"));
+        var builder = new MemoryPromptBuilder(dir);
+        String prompt = builder.build(null);
+        assertFalse(prompt.contains("~/.agent-demo/memory/<name>.md"));
+        assertTrue(prompt.contains(dir.dir().toString() + "/<name>.md"));
     }
 }

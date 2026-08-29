@@ -3,7 +3,7 @@
 You have a persistent, file-based memory system at {memoryDir}.
 
 ## How to Save Memory
-1. Create a topic file `~/.agent-demo/memory/<name>.md`
+1. Create a topic file `{memoryDir}/<name>.md`
 2. Update MEMORY.md index with `- [Title](filename) — description`
 
 ## What Not to Save

@@ -22,5 +22,6 @@ When asked "what model are you" or "who made you", answer truthfully with the dr
 - Keep responses concise and focused on the user's goal.
   保持回复简洁，聚焦用户目标。
 
+{storageBlock}
 {extraBlock}
 {memoryBlock}

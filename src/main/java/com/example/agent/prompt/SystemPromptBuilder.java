@@ -39,6 +39,7 @@ public class SystemPromptBuilder {
      * @param providerName    provider 类型名（deepseek / minimax / openai / anthropic ...）
      * @param modelName       当前模型名（如 deepseek-chat / MiniMax-Text-01）
      * @param memorySection   长期记忆段（MemoryPromptBuilder 产物；为空则整段省略）
+     * @param storageSection  运行时存储位置段（工作目录 / 日志 / 会话存档；为空则整段省略）
      * @param extraGuidelines 附加指引列表（来自 config memoryInject 等；为空则整段省略）
      * @param userOverride    用户自定义 system prompt（--system-prompt；非空白时直接返回）
      * @return 完整系统提示词文本
@@ -47,6 +48,7 @@ public class SystemPromptBuilder {
             String providerName,
             String modelName,
             String memorySection,
+            String storageSection,
             List<String> extraGuidelines,
             String userOverride) {
         if (userOverride != null && !userOverride.isBlank()) {
@@ -57,8 +59,20 @@ public class SystemPromptBuilder {
         return template
                 .replace("{providerName}", providerName == null ? "" : providerName)
                 .replace("{modelName}", modelName == null ? "" : modelName)
+                .replace("{storageBlock}", buildStorageBlock(storageSection))
                 .replace("{extraBlock}", buildExtraBlock(extraGuidelines))
                 .replace("{memoryBlock}", buildMemoryBlock(memorySection));
+    }
+
+    /**
+     * 组装运行时存储位置段（含标题；为空时返回空串，整段省略）。
+     *
+     * @param storageSection 存储位置说明文本
+     * @return 存储位置段文本（可为空串）
+     */
+    private static String buildStorageBlock(String storageSection) {
+        if (storageSection == null || storageSection.isBlank()) return "";
+        return "# Runtime Storage / 运行时存储\n\n" + storageSection.trim() + "\n\n";
     }
 
     /**
