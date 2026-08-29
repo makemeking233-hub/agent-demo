@@ -67,10 +67,10 @@
 
 ## 10. 集成测试 + E2E
 
-- [ ] 10.1 后端 WebTestClient 全覆盖：`/api/health` / `/api/chat/send` happy path / abort / stream resume / permission_request / slash / trusted-host
-- [ ] 10.2 jacoco 门禁: `mvn -pl agent-web verify` 通过 (`LINE >= 80%`, `BRANCH >= 70%`)
-- [ ] 10.3 前端 vitest + @testing-library/react: `MessageBubble` markdown 渲染 / `ToolCallCard` 三态切换 / `sse-client` 重连逻辑
-- [ ] 10.4 E2E (可选, v0.1 末): Playwright 起 dev server 跑一个 "用户输入 → 模型流式 → tool call → in-chat 权限 yes" 全链路截图
+- [x] 10.1 后端 WebTestClient 全覆盖：`/api/health` / `/api/chat/send` happy path / abort / stream resume / permission_request / slash / trusted-host（`WebIntegrationTest` 9 契约测试 + SlashCommandRouterTest 8 + TrustedHostFilterTest 8 + PermissionBridgeTest 6 + ChatStreamServiceTest 7 + HealthControllerTest 4）
+- [x] 10.2 jacoco 门禁: `mvn -pl agent-web verify` 通过 (`LINE >= 80%`, `BRANCH >= 70%`)（per-PACKAGE 门禁, 已实测 "All coverage checks met"）
+- [x] 10.3 前端 vitest + @testing-library/react: `MessageBubble` markdown 渲染 / `ToolCallCard` 三态切换 / `sse-client` 重连逻辑（`npm test` 10/10 全绿）
+- [ ] 10.4 E2E (可选, v0.1 末): Playwright 起 dev server 跑一个 "用户输入 → 模型流式 → tool call → in-chat 权限 yes" 全链路截图（v0.1 末可选项, 归入 v0.2）
 
 ## 11. 文档 + 收尾
 
@@ -78,7 +78,7 @@
 - [x] 11.2 `README.md` 加 web profile 启动说明 (中文)
 - [x] 11.3 `application-web.yml` 配置项加注释；`-Dagent.web.trusted-hosts=192.168.1.0/24` 用法进 README
 - [x] 11.4 `mvn -pl agent-web verify` 全绿；commit + push (per AGENTS.md §2.2 `commit 即 push`)
-- [ ] 11.5 准备 archive: `openspec validate add-web-ui-v0-1` 通过；`openspec archive add-web-ui-v0-1` 把 delta spec 合到 `openspec/specs/web-ui/spec.md`
+- [x] 11.5 准备 archive: `openspec validate add-web-ui-v0-1` 通过；`openspec archive add-web-ui-v0-1` 把 delta spec 合到 `openspec/specs/web-ui/spec.md`（已归档至 `openspec/changes/archive/2026-08-29-add-web-ui-v0-1`, `openspec validate --all` 2/2 passed）
 
 
 
