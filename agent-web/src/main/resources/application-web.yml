@@ -1,21 +1,25 @@
-# agent-web profile 配置（OpenSpec add-web-ui-v0-1）
-# 通过 -Dspring.profiles.active=web 激活；与 CLI profile 共存于同一 Spring 上下文
-
-# 关键：base application.yml 里 spring.main.web-application-type=none（CLI 不需要 web server）。
-# web profile 必须显式覆盖为 reactive，否则 Spring 不会启动任何嵌入服务器，
-# 端口永不监听 → /api/** 全部 connection refused（WebIntegrationTest 此前卡住的根因）。
-spring:
-  main:
-    web-application-type: reactive
+# agent-web profile 配置 (openspec add-web-ui-v0-1)
+# 激活方式: -Dspring.profiles.active=web
+# 与 CLI profile 共存于同一个 Spring 上下文 (复用 agent-core 的 AgentLoop /
+# SessionStore / PermissionManager / ToolRegistry bean)
+#
+# 开发: mvn -pl agent-core spring-boot:run -Dspring-boot.run.profiles=web
+# 生产: mvn -pl agent-web clean package && java -jar agent-web/target/agent-web.jar
 
 server:
+  # HTTP 端口; agent.web.port 跟这个对齐 (v0.1 不支持 port override)
   port: 8080
-  # bind 到 loopback；v0.1 显式拒绝 0.0.0.0（spec §Trusted Host Auth / Scenario: Bind to 0.0.0.0 rejected）
 
 agent:
   web:
-    # 默认绑 127.0.0.1；CLI -Dagent.web.host=192.168.x.x 可改 LAN IP
+    # 绑定的网卡 IP. 默认 loopback (单用户本地).
+    # 显式设为具体 LAN IP (如 192.168.1.42) 暴露到 LAN, 触发 TrustedHostFilter 检查.
+    # 0.0.0.0 在启动时直接拒 (WebConfig.validateHost), 避免误暴露公网.
     host: 127.0.0.1
-    # trusted-hosts: list of CIDR / 单 IP；空 = 仅 loopback
-    # 例: 192.168.1.0/24 或 192.168.1.42
+    # HTTP 端口; 与 server.port 对齐
+    port: 8080
+    # 允许的远端 IP (CIDR 或单 IP). 空列表 = 仅 loopback 接受.
+    # 例:
+    #   -Dagent.web.trusted-hosts=192.168.1.0/24   (整个 /24 子网)
+    #   -Dagent.web.trusted-hosts=192.168.1.42     (单 IP)
     trusted-hosts: []

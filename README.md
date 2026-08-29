@@ -359,3 +359,33 @@ tail -f ~/.agent-demo/logs/agent.log
 
 > **License**：MIT
 > **状态**：设计阶段（M0 之后进入编码）
+
+## 13. Web UI (v0.1)
+
+agent-demo v0.1 含 React 18 + Vite 6 Web UI, 与 CLI 并存.
+
+启动:
+
+```
+# 终端 A: 后端 (web profile)
+mvn -pl agent-core spring-boot:run -Dspring-boot.run.profiles=web
+
+# 终端 B: 前端
+cd agent-web/frontend
+npm run dev
+```
+
+打开 http://localhost:5173/ 看 UI. vite.config.ts 的 proxy 配置把 `/api/*` 转发到 :8080.
+
+生产一体化构建 (前端 dist 嵌入 jar):
+
+```
+mvn -pl agent-web clean package
+java -jar agent-web/target/agent-web.jar
+```
+
+默认绑 127.0.0.1:8080 (loopback). 改 application-web.yml 暴露到 LAN, 或加 `--agent.web.trusted-hosts=192.168.1.0/24`.
+
+SSE 事件流: 后端用 7 种事件 (`message_start / message_delta / tool_call_start / tool_call_end / permission_request / message_stop / error`) 推模型输出, 工具调用, 权限请求. 完整 schema 见 `docs/design/web-ui-design.md`.
+
+v0.1 限制: SessionStore / currentSession 端点占位, /resume / /history 静态文本. v0.2 才上正式 permission UI (modal 模态框) + session 历史 + settings.
