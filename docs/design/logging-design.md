@@ -320,3 +320,60 @@ logging:
 
 > 修订记录
 > v0.1.0（2026-08-26）：初版；仿 DSH 会话日志组织，定义四类日志分层与会话落盘接入。
+
+## 10. 可观测性扩展（v0.1.2）
+
+> 本版在四类日志基础上补齐「全动作事件」与「可维可测」能力（对应 OpenSpec change `add-observability-testability`）。
+
+### 10.1 新增事件类型
+
+在 §3.2 事件表基础上追加（现有事件形状不变，向后兼容）：
+
+| type | 触发点 | 关键字段 |
+|------|--------|---------|
+| `context/snapshot` | `AgentLoop.toRequest()` 每轮一次（含工具后续推） | turn、systemPrompt（按 `snapshotMaxChars` 截断）、memoryInjected、compacted、recentFiles、toolNames、messageCount、estTokens |
+| `system/config` | 启动装配完成 | provider、model、loggingEnabled（脱敏） |
+| `system/compact` | `ContextCompressor` 压缩成功/失败 | beforeTokens、afterTokens、success、summary（截断）、errorClass |
+| `system/retry` | `LlmRetry` 每次重试 | attempt、errorClass、errorMsg（截断） |
+| `system/error` | 回合级异常 | errorClass、message（截断 500） |
+| `permission/decision` | 权限裁决 ask/deny | tool、path、decision、reason（allow 不记录） |
+
+`session.jsonl` header `version` 1→2；旧 reader 忽略未知 type 兼容。
+
+### 10.2 context 快照
+
+- 每轮请求前记录「模型看到了什么」：system prompt 截断（默认 2000 字符，`logging.snapshotMaxChars`）+ 消息元数据（数量/估算 token/工具列表/压缩与文件重注入标记）
+- 消息正文不重复转储（由 user/message 与 assistant/message 事件覆盖），避免体积膨胀
+
+### 10.3 敏感信息脱敏
+
+- `log/Redactor`：sk- 前缀 key、Bearer token、apiKey 键值对三种模式统一替换 `***REDACTED***`
+- 四个文件写路径统一过滤（session.jsonl 序列化后、chat/thinking/tools 正文），杜绝明文 key 落盘
+
+### 10.4 保留策略
+
+| 项 | 配置 | 默认 |
+|----|------|------|
+| 会话目录过期清理 | `logging.retentionMaxAgeDays` | 30 天 |
+| 会话目录数量上限 | `logging.retentionKeepSessions` | 50 |
+| app.log 轮转 | logback `SizeAndTimeBasedRollingPolicy` | 10MB × 7 天 |
+
+清理在 `SessionLogger` 构造（新会话创建）时执行，失败仅 WARN。
+
+### 10.5 会话回放
+
+- `log/SessionReplay.replay(session.jsonl)` → `MessageHistory`（user/assistant(toolCalls)/tool 顺序重建；context/snapshot、system/*、未知类型跳过）
+- 供调试与测试复用；v0.2 `/resume` 可切到事件流
+
+### 10.6 Web 日志查看
+
+| API | 功能 |
+|-----|------|
+| `GET /api/logs/sessions` | 列出日志会话目录 |
+| `GET /api/logs/sessions/{id}/events?offset=&limit=` | 分页读事件 |
+| `GET /api/logs/sessions/{id}/files/{name}` | 读 chat/tools/thinking/session 文本 |
+
+`id`/`name` 白名单校验防路径穿越；沿用 trusted-hosts 鉴权。前端 `/logs` 页面提供事件/聊天/工具三视图。
+
+> 修订记录
+> v0.1.2（2026-08-29）：新增 §10 可观测性扩展（全动作事件、context 快照、脱敏、保留策略、回放、Web 日志查看）。

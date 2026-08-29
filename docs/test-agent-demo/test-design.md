@@ -496,3 +496,42 @@
 4. §10 增补 sync flush 时序图（execute -> append -> syncFlush -> force）。
 5. §11.4 增补 `provider.perModel.<modelId>.firstTokenTimeoutSec` 配置项说明（v0.1 预留）。
 6. §6.2 增补 deny 终态不可覆盖的状态机表格；增补 `denyCommands` v0.2 占位字段。
+---
+
+## 9. 可观测性测试设计（v0.1.2 补充）
+
+> 对应 OpenSpec change `add-observability-testability`，为「日志驱动测试」与「会话回放」补充测试设计。
+
+### 9.1 日志驱动测试（golden 事件）
+
+| 测试点 | 方法 | 断言 |
+|--------|------|------|
+| 事件类型序列 | E2E：wiremock 模拟两轮（tool_call → 文本），真实 SessionLogger + AgentLoop | `session.jsonl` 的 type 序列 == golden 文件（`e2e/events/read-file-round.txt`） |
+| 易变字段归一化 | `SessionEventAssertions.normalized` | timestamp/seq/callId/turn 替换为 `<n>`，跨运行对比稳定 |
+| 上下文快照内容 | E2E 断言 `context/snapshot` | `toolNames` 含已注册工具、`messageCount` 正确 |
+
+测试工具：`agent-core/src/test/java/com/example/agent/testutil/SessionEventAssertions`（读事件、按 type 过滤、type 序列、归一化）。
+
+### 9.2 会话回放测试
+
+| 场景 | 断言 |
+|------|------|
+| 单轮重建 | user → assistant 顺序与内容一致 |
+| 工具轮重建 | user → assistant(toolCalls) → tool → assistant；toolCallId 匹配 |
+| 未知事件跳过 | `future/event` 行被跳过不报错 |
+
+### 9.3 事件广播单元测试
+
+| 埋点 | 测试类 | 覆盖 |
+|------|--------|------|
+| `system/error` | `AgentLoopObservabilityTest` | 回合异常广播 + NOOP 零副作用 |
+| `system/compact` | `ContextCompressorObservabilityTest` | 成功/失败字段 |
+| `permission/decision` | `PermissionManagerObservabilityTest` | ask 广播、allow 不广播 |
+| `system/retry` | `LlmRetryObservabilityTest` | attempt 递增 |
+| context 快照 | `AgentLoopObservabilityTest` | 每轮一次、字段映射 |
+
+### 9.4 脱敏与保留策略测试
+
+- `RedactorTest`：sk- / Bearer / apiKey 键值对命中；普通文本不误伤；null/空安全
+- `SessionLoggerTest.redactionAppliedToAllFourFiles`：四文件无明文 key
+- `SessionRetentionCleanerTest`：过期删除、数量上限、根目录缺失 no-op

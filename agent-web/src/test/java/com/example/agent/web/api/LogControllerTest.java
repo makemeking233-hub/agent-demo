@@ -61,4 +61,30 @@ class LogControllerTest {
         assertThrows(ResponseStatusException.class, () -> c.events("..", 0, 10));
         assertThrows(ResponseStatusException.class, () -> c.events("a/b", 0, 10));
     }
+
+    @Test
+    void rejectsBadPagination() throws Exception {
+        LogController c = newController();
+        assertThrows(ResponseStatusException.class, () -> c.events("2026-08-29T10-23-45-abc12345", -1, 10));
+        assertThrows(ResponseStatusException.class, () -> c.events("2026-08-29T10-23-45-abc12345", 0, 0));
+        assertThrows(ResponseStatusException.class, () -> c.events("2026-08-29T10-23-45-abc12345", 0, 5000));
+    }
+
+    @Test
+    void eventsNotFoundForMissingSession() throws Exception {
+        LogController c = newController();
+        assertThrows(ResponseStatusException.class, () -> c.events("no-such-session", 0, 10));
+    }
+
+    @Test
+    void fileNotFoundWhenMissing() throws Exception {
+        LogController c = newController();
+        assertThrows(ResponseStatusException.class, () -> c.file("2026-08-29T10-23-45-abc12345", "thinking.log"));
+    }
+
+    @Test
+    void listsEmptyWhenNoSessions() throws Exception {
+        LogController c = new LogController(tmp); // 无 sessions 子目录
+        assertThat(c.listSessions()).isEmpty();
+    }
 }

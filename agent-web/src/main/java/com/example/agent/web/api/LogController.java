@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
@@ -61,6 +62,7 @@ public class LogController {
      *
      * @param loggingDir 配置的日志根（{@code agent.logging.dir}）
      */
+    @Autowired
     public LogController(@Value("${agent.logging.dir:}") String loggingDir) {
         this(Paths.get(
                 loggingDir == null || loggingDir.isBlank()

@@ -45,15 +45,17 @@
 
 ## 7. Web UI 日志查看
 
-- [ ] 7.1 agent-web 新增 `LogController`：`GET /api/logs/sessions`、`GET /api/logs/sessions/{id}/events?offset=&limit=`、`GET /api/logs/sessions/{id}/files/{name}`；`{id}`/`{name}` 白名单校验防路径穿越；沿用 trusted-hosts（测试：列会话/分页/白名单 400/不存在 404）
-- [ ] 7.2 前端新增 `/logs` 路由：会话列表页 + 会话详情页（事件流表格、类型过滤、事件/聊天/工具视图切换、空态）（测试：vitest 组件测试）
-- [ ] 7.3 本组完成后 `mvn test` + 前端测试全绿 + commit + push
+- [x] 7.1 agent-web 新增 `LogController`：`GET /api/logs/sessions`、`GET /api/logs/sessions/{id}/events?offset=&limit=`、`GET /api/logs/sessions/{id}/files/{name}`；`{id}`/`{name}` 白名单校验防路径穿越；沿用 trusted-hosts（测试：列会话/分页/白名单 400/不存在 404）
+- [x] 7.2 前端新增 `/logs` 路由：会话列表页 + 会话详情页（事件流表格、类型过滤、事件/聊天/工具视图切换、空态）（测试：vitest 组件测试）
+- [x] 7.3 本组完成后 `mvn test` + 前端测试全绿 + commit + push
 
 ## 8. 文档与收尾
 
-- [ ] 8.1 更新 `docs/design/logging-design.md`：新事件类型表、context 快照、脱敏、保留策略、回放、Web 日志 API
-- [ ] 8.2 更新 `docs/test-agent-demo/test-design.md`：日志驱动测试与回放的测试设计
-- [ ] 8.3 全量 `mvn verify`（含 jacoco LINE≥80% / BRANCH≥70%）通过
+- [x] 8.1 更新 `docs/design/logging-design.md`：新事件类型表、context 快照、脱敏、保留策略、回放、Web 日志 API
+- [x] 8.2 更新 `docs/test-agent-demo/test-design.md`：日志驱动测试与回放的测试设计
+- [x] 8.3 全量 `mvn verify`（含 jacoco LINE≥80% / BRANCH≥70%）通过
 - [ ] 8.4 最终 commit + push，汇报里程碑
+
+
 
 
