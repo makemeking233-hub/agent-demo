@@ -88,6 +88,12 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
         this.sessionDir = Path.of(logging.dir()).resolve("sessions").resolve(sessionId);
         this.resultMaxChars = logging.resultMaxChars();
         this.snapshotMaxChars = logging.snapshotMaxChars();
+        // 保留策略：新会话创建时清理过期/超量目录（失败不阻断）
+        new SessionRetentionCleaner(
+                        sessionDir.getParent(),
+                        logging.retentionMaxAgeDays(),
+                        logging.retentionKeepSessions())
+                .clean();
         Files.createDirectories(sessionDir);
         try {
             Files.setPosixFilePermissions(

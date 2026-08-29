@@ -18,9 +18,9 @@
 
 ## 3. 敏感信息脱敏
 
-- [ ] 3.1 新增 `log/Redactor.java`：正则覆盖 `sk-[A-Za-z0-9]{16,}`、`Bearer <token>`、`apiKey/api_key 键值对`，替换为 `***REDACTED***`（测试：三种格式各自命中；普通文本不误伤）
-- [ ] 3.2 `SessionLogger` 四个文件所有写路径统一过 `Redactor`（测试：四个文件均无明文 key；`logging.enabled=false` 不初始化 Redactor）
-- [ ] 3.3 本组完成后 `mvn test` 全绿 + commit + push
+- [x] 3.1 新增 `log/Redactor.java`：正则覆盖 `sk-[A-Za-z0-9]{16,}`、`Bearer <token>`、`apiKey/api_key 键值对`，替换为 `***REDACTED***`（测试：三种格式各自命中；普通文本不误伤）
+- [x] 3.2 `SessionLogger` 四个文件所有写路径统一过 `Redactor`（测试：四个文件均无明文 key；`logging.enabled=false` 不初始化 Redactor）
+- [x] 3.3 本组完成后 `mvn test` 全绿 + commit + push
 
 ## 4. 日志保留策略
 
