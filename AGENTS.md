@@ -14,6 +14,7 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 - 测试设计：`docs/test-agent-demo/test-design.md`
 - 日志设计：`docs/design/logging-design.md`
 - 实施计划：`docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md`
+- 迭代流程规范：**OpenSpec**（`openspec/`，见 §2.5），默认所有功能改动走 OpenSpec 四阶段
 - 使用说明：`README.md`
 
 ---
@@ -116,6 +117,83 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 3. `grep -n '^\s\+[A-Z][a-zA-Z]* -->'` 看 `&` 在末尾的→改为多行
 4. `grep -n '||'` 在节点 label 内 → 改为文字
 
+---
+
+### 2.5 OpenSpec 迭代流程（默认）
+
+> 本项目使用 **OpenSpec** 作为**默认迭代流程**。任何"修改行为 / 新增功能 / 重构"类工作都应走 OpenSpec 四阶段；纯文本/单行补丁、CI 配置、紧急 hotfix 可豁免。
+
+#### 2.5.1 四阶段流程
+
+| 阶段 | Skill | 何时调用 | 产出 |
+|------|-------|---------|------|
+| 1. 探索 | `openspec-explore` | 接到模糊需求 / 想法，先澄清目标与边界 | 设计方向（不进 git） |
+| 2. 提案 | `openspec-propose` | 方向清晰，一次性铺齐 design / specs / tasks | `openspec/changes/<id>/{proposal.md, tasks.md, design.md, specs/<cap>/spec.md}` |
+| 3. 实施 | `openspec-apply-change` | 按 tasks.md 逐项实现（§2.2 TDD/commit/push 节奏） | 实际代码 + 测试 + 文档 |
+| 4. 归档 | `openspec-archive-change` | 所有 tasks 勾选完成、`mvn test` 全绿后 | delta spec 合并到 `openspec/specs/`，change 标记 completed |
+
+#### 2.5.2 目录布局
+
+```text
+openspec/
+├── config.yaml                        # 上下文 + 规则（proposal scope ≤20 行、specs SHALL 规范、tasks < 4h）
+├── specs/<capability>/spec.md         # 主 spec（被 archive-change 累积）
+└── changes/
+    └── <change-id>/
+        ├── proposal.md                 # Why / What Changes / Impact / Out of Scope
+        ├── design.md                   # 技术设计（接口、数据流、边界）
+        ├── tasks.md                    # T1/T2/T3... 任务清单（每项 ≤4h）
+        └── specs/<capability>/spec.md  # delta spec（用 ## ADDED/MODIFIED/REMOVED Requirements）
+```
+
+#### 2.5.3 与本项目其他规则的衔接
+
+| 本项目规则 | 在 OpenSpec 中的体现 |
+|-----------|---------------------|
+| §2.2 TDD | 每个 task 内仍执行"测试先红 → 实现 → 转绿"；tasks.md 每项含 `<task>` 测试步骤 |
+| §2.2 commit 即 push | tasks.md 每项 commit 后立即 push；用中文 Conventional Commits |
+| §2.1 成本豁免 | OpenSpec change 内部仍按里程碑/M 分摊汇报；MiniMax 模型不受 5 元红线 |
+| §3 关键决策 | change 内的 design.md 不得违反 JDK17 / Fail-Closed / JSONL 0700 / 无 Lombok 等 |
+| jacoco 门禁 | `mvn verify` 在 apply-change 收尾时必跑，LINE≥80% / BRANCH≥70% |
+
+#### 2.5.4 强制门禁
+
+| 场景 | 必须做 |
+|------|-------|
+| 接到新需求 | **必须先 `openspec-explore`** 澄清再动手；不允许直接进 `openspec-apply-change` 跳过设计 |
+| 改完一个 change | **必须 `openspec-archive-change`** 收尾；不允许留 `openspec/changes/<id>/` 未归档导致下次 session 看到一堆"已完成但未归档" |
+| archive 后 | delta spec 已合并到 `openspec/specs/`，下次 session 才能看到新行为 |
+| 提案 scope | 超过 20 行 → 拆 change（每个 change 一周内可完成） |
+| task 颗粒度 | 单 task > 4h → 拆 |
+
+#### 2.5.5 适用/豁免清单
+
+| 工作类型 | 是否走 OpenSpec |
+|---------|---------------|
+| 新增 slash 命令 / 新增 Tool / 新增 provider | ✅ 走 |
+| 重构已有模块（接口签名变更） | ✅ 走 |
+| 性能优化（无 API 变更） | ✅ 走（小 change） |
+| 文档补充 / 教程 | ❌ 直接 commit |
+| CI / 工程脚本调整 | ❌ 直接 commit |
+| 安全修复（gitleaks 规则调整等） | ❌ 直接 commit（hotfix） |
+| 测试用例补全 | ❌ 直接 commit |
+| typo / 注释微调 | ❌ 直接 commit |
+
+#### 2.5.6 快速命令
+
+| 命令 | 作用 |
+|------|------|
+| 接收大需求 | 先 `openspec-explore` 跑一轮 → 用户确认方向 → `openspec-propose` 一键铺齐 |
+| 接收明确任务 | 直接 `openspec-apply-change <change-id>` |
+| 完成全部 tasks | `mvn verify` → 全绿后 `openspec-archive-change <change-id>` |
+| 调整未归档 change | `openspec-sync-specs <change-id>`（不 archive，只同步 spec） |
+
+#### 2.5.7 当前 OpenSpec 状态
+
+`openspec/changes/` 下的每个目录就是一个 change；completed 后应 archive 到 `openspec/archive/`。下次 session 进入项目**先看一眼** `openspec/changes/` 知道哪些是 WIP、哪些该 archive。
+
+---
+
 ## 3. 关键决策摘要（供后续 Agent 快速对齐）
 
 - **JDK 17 + Spring Boot 3.2 + Maven 3.9**（plan §3）
@@ -130,5 +208,6 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 ---
 
 > 修订记录：
+> - v0.1.2（2026-08-26）：§1 加 OpenSpec 路径索引；新增 §2.5 OpenSpec 迭代流程（默认）：四阶段（explore → propose → apply → archive）、目录布局、与 §2.1/§2.2/§3 的衔接、强制门禁、适用/豁免清单
 > - v0.1.1（2026-08-26）：新增 §2.4 Mermaid 8.8.3 兼容性规则（docs/ 文档专属）
 > - v0.1.0（2026-08-26）：初版；定义成本红线豁免与实施方法学
