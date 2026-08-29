@@ -4,6 +4,7 @@ import com.example.agent.core.exception.CompactCircuitBrokenException;
 import com.example.agent.llm.ChatRequest;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
+import com.example.agent.log.SessionLogSink;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,7 +64,12 @@ public class ContextCompressor {
     private final String summaryModel;
 
     /**
-     * 构造上下文压缩器。
+     * 会话日志观察者（压缩事件广播；可空，默认 no-op）
+     */
+    private final SessionLogSink sink;
+
+    /**
+     * 构造上下文压缩器（不接日志观察者）。
      *
      * @param provider               LLM provider
      * @param autoCompactBuffer      提前压缩 buffer（tokens）
@@ -75,10 +81,29 @@ public class ContextCompressor {
             int autoCompactBuffer,
             int maxConsecutiveFailures,
             String summaryModel) {
+        this(provider, autoCompactBuffer, maxConsecutiveFailures, summaryModel, null);
+    }
+
+    /**
+     * 构造上下文压缩器（带日志观察者）。
+     *
+     * @param provider               LLM provider
+     * @param autoCompactBuffer      提前压缩 buffer（tokens）
+     * @param maxConsecutiveFailures 连续失败熔断阈值
+     * @param summaryModel           summary 模型名
+     * @param sink                   会话日志观察者（{@code null} 用 no-op）
+     */
+    public ContextCompressor(
+            LlmProvider provider,
+            int autoCompactBuffer,
+            int maxConsecutiveFailures,
+            String summaryModel,
+            SessionLogSink sink) {
         this.provider = provider;
         this.autoCompactBuffer = autoCompactBuffer;
         this.maxConsecutiveFailures = maxConsecutiveFailures;
         this.summaryModel = summaryModel;
+        this.sink = sink != null ? sink : SessionLogSink.NOOP;
     }
 
     /**
@@ -94,14 +119,38 @@ public class ContextCompressor {
             log.warn("compact circuit-broken after {} failures", hist.consecutiveCompactFailures());
             return Mono.error(new CompactCircuitBrokenException());
         }
+        int beforeTokens = hist.estimateTokens();
         return compact(hist)
-                .doOnSuccess(r -> hist.resetCompactFailures())
+                .doOnSuccess(
+                        compacted -> {
+                            hist.resetCompactFailures();
+                            sink.onSystemEvent(
+                                    "system/compact",
+                                    Map.of(
+                                            "beforeTokens", beforeTokens,
+                                            "afterTokens", compacted.estimateTokens(),
+                                            "success", true,
+                                            "summary", truncate(summaryFrom(compacted))));
+                        })
                 .doOnError(
                         e -> {
                             hist.incrementCompactFailures();
                             log.warn("compact failed", e);
+                            sink.onSystemEvent(
+                                    "system/compact",
+                                    Map.of(
+                                            "beforeTokens", beforeTokens,
+                                            "success", false,
+                                            "errorClass", e.getClass().getSimpleName()));
                         })
                 .onErrorResume(this::ptlFallback);
+    }
+
+    /** 截断摘要（可观测性事件用，默认 500 字符） */
+    private static String truncate(String s) {
+        if (s == null) return "";
+        if (s.length() <= 500) return s;
+        return s.substring(0, 500) + "...[truncated]";
     }
 
     /**

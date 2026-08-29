@@ -1,9 +1,11 @@
 package com.example.agent.permission;
 
+import com.example.agent.log.SessionLogSink;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolCategory;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -38,6 +40,20 @@ public class PermissionManager {
      * 工具名 → 语义分类注册表（消 switch(String)）
      */
     private final Map<String, ToolCategory> categoryRegistry = new HashMap<>();
+
+    /**
+     * 会话日志观察者（permission/decision 事件广播；默认 no-op）
+     */
+    private SessionLogSink sink = SessionLogSink.NOOP;
+
+    /**
+     * 注入会话日志观察者（AgentLoop 装配时调用；{@code null} 重置为 no-op）。
+     *
+     * @param sink 会话日志观察者
+     */
+    public void setSink(SessionLogSink sink) {
+        this.sink = sink != null ? sink : SessionLogSink.NOOP;
+    }
 
     /**
      * 默认策略构造（{@link PermissionPolicy#defaults()} + 内置 5 个工具分类）
@@ -89,10 +105,35 @@ public class PermissionManager {
      */
     public PermissionDecision decide(String toolName, Object input, Tool.ToolContext ctx) {
         String path = extractPath(input);
+        PermissionDecision d;
         if (path != null && pathMatcher.matches(path)) {
-            return PermissionDecision.ask();
+            d = PermissionDecision.ask();
+        } else {
+            d = decideByCategory(categoryRegistry.getOrDefault(toolName, ToolCategory.OTHER));
         }
-        return decideByCategory(categoryRegistry.getOrDefault(toolName, ToolCategory.OTHER));
+        broadcast(toolName, path, d);
+        return d;
+    }
+
+    /**
+     * 广播权限裁决事件（仅 ask/deny；allow 不产生事件，避免噪声）。
+     *
+     * @param toolName 工具名
+     * @param path     抽取出的路径（无路径语义时为 {@code null}）
+     * @param d        裁决结果
+     */
+    private void broadcast(String toolName, String path, PermissionDecision d) {
+        if (d.behavior() == PermissionDecision.Behavior.ALLOW) return;
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("tool", toolName);
+        payload.put("path", path != null ? path : "");
+        payload.put(
+                "decision",
+                d.behavior() == PermissionDecision.Behavior.ASK ? "ask" : "deny");
+        payload.put(
+                "reason",
+                d.behavior() == PermissionDecision.Behavior.DENY ? "tool_deny" : "policy_ask");
+        sink.onPermissionDecision(payload);
     }
 
     /**

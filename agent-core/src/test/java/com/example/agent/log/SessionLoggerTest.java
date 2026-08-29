@@ -32,7 +32,7 @@ class SessionLoggerTest {
             assertTrue(Files.exists(l.sessionDir().resolve("tools.log")));
             String first = Files.readString(l.sessionDir().resolve("session.jsonl")).split("\n")[0];
             assertTrue(first.contains("\"type\":\"session\""));
-            assertTrue(first.contains("\"version\":1"));
+            assertTrue(first.contains("\"version\":2"));
         }
     }
 
@@ -117,6 +117,56 @@ class SessionLoggerTest {
             assertTrue(session.contains("\"type\":\"turn/end\""));
             assertTrue(session.contains("\"prompt\":10"));
             assertTrue(session.contains("\"completion\":5"));
+        }
+    }
+
+    @Test
+    void headerVersionIsTwo() throws Exception {
+        try (SessionLogger l = new SessionLogger(logging(), "sess-008")) {
+            String first = Files.readString(l.sessionDir().resolve("session.jsonl")).split("\n")[0];
+            assertTrue(first.contains("\"version\":2"), "session header 应为 version:2");
+        }
+    }
+
+    @Test
+    void contextSnapshotGoesToSessionLog() throws Exception {
+        try (SessionLogger l = new SessionLogger(logging(), "sess-009")) {
+            l.onContextSnapshot(
+                    new ContextSnapshot(
+                            0,
+                            "system prompt",
+                            true,
+                            false,
+                            java.util.List.of("a.txt"),
+                            java.util.List.of("ReadFile"),
+                            3,
+                            120));
+            String session = Files.readString(l.sessionDir().resolve("session.jsonl"));
+            assertTrue(session.contains("\"type\":\"context/snapshot\""));
+            assertTrue(session.contains("\"turn\":0"));
+            assertTrue(session.contains("\"systemPrompt\":\"system prompt\""));
+            assertTrue(session.contains("\"toolNames\":[\"ReadFile\"]"));
+            assertTrue(session.contains("\"estTokens\":120"));
+        }
+    }
+
+    @Test
+    void systemAndPermissionEventsGoToSessionLog() throws Exception {
+        try (SessionLogger l = new SessionLogger(logging(), "sess-010")) {
+            l.onSystemEvent(
+                    "system/config",
+                    java.util.Map.of("provider", "deepseek", "model", "deepseek-chat"));
+            l.onSystemEvent(
+                    "system/compact", java.util.Map.of("beforeTokens", 5000, "afterTokens", 800));
+            l.onPermissionDecision(
+                    java.util.Map.of("tool", "Shell", "path", ".", "decision", "ask", "reason", "exec"));
+            String session = Files.readString(l.sessionDir().resolve("session.jsonl"));
+            assertTrue(session.contains("\"type\":\"system/config\""));
+            assertTrue(session.contains("\"provider\":\"deepseek\""));
+            assertTrue(session.contains("\"type\":\"system/compact\""));
+            assertTrue(session.contains("\"beforeTokens\":5000"));
+            assertTrue(session.contains("\"type\":\"permission/decision\""));
+            assertTrue(session.contains("\"decision\":\"ask\""));
         }
     }
 }

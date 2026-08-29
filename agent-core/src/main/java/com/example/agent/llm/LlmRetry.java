@@ -1,5 +1,7 @@
 package com.example.agent.llm;
 
+import com.example.agent.log.SessionLogSink;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
@@ -9,6 +11,8 @@ import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.function.Predicate;
 
 /**
@@ -90,10 +94,25 @@ public class LlmRetry {
      * @param policy 重试策略
      */
     public static <T> Mono<T> retry(Mono<T> source, RetryPolicy policy) {
-        return retry(source, policy, 0);
+        return retry(source, policy, 0, null);
+    }
+
+    /**
+     * 按自定义策略重试（带会话日志观察者，每次重试广播 {@code system/retry} 事件）。
+     *
+     * @param source 原始请求 Mono
+     * @param policy 重试策略
+     * @param sink   会话日志观察者（{@code null} 不广播）
+     */
+    public static <T> Mono<T> retry(Mono<T> source, RetryPolicy policy, SessionLogSink sink) {
+        return retry(source, policy, 0, sink);
     }
 
     static <T> Mono<T> retry(Mono<T> source, RetryPolicy policy, int attempt) {
+        return retry(source, policy, attempt, null);
+    }
+
+    static <T> Mono<T> retry(Mono<T> source, RetryPolicy policy, int attempt, SessionLogSink sink) {
         return source.onErrorResume(
                 e -> {
                     if (attempt >= policy.maxAttempts() || !policy.predicate().test(e)) {
@@ -105,9 +124,23 @@ public class LlmRetry {
                                             Math.min(attempt, policy.backoffMs().length - 1)],
                                     MAX_BACKOFF_MS);
                     log.warn("retrying after {} attempt(s): {}", attempt + 1, e.toString());
+                    if (sink != null) {
+                        Map<String, Object> payload = new LinkedHashMap<>();
+                        payload.put("attempt", attempt + 1);
+                        payload.put("errorClass", e.getClass().getSimpleName());
+                        payload.put("errorMsg", truncate(e.toString()));
+                        sink.onSystemEvent("system/retry", payload);
+                    }
                     return Mono.delay(Duration.ofMillis(delay))
-                            .then(retry(source, policy, attempt + 1));
+                            .then(retry(source, policy, attempt + 1, sink));
                 });
+    }
+
+    /** 截断错误信息（可观测性事件用，默认 300 字符） */
+    private static String truncate(String s) {
+        if (s == null) return "";
+        if (s.length() <= 300) return s;
+        return s.substring(0, 300) + "...[truncated]";
     }
 
     /**

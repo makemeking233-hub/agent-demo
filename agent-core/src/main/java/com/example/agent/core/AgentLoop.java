@@ -25,6 +25,7 @@ import reactor.core.publisher.Mono;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Agent 主循环：单轮对话 → 流式响应 → 工具调度 → 续推（详见 design.md §7）。
@@ -250,8 +251,10 @@ public class AgentLoop {
         this.sink = sink != null ? sink : SessionLogSink.NOOP;
         this.confirmer = confirmer;
         AbortSignal signal = abortSignal != null ? abortSignal : () -> false;
+        PermissionManager perms = new PermissionManager();
+        perms.setSink(sink != null ? sink : SessionLogSink.NOOP);
         this.toolContext =
-                new Tool.ToolContext(workingDir, new PermissionManager(), signal, agentDataDir);
+                new Tool.ToolContext(workingDir, perms, signal, agentDataDir);
     }
 
     /**
@@ -277,7 +280,25 @@ public class AgentLoop {
                 .next()
                 .map(this::buildTurnResult)
                 .doOnSuccess(sink::onTurnEnd)
-                .doOnError(e -> sink.onTurnEnd(new TurnResult("", 0, 0, 0)));
+                .doOnError(
+                        e -> {
+                            // 回合级异常广播 system/error（message 截断 500 字符）
+                            sink.onSystemEvent(
+                                    "system/error",
+                                    Map.of(
+                                            "errorClass",
+                                            e.getClass().getSimpleName(),
+                                            "message",
+                                            truncate(e.getMessage())));
+                            sink.onTurnEnd(new TurnResult("", 0, 0, 0));
+                        });
+    }
+
+    /** 截断长文本（可观测性事件用，避免错误信息撑爆日志） */
+    private static String truncate(String s) {
+        if (s == null) return "";
+        if (s.length() <= 500) return s;
+        return s.substring(0, 500) + "...[truncated]";
     }
 
     /**

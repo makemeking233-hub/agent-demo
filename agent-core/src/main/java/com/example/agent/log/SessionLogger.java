@@ -19,7 +19,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.LocalDateTime;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
@@ -123,7 +122,7 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
     private void writeHeader() throws IOException {
         Map<String, Object> h = new LinkedHashMap<>();
         h.put("type", "session");
-        h.put("version", 1);
+        h.put("version", 2);
         h.put("id", sessionDir.getFileName().toString());
         h.put("createdAt", System.currentTimeMillis());
         h.put("cwd", Path.of(System.getProperty("user.dir")).toString());
@@ -239,6 +238,41 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
             usage.put("prompt", result.totalPromptTokens());
             usage.put("completion", result.totalCompletionTokens());
             writeSessionLine(Map.of("type", "turn/end", "turn", Math.max(turn.get(), 0), "usage", usage));
+        });
+    }
+
+    @Override
+    public void onContextSnapshot(ContextSnapshot snapshot) {
+        safe(() -> {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("type", "context/snapshot");
+            data.put("turn", snapshot.turn());
+            data.put("systemPrompt", truncate(snapshot.systemPrompt()));
+            data.put("memoryInjected", snapshot.memoryInjected());
+            data.put("compacted", snapshot.compacted());
+            data.put("recentFiles", snapshot.recentFiles());
+            data.put("toolNames", snapshot.toolNames());
+            data.put("messageCount", snapshot.messageCount());
+            data.put("estTokens", snapshot.estTokens());
+            writeSessionLine(data);
+        });
+    }
+
+    @Override
+    public void onSystemEvent(String type, Map<String, Object> payload) {
+        safe(() -> {
+            Map<String, Object> data = new LinkedHashMap<>(payload);
+            data.put("type", type);
+            writeSessionLine(data);
+        });
+    }
+
+    @Override
+    public void onPermissionDecision(Map<String, Object> payload) {
+        safe(() -> {
+            Map<String, Object> data = new LinkedHashMap<>(payload);
+            data.put("type", "permission/decision");
+            writeSessionLine(data);
         });
     }
 

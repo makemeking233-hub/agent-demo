@@ -6,6 +6,7 @@ import com.example.agent.llm.ToolCall;
 import com.example.agent.tools.ToolResult;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 会话日志事件观察者（详见 logging-design.md §4.2）。
@@ -63,4 +64,27 @@ public interface SessionLogSink {
      * @param result 该轮结果（含 token 累计）
      */
     default void onTurnEnd(TurnResult result) {}
+
+    /**
+     * 每轮请求前的上下文快照（observability 事件 {@code context/snapshot}）。
+     *
+     * @param snapshot 上下文元数据（system prompt 截断、消息数、工具列表等）
+     */
+    default void onContextSnapshot(ContextSnapshot snapshot) {}
+
+    /**
+     * 系统级动作事件（observability 事件 {@code system/*}）：配置加载 / 压缩 / 重试 / 错误。
+     *
+     * @param type 事件类型（{@code system/config}、{@code system/compact}、{@code
+     *     system/retry}、{@code system/error}）
+     * @param payload 事件载荷（Key 用 camelCase；值须可被 Jackson 序列化）
+     */
+    default void onSystemEvent(String type, Map<String, Object> payload) {}
+
+    /**
+     * 权限裁决事件（observability 事件 {@code permission/decision}）。
+     *
+     * @param payload 载荷：{@code tool}、{@code path}、{@code decision}、{@code reason}
+     */
+    default void onPermissionDecision(Map<String, Object> payload) {}
 }

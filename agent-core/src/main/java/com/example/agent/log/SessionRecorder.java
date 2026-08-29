@@ -9,6 +9,7 @@ import com.example.agent.tools.ToolResult;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 会话录制聚合器（详见 logging-design.md §5）。
@@ -79,6 +80,22 @@ public class SessionRecorder implements SessionLogSink, AutoCloseable {
             store.append(SessionEntry.meta("tokens", List.of(result.totalPromptTokens(), result.totalCompletionTokens())));
             store.syncFlush();
         });
+    }
+
+    @Override
+    public void onContextSnapshot(ContextSnapshot snapshot) {
+        // context/snapshot 仅写入结构化日志，不进 SessionStore 存档（存档只含对话消息）
+        if (logger != null) logger.onContextSnapshot(snapshot);
+    }
+
+    @Override
+    public void onSystemEvent(String type, Map<String, Object> payload) {
+        if (logger != null) logger.onSystemEvent(type, payload);
+    }
+
+    @Override
+    public void onPermissionDecision(Map<String, Object> payload) {
+        if (logger != null) logger.onPermissionDecision(payload);
     }
 
     /** 关键节点主动刷盘（如 /clear 前） */

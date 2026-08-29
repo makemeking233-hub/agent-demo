@@ -1,13 +1,13 @@
 ## 1. 事件模型扩展（observability 基础）
 
-- [ ] 1.1 `SessionLogSink` 增加 default 方法：`onContextSnapshot(ContextSnapshot)`、`onSystemEvent(String type, Map<String,Object> payload)`、`onPermissionDecision(Map<String,Object> payload)`；NOOP 不变（测试：新方法可被空实现调用，零副作用）
-- [ ] 1.2 `SessionLogger` 实现三类新事件写入 `session.jsonl`（含 seq/时间戳）；session header `version` 1→2（测试：写入后 JSONL 行 type 正确、header 含 version:2；旧 reader 兼容）
-- [ ] 1.3 `AgentLoop.processTurn` 错误路径广播 `system/error`（errorClass + message，截断）（测试：fake provider 抛错 → 事件流含 system/error 且 REPL 不退出）
-- [ ] 1.4 `ContextCompressor` 压缩成功/失败广播 `system/compact`（beforeTokens/afterTokens/success/summary 截断）（测试：模拟压缩 → 事件字段正确）
-- [ ] 1.5 `PermissionManager` 裁决结果为 ask/deny 时广播 `permission/decision`（tool/path/decision/reason）（测试：ask 与 deny 各一条事件）
-- [ ] 1.6 `LlmRetry` 每次重试广播 `system/retry`（attempt/errorClass/errorMsg 截断）（测试：重试 2 次 → 2 条事件，attempt 递增）
-- [ ] 1.7 `SessionRecorder` 透传三类新事件到 `SessionLogger`（测试：fake sink 收到透传）
-- [ ] 1.8 本组完成后 `mvn test` 全绿 + commit + push
+- [x] 1.1 `SessionLogSink` 增加 default 方法：`onContextSnapshot(ContextSnapshot)`、`onSystemEvent(String type, Map<String,Object> payload)`、`onPermissionDecision(Map<String,Object> payload)`；NOOP 不变（测试：新方法可被空实现调用，零副作用）
+- [x] 1.2 `SessionLogger` 实现三类新事件写入 `session.jsonl`（含 seq/时间戳）；session header `version` 1→2（测试：写入后 JSONL 行 type 正确、header 含 version:2；旧 reader 兼容）
+- [x] 1.3 `AgentLoop.processTurn` 错误路径广播 `system/error`（errorClass + message，截断）（测试：fake provider 抛错 → 事件流含 system/error 且 REPL 不退出）
+- [x] 1.4 `ContextCompressor` 压缩成功/失败广播 `system/compact`（beforeTokens/afterTokens/success/summary 截断）（测试：模拟压缩 → 事件字段正确）
+- [x] 1.5 `PermissionManager` 裁决结果为 ask/deny 时广播 `permission/decision`（tool/path/decision/reason）（测试：ask 与 deny 各一条事件）
+- [x] 1.6 `LlmRetry` 每次重试广播 `system/retry`（attempt/errorClass/errorMsg 截断）（测试：重试 2 次 → 2 条事件，attempt 递增）
+- [x] 1.7 `SessionRecorder` 透传三类新事件到 `SessionLogger`（测试：fake sink 收到透传）
+- [x] 1.8 本组完成后 `mvn test` 全绿 + commit + push
 
 ## 2. context 快照
 
