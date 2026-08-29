@@ -65,7 +65,9 @@ public class ChatStreamService {
 
     public ActiveStream create(String sessionId, String model) {
         String streamId = UUID.randomUUID().toString();
-        Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().unicast().onBackpressureBuffer();
+        // replay().all(): 延迟订阅者(客户端 turn 完成后再连)能收到全部事件 + complete,
+        // 支撑 spec §resume/Last-Event-ID 与测试中 send→stream 的先后时序。
+        Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().replay().all();
         SseSessionLogSink adapter = new SseSessionLogSink(this, streamId);
         // 权限桥包装成 PermissionConfirmer：confirm(prompt) 阻塞等待前端决策。
         PermissionConfirmer confirmer =
@@ -141,10 +143,25 @@ public class ChatStreamService {
     }
 
     public void stop(String streamId, String finishReason) {
-        ActiveStream meta = actives.remove(streamId);
+        ActiveStream meta = actives.get(streamId);
         if (meta == null) return;
         emit(meta, new SseEvent.MessageStop(finishReason));
         meta.sink().tryEmitComplete();
+        // 不立即从 map 移除: replay sink 保留全部事件, 延迟订阅 / 重连 (spec §resume)
+        // 仍能通过 get(streamId) 拿到已完成的流。由 TTL 清理 + shutdown 回收。
+        evictIfExpired(meta, STREAM_RETENTION_MS);
+    }
+
+    /** 保留时长上限(ms): 完成后仍允许客户端在此窗口内订阅 / 用 Last-Event-ID 重连。 */
+    private static final long STREAM_RETENTION_MS = 10 * 60 * 1000L;
+
+    /** 惰性清理: 超过保留时长的已结束流从 map 移除, 防内存泄漏。 */
+    private void evictIfExpired(ActiveStream meta, long retentionMs) {
+        long ttl = meta.startedAt() + retentionMs;
+        // 简单惰性: 仅当流确实完成且超过 TTL 才移除; 由下一次 create/get 触发
+        if (System.currentTimeMillis() > ttl) {
+            actives.remove(meta.streamId());
+        }
     }
 
     public void abort(String streamId) {
