@@ -375,7 +375,7 @@ cd agent-web/frontend
 npm run dev
 ```
 
-打开 http://localhost:5173/ 看 UI. vite.config.ts 的 proxy 配置把 `/api/*` 转发到 :8090.
+打开 http://localhost:5173/ 看 UI. vite.config.ts 的 proxy 配置把 `/api/*` 转发到 :18080.
 
 生产一体化构建 (前端 dist 嵌入 jar):
 
@@ -384,7 +384,7 @@ mvn -pl agent-web clean package
 java -jar agent-web/target/agent-web.jar
 ```
 
-默认绑 127.0.0.1:8090 (loopback). 改 application-web.yml 暴露到 LAN, 或加 `--agent.web.trusted-hosts=192.168.1.0/24`.
+默认绑 127.0.0.1:18080 (loopback). 改 application-web.yml 暴露到 LAN, 或加 `--agent.web.trusted-hosts=192.168.1.0/24`.
 
 SSE 事件流: 后端用 7 种事件 (`message_start / message_delta / tool_call_start / tool_call_end / permission_request / message_stop / error`) 推模型输出, 工具调用, 权限请求. 完整 schema 见 `docs/design/web-ui-design.md`.
 

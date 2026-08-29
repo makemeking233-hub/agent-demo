@@ -8,7 +8,7 @@
 
 server:
   # HTTP 端口; agent.web.port 跟这个对齐 (v0.1 不支持 port override)
-  port: 8090
+  port: 18080
 
 # 关键: base application.yml 的 spring.main.web-application-type=none (CLI 不需要内嵌 server)。
 # web profile 必须覆盖为 reactive, 否则 Spring 不起 HTTP server, WebApplication 启动后立刻退出
@@ -25,7 +25,7 @@ agent:
     # 0.0.0.0 在启动时直接拒 (WebConfig.validateHost), 避免误暴露公网.
     host: 127.0.0.1
     # HTTP 端口; 与 server.port 对齐
-    port: 8090
+    port: 18080
     # 允许的远端 IP (CIDR 或单 IP). 空列表 = 仅 loopback 接受.
     # 例:
     #   -Dagent.web.trusted-hosts=192.168.1.0/24   (整个 /24 子网)
