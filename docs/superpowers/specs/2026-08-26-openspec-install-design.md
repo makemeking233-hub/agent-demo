@@ -13,7 +13,7 @@
 ## 2. 背景
 
 - `agent-demo` 是 Claude Code 风格的 Java Agent CLI，v0.1 完整跑通 50 个 Task
-- `docs/design/design.md`（500+ 行）和 `docs/design/test-design.md`（170+ 行）目前是 spec 真相源，但仅 Markdown
+- `docs/design/design.md`（500+ 行）和 `docs/test-agent-demo/test-design.md`（170+ 行）目前是 spec 真相源，但仅 Markdown
 - md-main 已深度研究 OpenSpec（v1.5+ npm 包 `@fission-ai/openspec`），社区采用率 20 万+/周
 - DSH = **DeepSeek Harness**（用户当前会话运行的 Agent 平台，端口 3080）
 
@@ -70,7 +70,7 @@ context: |
   agent-demo: Claude Code 风格 Java Agent CLI
   技术栈: JDK 17 + Spring Boot 3.2 + Maven 3.9 + picocli 4.7 + JLine3 3.25 + JTokkit 0.6.1
   LLM Provider: DeepSeek (OpenAI 兼容协议)
-  文档: docs/design/design.md (技术设计) / docs/design/test-design.md (测试设计) / docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md (实施计划)
+  文档: docs/design/design.md (技术设计) / docs/test-agent-demo/test-design.md (测试设计) / docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md (实施计划)
   v0.1 状态: 已完成 M0-M10 (92 个测试全绿 + jacoco 门禁通过)
   v0.2 候选: /resume /model Ctrl+C 中断 deepseek-reasoner 等
   规范: .codex/rules/Codex本地开发规范-Java篇.md (AOSP 风格 + 阿里 P3C + 华为 CleanCode)

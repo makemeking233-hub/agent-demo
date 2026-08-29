@@ -1,6 +1,6 @@
 # agent-demo v0.1 测试设计
 
-> 对应设计文档：[`docs/design/design.md`](./design.md)（v0.1 草稿）
+> 对应设计文档：[`docs/design/design.md`](../design/design.md)（v0.1 草稿）
 > 范围：v0.1 验收清单 #1-#14（§14.1）+ §12 测试策略细化
 > 角色视角：测试工程师 / QA
 > 输出语言：中文

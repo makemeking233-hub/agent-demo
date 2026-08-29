@@ -2,7 +2,7 @@
 
 > 版本：v0.1（草稿）
 >
-> 配套文档：[design.md](./design.md)（§10 会话存储、§17 中断与编码、§11 错误处理）+ [test-design.md](./test-design.md)（本设计的测试视角）
+> 配套文档：[design.md](./design.md)（§10 会话存储、§17 中断与编码、§11 错误处理）+ [test-design.md](../test-agent-demo/test-design.md)（本设计的测试视角）
 >
 > 设计来源：DSH（DeepSeek Harness）会话持久化与日志组织方式，按 agent-demo 的 Java CLI 规模裁剪。
 
