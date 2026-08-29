@@ -12,6 +12,8 @@ import com.example.agent.llm.FinishReason;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.TokenEstimator;
+import com.example.agent.log.SessionLogSink;
+import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolRegistry;
@@ -108,7 +110,8 @@ class AgentLoopToolContextTest {
         MessageHistory hist = new MessageHistory(new TokenEstimator());
         AgentLoop loop =
                 new AgentLoop(
-                        provider, tools, hist, new StreamingPrinter(), 25, "deepseek-chat", tmp);
+                        provider, tools, hist, new StreamingPrinter(), 25, "deepseek-chat", tmp,
+                        null, SessionLogSink.NOOP, null, PermissionConfirmer.allowAll());
 
         // 不应抛 NPE：ToolContext 正确传递 workingDirectory
         var result = loop.processTurn(new Message.User("go")).block();

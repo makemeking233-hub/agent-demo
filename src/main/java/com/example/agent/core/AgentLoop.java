@@ -7,6 +7,8 @@ import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.ToolCall;
 import com.example.agent.llm.ToolSpec;
 import com.example.agent.log.SessionLogSink;
+import com.example.agent.permission.PermissionConfirmer;
+import com.example.agent.permission.PermissionDecision;
 import com.example.agent.permission.PermissionManager;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.Tool;
@@ -100,6 +102,11 @@ public class AgentLoop {
     private final SessionLogSink sink;
 
     /**
+     * 权限交互确认器（ASK 时调用；{@code null} = fail-closed 拒绝）
+     */
+    private final PermissionConfirmer confirmer;
+
+    /**
      * 构造 Agent 主循环（无系统提示词；等价于 {@code systemPrompt = null}）。
      *
      * @param provider          LLM provider
@@ -187,6 +194,27 @@ public class AgentLoop {
             String systemPrompt,
             SessionLogSink sink,
             Path agentDataDir) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, systemPrompt, sink, agentDataDir, null);
+    }
+
+    /**
+     * 构造 Agent 主循环（带会话日志观察者 + agent 数据目录 + 权限确认器）。
+     *
+     * @param agentDataDir agent 数据目录（{@code ~/.agent-demo}，memory/logs/sessions 所在；文件工具额外放行，可空）
+     * @param confirmer    权限交互确认器（ASK 时调用；{@code null} = fail-closed 拒绝）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt,
+            SessionLogSink sink,
+            Path agentDataDir,
+            PermissionConfirmer confirmer) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
@@ -195,6 +223,7 @@ public class AgentLoop {
         this.model = model;
         this.systemPrompt = systemPrompt;
         this.sink = sink != null ? sink : SessionLogSink.NOOP;
+        this.confirmer = confirmer;
         this.toolContext =
                 new Tool.ToolContext(workingDir, new PermissionManager(), () -> false, agentDataDir);
     }
@@ -344,7 +373,7 @@ public class AgentLoop {
         long startNs = System.nanoTime();
         return Mono.fromCallable(() -> (Object) tool.parseArguments(call.argumentsJson()))
                 // raw cast 隔离到 executeTool，主链保持强类型，onErrorResume 的 e 才能正确推断为 Throwable
-                .flatMap(input -> executeTool(tool, input))
+                .flatMap(input -> authorize(tool, call, input))
                 .map(r -> {
                     // 强制用本次调用的真实 id 覆盖工具结果里的 toolCallId（工具常返回 null 或 "<auto>" 占位），
                     // 保证回流给模型的 tool_call_id 与 assistant tool_calls[].id 一致（否则 DeepSeek 400）
@@ -390,6 +419,63 @@ public class AgentLoop {
             return ToolResult.error(callId, ((ToolResult.Err<?>) r).message());
         }
         return (ToolResult<Object>) ToolResult.ok(((ToolResult.Ok<?>) r).output(), callId);
+    }
+
+    /**
+     * 权限裁决 + 交互确认：DENY 拒绝、ALLOW 放行、ASK 走 confirmer（无 confirmer 时 fail-closed 拒绝）。
+     *
+     * @param tool  待执行工具
+     * @param call  本次工具调用（用于错误结果回填 id）
+     * @param input 已反序列化的工具输入
+     * @return 执行结果（放行时执行工具；拒绝时返回 error 结果）
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Mono<ToolResult<Object>> authorize(Tool tool, ToolCall call, Object input) {
+        PermissionDecision d = resolvePermission(tool, input);
+        if (d.behavior() == PermissionDecision.Behavior.DENY) {
+            return Mono.just(ToolResult.error(call.id(), "权限拒绝: " + tool.name()));
+        }
+        if (d.behavior() == PermissionDecision.Behavior.ALLOW) {
+            return executeTool(tool, input);
+        }
+        String prompt = tool.name() + " → " + renderUse(tool, input);
+        if (confirmer != null && confirmer.confirm(prompt)) {
+            return executeTool(tool, input);
+        }
+        return Mono.just(ToolResult.error(call.id(), "用户拒绝执行: " + tool.name()));
+    }
+
+    /**
+     * 合并全局策略（敏感路径 + 分类默认）与工具级 {@code checkPermissions}（含 {@code ..} 越界 deny）。
+     *
+     * <p>deny 终态；任一 ask → ask；都 allow → allow。工具级 {@code checkPermissions} 为 {@code null}（mock
+     * 未 stub）时视作无意见。
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private PermissionDecision resolvePermission(Tool tool, Object input) {
+        PermissionDecision global = toolContext.permissions().decide(tool.name(), input, toolContext);
+        PermissionDecision local = tool.checkPermissions(input, toolContext);
+        if ((local != null && local.behavior() == PermissionDecision.Behavior.DENY)
+                || global.behavior() == PermissionDecision.Behavior.DENY) {
+            return PermissionDecision.deny();
+        }
+        if ((local != null && local.behavior() == PermissionDecision.Behavior.ASK)
+                || global.behavior() == PermissionDecision.Behavior.ASK) {
+            return PermissionDecision.ask();
+        }
+        return PermissionDecision.allow();
+    }
+
+    /**
+     * 渲染工具调用描述（确认提示用）；渲染异常时回退到工具名。
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static String renderUse(Tool tool, Object input) {
+        try {
+            return String.valueOf(tool.renderUse(input));
+        } catch (Exception e) {
+            return tool.name();
+        }
     }
 
     /**

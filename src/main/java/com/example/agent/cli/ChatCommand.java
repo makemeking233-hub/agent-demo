@@ -15,7 +15,7 @@ import com.example.agent.log.SessionRecorder;
 import com.example.agent.log.SessionId;
 import com.example.agent.memory.MemoryDir;
 import com.example.agent.memory.MemoryPromptBuilder;
-import com.example.agent.permission.PermissionManager;
+import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.session.SessionStore;
@@ -185,7 +185,6 @@ public class ChatCommand implements Runnable {
         ToolRegistry.registerMemoryTools(tools);
         registerShellAndLs(tools, cfg);
         StreamingPrinter printer = new StreamingPrinter();
-        PermissionManager perms = new PermissionManager(); // v0.1 placeholder
 
         ContextCompressor compressor =
                 new ContextCompressor(
@@ -198,6 +197,9 @@ public class ChatCommand implements Runnable {
         Path agentDataDir = Paths.get(userHome, ".agent-demo");
         // 会话日志 + 会话落盘（只读配置；失败降级为 no-op，不阻断对话）
         SessionRecorder recorder = buildRecorder(cfg, userHome);
+        // stdin reader：REPL 主循环与权限交互确认共用（避免双 reader 缓冲冲突）
+        BufferedReader reader = createReader();
+        PermissionConfirmer confirmer = buildConfirmer(reader);
         AgentLoop loop =
                 new AgentLoop(
                         provider,
@@ -209,7 +211,8 @@ public class ChatCommand implements Runnable {
                         workingDir,
                         systemPrompt,
                         recorder,
-                        agentDataDir);
+                        agentDataDir,
+                        confirmer);
 
         AtomicBoolean aborted = new AtomicBoolean(false);
         AbortSignal abortSignal = () -> aborted.get();
@@ -231,9 +234,10 @@ public class ChatCommand implements Runnable {
                         aborted,
                         recorder);
         try {
-            runReplLoop(ctx);
+            runReplLoop(ctx, reader);
         } finally {
             closeQuietly(recorder);
+            closeQuietly(reader);
         }
     }
 
@@ -336,15 +340,11 @@ public class ChatCommand implements Runnable {
     /**
      * REPL 主循环：读取 stdin → 派发 slash 命令或 AgentLoop。
      *
-     * @param ctx REPL 共享状态
+     * @param ctx    REPL 共享状态
+     * @param reader stdin reader（与权限交互确认共用）
      */
-    private void runReplLoop(ReplContext ctx) {
-        InputStream stdin =
-                injectedInput != null
-                        ? new ByteArrayInputStream(injectedInput.getBytes(StandardCharsets.UTF_8))
-                        : System.in;
-        try (BufferedReader reader =
-                     new BufferedReader(new InputStreamReader(stdin, StandardCharsets.UTF_8))) {
+    private void runReplLoop(ReplContext ctx, BufferedReader reader) {
+        try {
             System.out.println(
                     "agent-demo v0.1 chat (model="
                             + ctx.resolvedModel()
@@ -370,6 +370,45 @@ public class ChatCommand implements Runnable {
             }
         } catch (IOException e) {
             log.error("[chat] failed to read input", e);
+        }
+    }
+
+    /**
+     * 创建 stdin reader（--input 注入时用字节流，否则 System.in）。
+     */
+    private BufferedReader createReader() {
+        InputStream stdin =
+                injectedInput != null
+                        ? new ByteArrayInputStream(injectedInput.getBytes(StandardCharsets.UTF_8))
+                        : System.in;
+        return new BufferedReader(new InputStreamReader(stdin, StandardCharsets.UTF_8));
+    }
+
+    /**
+     * 构建权限确认器：--auto-approve-write 全放行；否则从 stdin 交互确认（y/yes）。
+     */
+    private PermissionConfirmer buildConfirmer(BufferedReader reader) {
+        if (autoApproveWrite) return PermissionConfirmer.allowAll();
+        return prompt -> {
+            try {
+                System.out.print("⚠ 允许执行 " + prompt + " ? [y/N] ");
+                System.out.flush();
+                String ans = reader.readLine();
+                return ans != null && (ans.equalsIgnoreCase("y") || ans.equalsIgnoreCase("yes"));
+            } catch (IOException e) {
+                return false;
+            }
+        };
+    }
+
+    /**
+     * 静默关闭 reader（--input 字节流可关；System.in 关闭无副作用）。
+     */
+    private static void closeQuietly(BufferedReader reader) {
+        if (reader == null) return;
+        try {
+            reader.close();
+        } catch (IOException ignored) {
         }
     }
 
