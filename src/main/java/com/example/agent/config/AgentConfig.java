@@ -15,89 +15,89 @@ import java.util.List;
  * @param memoryInject 注入到 system prompt 的额外 memory 指引
  */
 public record AgentConfig(
-    Provider provider,
-    Permission permission,
-    Cost cost,
-    Context context,
-    Shell shell,
-    List<String> memoryInject) {
+        Provider provider,
+        Permission permission,
+        Cost cost,
+        Context context,
+        Shell shell,
+        List<String> memoryInject) {
 
-  /**
-   * LLM provider 配置。
-   *
-   * @param type provider 类型（v0.1 固定 "deepseek"）
-   * @param apiKey API key（优先用环境变量）
-   * @param baseUrl API base URL
-   * @param model 模型名（deepseek-chat / deepseek-reasoner）
-   * @param maxOutputTokens 最大输出 token
-   */
-  public record Provider(
-      String type, String apiKey, String baseUrl, String model, int maxOutputTokens) {}
+    /**
+     * LLM provider 配置。
+     *
+     * @param type provider 类型（v0.1 固定 "deepseek"）
+     * @param apiKey API key（优先用环境变量）
+     * @param baseUrl API base URL
+     * @param model 模型名（deepseek-chat / deepseek-reasoner）
+     * @param maxOutputTokens 最大输出 token
+     */
+    public record Provider(
+            String type, String apiKey, String baseUrl, String model, int maxOutputTokens) {}
 
-  /**
-   * 权限策略。
-   *
-   * @param defaultPolicy 全局默认策略名（"ask-write" / "allow-all"）
-   * @param shellDenylist shell 全局黑名单（合并 ShellAdapter.defaultDenylist）
-   */
-  public record Permission(String defaultPolicy, List<String> shellDenylist) {}
+    /**
+     * 权限策略。
+     *
+     * @param defaultPolicy 全局默认策略名（"ask-write" / "allow-all"）
+     * @param shellDenylist shell 全局黑名单（合并 ShellAdapter.defaultDenylist）
+     */
+    public record Permission(String defaultPolicy, List<String> shellDenylist) {}
 
-  /**
-   * 成本控制阈值。
-   *
-   * @param inputPerMTokens 输入价格（元/M tokens）
-   * @param outputPerMTokens 输出价格（元/M tokens）
-   * @param warnThreshold 告警阈值（元）
-   * @param stopThreshold 停止阈值（元）
-   */
-  public record Cost(
-      double inputPerMTokens,
-      double outputPerMTokens,
-      double warnThreshold,
-      double stopThreshold) {}
+    /**
+     * 成本控制阈值。
+     *
+     * @param inputPerMTokens 输入价格（元/M tokens）
+     * @param outputPerMTokens 输出价格（元/M tokens）
+     * @param warnThreshold 告警阈值（元）
+     * @param stopThreshold 停止阈值（元）
+     */
+    public record Cost(
+            double inputPerMTokens,
+            double outputPerMTokens,
+            double warnThreshold,
+            double stopThreshold) {}
 
-  /**
-   * 上下文压缩参数。
-   *
-   * @param compactBuffer 提前压缩 buffer（tokens）
-   * @param maxConsecutiveCompactFailures 连续失败熔断阈值
-   */
-  public record Context(int compactBuffer, int maxConsecutiveCompactFailures) {}
+    /**
+     * 上下文压缩参数。
+     *
+     * @param compactBuffer 提前压缩 buffer（tokens）
+     * @param maxConsecutiveCompactFailures 连续失败熔断阈值
+     */
+    public record Context(int compactBuffer, int maxConsecutiveCompactFailures) {}
 
-  /**
-   * Shell 沙箱参数。
-   *
-   * @param timeoutMs 单次命令硬超时（毫秒）
-   * @param maxOutputBytes 输出上限（字节，stdout+stderr 累计）
-   */
-  public record Shell(int timeoutMs, int maxOutputBytes) {}
+    /**
+     * Shell 沙箱参数。
+     *
+     * @param timeoutMs 单次命令硬超时（毫秒）
+     * @param maxOutputBytes 输出上限（字节，stdout+stderr 累计）
+     */
+    public record Shell(int timeoutMs, int maxOutputBytes) {}
 
-  /**
-   * v0.1 内置默认配置。
-   *
-   * @return 默认 {@link AgentConfig}
-   */
-  public static AgentConfig defaults() {
-    return new AgentConfig(
-        new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 8192),
-        new Permission(
-            "ask-write",
-            List.of(
-                "rm -rf /",
-                "mkfs",
-                "dd if=.*of=/dev/.*",
-                "chmod -R 777 /",
-                "shutdown",
-                "reboot",
-                "format",
-                "rd /s /q C:\\",
-                "del /f /s /q C:\\*",
-                "diskpart",
-                "bcdedit",
-                "reg delete HKLM")),
-        new Cost(2.0, 8.0, 4.0, 5.0),
-        new Context(8000, 3),
-        new Shell(120_000, 1_000_000),
-        List.of());
-  }
+    /**
+     * v0.1 内置默认配置。
+     *
+     * @return 默认 {@link AgentConfig}
+     */
+    public static AgentConfig defaults() {
+        return new AgentConfig(
+                new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 8192),
+                new Permission(
+                        "ask-write",
+                        List.of(
+                                "rm -rf /",
+                                "mkfs",
+                                "dd if=.*of=/dev/.*",
+                                "chmod -R 777 /",
+                                "shutdown",
+                                "reboot",
+                                "format",
+                                "rd /s /q C:\\",
+                                "del /f /s /q C:\\*",
+                                "diskpart",
+                                "bcdedit",
+                                "reg delete HKLM")),
+                new Cost(2.0, 8.0, 4.0, 5.0),
+                new Context(8000, 3),
+                new Shell(120_000, 1_000_000),
+                List.of());
+    }
 }

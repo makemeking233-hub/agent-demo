@@ -1,6 +1,7 @@
 package com.example.agent.core;
 
 import com.example.agent.llm.ToolCall;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,93 +25,98 @@ import java.util.Map;
  * 链。
  */
 public sealed interface Message
-    permits Message.User, Message.Assistant, Message.ToolResult, Message.System {
-  /** 角色名（user / assistant / tool / system） */
-  String role();
+        permits Message.User, Message.Assistant, Message.ToolResult, Message.System {
+    /** 角色名（user / assistant / tool / system） */
+    String role();
 
-  /** 消息主内容 */
-  String content();
+    /** 消息主内容 */
+    String content();
 
-  /**
-   * 转 OpenAI 格式 Map（含 role + content + 特有字段如 tool_calls / tool_call_id）。
-   *
-   * @return DeepSeek wire format 字段映射
-   */
-  Map<String, Object> toMap();
+    /**
+     * 转 OpenAI 格式 Map（含 role + content + 特有字段如 tool_calls / tool_call_id）。
+     *
+     * @return DeepSeek wire format 字段映射
+     */
+    Map<String, Object> toMap();
 
-  /** 用户输入 */
-  record User(String content) implements Message {
-    @Override
-    public String role() {
-      return "user";
-    }
-
-    @Override
-    public Map<String, Object> toMap() {
-      Map<String, Object> m = new LinkedHashMap<>();
-      m.put("role", role());
-      m.put("content", content);
-      return m;
-    }
-  }
-
-  /** 模型回复（含可选 tool_calls） */
-  record Assistant(String content, List<ToolCall> toolCalls) implements Message {
-    @Override
-    public String role() {
-      return "assistant";
-    }
-
-    @Override
-    public Map<String, Object> toMap() {
-      Map<String, Object> m = new LinkedHashMap<>();
-      m.put("role", role());
-      m.put("content", content);
-      if (toolCalls != null && !toolCalls.isEmpty()) {
-        java.util.ArrayList<Map<String, Object>> tcs = new java.util.ArrayList<>();
-        for (ToolCall tc : toolCalls) {
-          tcs.add(
-              Map.of(
-                  "id", tc.id(),
-                  "type", "function",
-                  "function", Map.of("name", tc.name(), "arguments", tc.argumentsJson())));
+    /** 用户输入 */
+    record User(String content) implements Message {
+        @Override
+        public String role() {
+            return "user";
         }
-        m.put("tool_calls", tcs);
-      }
-      return m;
-    }
-  }
 
-  /** 工具调用结果回流给模型（关联 toolCallId） */
-  record ToolResult(String toolCallId, String content, boolean isError) implements Message {
-    @Override
-    public String role() {
-      return "tool";
+        @Override
+        public Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("role", role());
+            m.put("content", content);
+            return m;
+        }
     }
 
-    @Override
-    public Map<String, Object> toMap() {
-      Map<String, Object> m = new LinkedHashMap<>();
-      m.put("role", role());
-      m.put("content", content);
-      m.put("tool_call_id", toolCallId);
-      return m;
-    }
-  }
+    /** 模型回复（含可选 tool_calls） */
+    record Assistant(String content, List<ToolCall> toolCalls) implements Message {
+        @Override
+        public String role() {
+            return "assistant";
+        }
 
-  /** system prompt（注入 memory、行为约束等） */
-  record System(String content) implements Message {
-    @Override
-    public String role() {
-      return "system";
+        @Override
+        public Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("role", role());
+            m.put("content", content);
+            if (toolCalls != null && !toolCalls.isEmpty()) {
+                java.util.ArrayList<Map<String, Object>> tcs = new java.util.ArrayList<>();
+                for (ToolCall tc : toolCalls) {
+                    tcs.add(
+                            Map.of(
+                                    "id", tc.id(),
+                                    "type", "function",
+                                    "function",
+                                            Map.of(
+                                                    "name",
+                                                    tc.name(),
+                                                    "arguments",
+                                                    tc.argumentsJson())));
+                }
+                m.put("tool_calls", tcs);
+            }
+            return m;
+        }
     }
 
-    @Override
-    public Map<String, Object> toMap() {
-      Map<String, Object> m = new LinkedHashMap<>();
-      m.put("role", role());
-      m.put("content", content);
-      return m;
+    /** 工具调用结果回流给模型（关联 toolCallId） */
+    record ToolResult(String toolCallId, String content, boolean isError) implements Message {
+        @Override
+        public String role() {
+            return "tool";
+        }
+
+        @Override
+        public Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("role", role());
+            m.put("content", content);
+            m.put("tool_call_id", toolCallId);
+            return m;
+        }
     }
-  }
+
+    /** system prompt（注入 memory、行为约束等） */
+    record System(String content) implements Message {
+        @Override
+        public String role() {
+            return "system";
+        }
+
+        @Override
+        public Map<String, Object> toMap() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("role", role());
+            m.put("content", content);
+            return m;
+        }
+    }
 }

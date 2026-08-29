@@ -19,20 +19,20 @@ import java.util.List;
  * @param sensitivePathPatterns 敏感路径 Ant glob 列表
  */
 public record PermissionPolicy(
-    boolean defaultRead,
-    boolean defaultWrite,
-    boolean defaultShell,
-    List<String> sensitivePathPatterns) {
-  /**
-   * v0.1 默认策略：read=allow, write=ask, shell=ask。
-   *
-   * @return 默认 {@link PermissionPolicy}
-   */
-  public static PermissionPolicy defaults() {
-    return new PermissionPolicy(
-        true, // default read: allow
-        false, // default write: ask
-        false, // default shell: ask
-        List.of("**/.ssh/**", "**/.env*", "**/*credentials*", "**/*.pem"));
-  }
+        boolean defaultRead,
+        boolean defaultWrite,
+        boolean defaultShell,
+        List<String> sensitivePathPatterns) {
+    /**
+     * v0.1 默认策略：read=allow, write=ask, shell=ask。
+     *
+     * @return 默认 {@link PermissionPolicy}
+     */
+    public static PermissionPolicy defaults() {
+        return new PermissionPolicy(
+                true, // default read: allow
+                false, // default write: ask
+                false, // default shell: ask
+                List.of("**/.ssh/**", "**/.env*", "**/*credentials*", "**/*.pem"));
+    }
 }

@@ -16,12 +16,15 @@ import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.ToolResult;
-import java.nio.file.Path;
-import java.util.List;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.nio.file.Path;
+import java.util.List;
 
 /**
  * 覆盖 C1 / C3 修复：
@@ -35,114 +38,120 @@ import reactor.core.publisher.Mono;
  */
 class AgentLoopToolContextTest {
 
-  @Test
-  void toolReceivesWorkingDirectoryFromContext(@TempDir Path tmp) {
-    // fake tool：把 ctx.workingDirectory() 拼到输出，验证 ToolContext 正确传递
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    Tool fakeTool =
-        new Tool() {
-          @Override
-          public String name() {
-            return "fake";
-          }
+    @Test
+    void toolReceivesWorkingDirectoryFromContext(@TempDir Path tmp) {
+        // fake tool：把 ctx.workingDirectory() 拼到输出，验证 ToolContext 正确传递
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Tool fakeTool =
+                new Tool() {
+                    @Override
+                    public String name() {
+                        return "fake";
+                    }
 
-          @Override
-          public String description() {
-            return "fake tool";
-          }
+                    @Override
+                    public String description() {
+                        return "fake tool";
+                    }
 
-          @Override
-          public java.util.Map<String, Object> inputSchema() {
-            return java.util.Map.of();
-          }
+                    @Override
+                    public java.util.Map<String, Object> inputSchema() {
+                        return java.util.Map.of();
+                    }
 
-          @Override
-          public String renderUse(Object input) {
-            return "fake()";
-          }
+                    @Override
+                    public String renderUse(Object input) {
+                        return "fake()";
+                    }
 
-          @Override
-          public String renderResult(Object output) {
-            return String.valueOf(output);
-          }
+                    @Override
+                    public String renderResult(Object output) {
+                        return String.valueOf(output);
+                    }
 
-          @Override
-          public Mono<ToolResult<Object>> execute(Object input, ToolContext ctx) {
-            return Mono.just(ToolResult.ok("cwd=" + ctx.workingDirectory().toString(), "<auto>"));
-          }
-        };
+                    @Override
+                    public Mono<ToolResult<Object>> execute(Object input, ToolContext ctx) {
+                        return Mono.just(
+                                ToolResult.ok(
+                                        "cwd=" + ctx.workingDirectory().toString(), "<auto>"));
+                    }
+                };
 
-    LlmProvider provider = mock(LlmProvider.class);
-    when(provider.contextWindow()).thenReturn(100_000);
-    when(provider.maxOutputTokens()).thenReturn(8192);
-    when(provider.streamChat(any()))
-        .thenReturn(
-            Flux.just(
-                (StreamChunk) new StreamChunk.ToolCallStart("1", "fake"),
-                new StreamChunk.ToolCallEnd("1", "fake", "{}"),
-                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
-        .thenReturn(
-            Flux.just(
-                new StreamChunk.TextDelta("ok"),
-                new StreamChunk.Finished(FinishReason.STOP, new StreamChunk.Usage(5, 8))));
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                (StreamChunk) new StreamChunk.ToolCallStart("1", "fake"),
+                                new StreamChunk.ToolCallEnd("1", "fake", "{}"),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("ok"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(5, 8))));
 
-    ToolRegistry tools = mock(ToolRegistry.class);
-    doReturn(fakeTool).when(tools).getRaw("fake");
-    @SuppressWarnings("rawtypes")
-    List toolsList = List.of(fakeTool);
-    when(tools.list()).thenReturn(toolsList);
+        ToolRegistry tools = mock(ToolRegistry.class);
+        doReturn(fakeTool).when(tools).getRaw("fake");
+        @SuppressWarnings("rawtypes")
+        List toolsList = List.of(fakeTool);
+        when(tools.list()).thenReturn(toolsList);
 
-    MessageHistory hist = new MessageHistory(new TokenEstimator());
-    AgentLoop loop =
-        new AgentLoop(provider, tools, hist, new StreamingPrinter(), 25, "deepseek-chat", tmp);
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider, tools, hist, new StreamingPrinter(), 25, "deepseek-chat", tmp);
 
-    // 不应抛 NPE：ToolContext 正确传递 workingDirectory
-    var result = loop.processTurn(new Message.User("go")).block();
-    assertNotNull(result);
-    assertEquals("ok", result.finalMessage());
+        // 不应抛 NPE：ToolContext 正确传递 workingDirectory
+        var result = loop.processTurn(new Message.User("go")).block();
+        assertNotNull(result);
+        assertEquals("ok", result.finalMessage());
 
-    // tool_result 应包含 workingDirectory 信息（验证 ToolContext 正确传递）
-    boolean hasAnyResult =
-        hist.all().stream()
-            .anyMatch(
-                m ->
-                    m instanceof Message.ToolResult t
-                        && !t.isError()
-                        && t.content() != null
-                        && t.content().startsWith("cwd="));
-    assertTrue(hasAnyResult, "fake tool 应成功执行并把 workingDirectory 写进 tool_result");
-  }
+        // tool_result 应包含 workingDirectory 信息（验证 ToolContext 正确传递）
+        boolean hasAnyResult =
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult t
+                                                && !t.isError()
+                                                && t.content() != null
+                                                && t.content().startsWith("cwd="));
+        assertTrue(hasAnyResult, "fake tool 应成功执行并把 workingDirectory 写进 tool_result");
+    }
 
-  @Test
-  void setHistorySwitchesContainerForFutureTurns(@TempDir Path tmp) {
-    LlmProvider provider = mock(LlmProvider.class);
-    when(provider.contextWindow()).thenReturn(100_000);
-    when(provider.maxOutputTokens()).thenReturn(8192);
-    when(provider.streamChat(any()))
-        .thenReturn(
-            Flux.just(
-                new StreamChunk.TextDelta("reply"),
-                new StreamChunk.Finished(FinishReason.STOP, new StreamChunk.Usage(5, 5))));
+    @Test
+    void setHistorySwitchesContainerForFutureTurns(@TempDir Path tmp) {
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("reply"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(5, 5))));
 
-    ToolRegistry tools = mock(ToolRegistry.class);
-    when(tools.list()).thenReturn(List.of());
+        ToolRegistry tools = mock(ToolRegistry.class);
+        when(tools.list()).thenReturn(List.of());
 
-    MessageHistory hist1 = new MessageHistory(new TokenEstimator());
-    AgentLoop loop =
-        new AgentLoop(provider, tools, hist1, new StreamingPrinter(), 25, "deepseek-chat", tmp);
+        MessageHistory hist1 = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider, tools, hist1, new StreamingPrinter(), 25, "deepseek-chat", tmp);
 
-    // 第一轮 turn：写入 hist1
-    loop.processTurn(new Message.User("msg-1")).block();
-    assertEquals(2, hist1.size(), "user + assistant");
+        // 第一轮 turn：写入 hist1
+        loop.processTurn(new Message.User("msg-1")).block();
+        assertEquals(2, hist1.size(), "user + assistant");
 
-    // /clear：切换到 hist2（保留旧 hist1 作为历史）
-    MessageHistory hist2 = new MessageHistory(new TokenEstimator());
-    loop.setHistory(hist2);
+        // /clear：切换到 hist2（保留旧 hist1 作为历史）
+        MessageHistory hist2 = new MessageHistory(new TokenEstimator());
+        loop.setHistory(hist2);
 
-    // 第二轮 turn：应写入 hist2 而不是 hist1
-    loop.processTurn(new Message.User("msg-2")).block();
-    // setHistory 是切换（保留旧 hist1），不是清空；hist2 接收第二轮 turn 的写入
-    assertEquals(2, hist1.size(), "hist1 保留第一轮 turn 内容");
-    assertEquals(2, hist2.size(), "hist2 接收第二轮 turn 的写入");
-  }
+        // 第二轮 turn：应写入 hist2 而不是 hist1
+        loop.processTurn(new Message.User("msg-2")).block();
+        // setHistory 是切换（保留旧 hist1），不是清空；hist2 接收第二轮 turn 的写入
+        assertEquals(2, hist1.size(), "hist1 保留第一轮 turn 内容");
+        assertEquals(2, hist2.size(), "hist2 接收第二轮 turn 的写入");
+    }
 }

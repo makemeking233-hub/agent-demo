@@ -5,8 +5,8 @@ package com.example.agent;
  */
 @FunctionalInterface
 public interface AbortSignal {
-  /**
-   * @return true=已中断（工具应立即停止并返回 isError=true）
-   */
-  boolean isAborted();
+    /**
+     * @return true=已中断（工具应立即停止并返回 isError=true）
+     */
+    boolean isAborted();
 }

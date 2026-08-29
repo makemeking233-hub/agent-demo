@@ -10,7 +10,9 @@ package com.example.agent.tools.file;
  * PermissionManager} 自动识别。
  */
 public sealed interface ToolInput
-    permits ReadFileTool.Input, WriteFileTool.Input, EditFileTool.Input, LsTool.Input {
-  /** 工具输入中的相对路径（{@code null} 表示无路径语义） */
-  String path();
+        permits ReadFileTool.Input, WriteFileTool.Input, EditFileTool.Input, LsTool.Input {
+    /**
+     * 工具输入中的相对路径（{@code null} 表示无路径语义）
+     */
+    String path();
 }

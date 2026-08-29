@@ -15,12 +15,12 @@ package com.example.agent.tools;
  * <p>新增工具时通过 {@link Tool#category()} 自报家门，{@code PermissionManager} 即可自动按类别走策略。
  */
 public enum ToolCategory {
-  /** 只读 IO */
-  READ,
-  /** 覆盖写 IO */
-  WRITE,
-  /** 进程执行 */
-  SHELL,
-  /** 未分类（默认最严策略） */
-  OTHER
+    /** 只读 IO */
+    READ,
+    /** 覆盖写 IO */
+    WRITE,
+    /** 进程执行 */
+    SHELL,
+    /** 未分类（默认最严策略） */
+    OTHER
 }

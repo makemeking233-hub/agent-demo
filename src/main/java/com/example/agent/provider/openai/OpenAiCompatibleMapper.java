@@ -6,6 +6,7 @@ import com.example.agent.llm.FinishReason;
 import com.example.agent.llm.StreamChunk;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,174 +28,204 @@ import java.util.Optional;
  */
 public class OpenAiCompatibleMapper {
 
-  /** 强制字段：开启 usage 透传 */
-  private static final String STREAM_OPTIONS_KEY = "stream_options";
-
-  /** {@code stream_options.include_usage} 子键名 */
-  private static final String INCLUDE_USAGE_KEY = "include_usage";
-
-  /** JSON 解析器（SSE payload → JsonNode） */
-  private final ObjectMapper json = new ObjectMapper();
-
-  /** SSE parser pipeline（按优先级排序；第一个命中者胜出） */
-  private final List<SsePayloadParser> parsers =
-      List.of(
-          new ChoiceContentParser(),
-          new ChoiceToolCallParser(),
-          new ChoiceFinishReasonParser(),
-          new TopLevelUsageParser());
-
-  /**
-   * 构造 OpenAI 格式 chat completion 请求体（含 {@code stream_options.include_usage=true}）。
-   *
-   * @param req 聊天请求
-   * @return OpenAI 兼容 API 请求体 Map
-   */
-  public Map<String, Object> toRequestBody(ChatRequest req) {
-    Map<String, Object> body = new LinkedHashMap<>();
-    body.put("model", req.model());
-    body.put("stream", true);
-    body.put(STREAM_OPTIONS_KEY, Map.of(INCLUDE_USAGE_KEY, true));
-    if (req.temperature() != null) body.put("temperature", req.temperature());
-    if (req.maxTokens() != null) body.put("max_tokens", req.maxTokens());
-    if (req.systemPrompt() != null && !req.systemPrompt().isEmpty()) {
-      body.put("messages", mergeSystemPrompt(req));
-    } else {
-      body.put("messages", toMessageArray(req.messages()));
-    }
-    if (req.tools() != null && !req.tools().isEmpty()) {
-      body.put("tools", req.tools());
-      body.put("tool_choice", "auto");
-    }
-    if (req.extra() != null) body.putAll(req.extra());
-    return body;
-  }
-
-  /**
-   * 解析单行 SSE data。
-   *
-   * @param line "data: {...}" 或 "data: [DONE]" 行
-   * @return 解析出的 chunk；{@code [DONE]} / 空行 / 非 data 行返回 empty
-   */
-  public Optional<StreamChunk> parseSseLine(String line) {
-    if (!line.startsWith("data: ")) return Optional.empty();
-    String payload = line.substring(6).trim();
-    if (payload.isEmpty() || "[DONE]".equals(payload)) return Optional.empty();
-    try {
-      JsonNode root = json.readTree(payload);
-      for (SsePayloadParser p : parsers) {
-        Optional<StreamChunk> chunk = p.parse(root);
-        if (chunk.isPresent()) return chunk;
-      }
-      return Optional.empty();
-    } catch (Exception e) {
-      return Optional.of(new StreamChunk.Error("SSE 解析失败: " + e.getMessage(), 0, e));
-    }
-  }
-
-  /** 合并 system prompt 到 messages 数组头部 */
-  private List<Map<String, Object>> mergeSystemPrompt(ChatRequest req) {
-    List<Map<String, Object>> arr = new ArrayList<>();
-    arr.add(Map.of("role", "system", "content", req.systemPrompt()));
-    arr.addAll(toMessageArray(req.messages()));
-    return arr;
-  }
-
-  /** 把内部 {@link Message} 列表转为 OpenAI 格式 Map 数组（通过 sealed {@code Message.toMap()} 多态） */
-  private List<Map<String, Object>> toMessageArray(List<Message> messages) {
-    List<Map<String, Object>> arr = new ArrayList<>();
-    for (var m : messages) arr.add(m.toMap());
-    return arr;
-  }
-
-  /** Parser 单元接口（pipeline 节点；提供给子类扩展或覆盖） */
-  public interface SsePayloadParser {
     /**
-     * 尝试从 root 解析一个 chunk；不适用时返回 empty（pipeline 继续尝试下一个 parser）。
-     *
-     * @param root 已解析的 JSON 根节点
-     * @return 解析出的 chunk；不适用时返回 empty
+     * 强制字段：开启 usage 透传
      */
-    Optional<StreamChunk> parse(JsonNode root);
-  }
+    private static final String STREAM_OPTIONS_KEY = "stream_options";
 
-  /** 解析 choices[0].delta.content → TextDelta */
-  static final class ChoiceContentParser implements SsePayloadParser {
-    @Override
-    public Optional<StreamChunk> parse(JsonNode root) {
-      JsonNode content = firstChoiceDeltaContent(root);
-      if (content == null) return Optional.empty();
-      return Optional.of(new StreamChunk.TextDelta(content.asText()));
+    /**
+     * {@code stream_options.include_usage} 子键名
+     */
+    private static final String INCLUDE_USAGE_KEY = "include_usage";
+
+    /**
+     * JSON 解析器（SSE payload → JsonNode）
+     */
+    private final ObjectMapper json = new ObjectMapper();
+
+    /**
+     * SSE parser pipeline（按优先级排序；第一个命中者胜出）
+     */
+    private final List<SsePayloadParser> parsers =
+            List.of(
+                    new ChoiceContentParser(),
+                    new ChoiceToolCallParser(),
+                    new ChoiceFinishReasonParser(),
+                    new TopLevelUsageParser());
+
+    /**
+     * 构造 OpenAI 格式 chat completion 请求体（含 {@code stream_options.include_usage=true}）。
+     *
+     * @param req 聊天请求
+     * @return OpenAI 兼容 API 请求体 Map
+     */
+    public Map<String, Object> toRequestBody(ChatRequest req) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", req.model());
+        body.put("stream", true);
+        body.put(STREAM_OPTIONS_KEY, Map.of(INCLUDE_USAGE_KEY, true));
+        if (req.temperature() != null) body.put("temperature", req.temperature());
+        if (req.maxTokens() != null) body.put("max_tokens", req.maxTokens());
+        if (req.systemPrompt() != null && !req.systemPrompt().isEmpty()) {
+            body.put("messages", mergeSystemPrompt(req));
+        } else {
+            body.put("messages", toMessageArray(req.messages()));
+        }
+        if (req.tools() != null && !req.tools().isEmpty()) {
+            body.put("tools", req.tools());
+            body.put("tool_choice", "auto");
+        }
+        if (req.extra() != null) body.putAll(req.extra());
+        return body;
     }
-  }
 
-  /** 解析 choices[0].delta.tool_calls[0] → ToolCallEnd */
-  static final class ChoiceToolCallParser implements SsePayloadParser {
-    @Override
-    public Optional<StreamChunk> parse(JsonNode root) {
-      JsonNode choices = root.path("choices");
-      if (!choices.isArray() || choices.isEmpty()) return Optional.empty();
-      JsonNode delta = choices.get(0).path("delta");
-      if (!delta.has("tool_calls")) return Optional.empty();
-      JsonNode tc = delta.get("tool_calls").get(0);
-      return Optional.of(
-          new StreamChunk.ToolCallEnd(
-              tc.path("id").asText(),
-              tc.path("function").path("name").asText(),
-              tc.path("function").path("arguments").asText("{}")));
+    /**
+     * 解析单行 SSE data。
+     *
+     * @param line "data: {...}" 或 "data: [DONE]" 行
+     * @return 解析出的 chunk；{@code [DONE]} / 空行 / 非 data 行返回 empty
+     */
+    public Optional<StreamChunk> parseSseLine(String line) {
+        if (!line.startsWith("data: ")) return Optional.empty();
+        String payload = line.substring(6).trim();
+        if (payload.isEmpty() || "[DONE]".equals(payload)) return Optional.empty();
+        try {
+            JsonNode root = json.readTree(payload);
+            for (SsePayloadParser p : parsers) {
+                Optional<StreamChunk> chunk = p.parse(root);
+                if (chunk.isPresent()) return chunk;
+            }
+            return Optional.empty();
+        } catch (Exception e) {
+            return Optional.of(new StreamChunk.Error("SSE 解析失败: " + e.getMessage(), 0, e));
+        }
     }
-  }
 
-  /** 解析 choices[0].finish_reason + usage → Finished */
-  static final class ChoiceFinishReasonParser implements SsePayloadParser {
-    @Override
-    public Optional<StreamChunk> parse(JsonNode root) {
-      JsonNode choices = root.path("choices");
-      if (!choices.isArray() || choices.isEmpty()) return Optional.empty();
-      JsonNode choice0 = choices.get(0);
-      JsonNode fr = choice0.path("finish_reason");
-      if (fr.isNull() || fr.asText().isEmpty()) return Optional.empty();
-      return Optional.of(new StreamChunk.Finished(toFinishReason(fr.asText()), parseUsage(root)));
+    /**
+     * 合并 system prompt 到 messages 数组头部
+     */
+    private List<Map<String, Object>> mergeSystemPrompt(ChatRequest req) {
+        List<Map<String, Object>> arr = new ArrayList<>();
+        arr.add(Map.of("role", "system", "content", req.systemPrompt()));
+        arr.addAll(toMessageArray(req.messages()));
+        return arr;
     }
-  }
 
-  /** 顶层 usage（choices 为空但 SSE 流最后一块仍带 usage） */
-  static final class TopLevelUsageParser implements SsePayloadParser {
-    @Override
-    public Optional<StreamChunk> parse(JsonNode root) {
-      StreamChunk.Usage usage = parseUsage(root);
-      return usage == null
-          ? Optional.empty()
-          : Optional.of(new StreamChunk.Usage(usage.promptTokens(), usage.completionTokens()));
+    /**
+     * 把内部 {@link Message} 列表转为 OpenAI 格式 Map 数组（通过 sealed {@code Message.toMap()} 多态）
+     */
+    private List<Map<String, Object>> toMessageArray(List<Message> messages) {
+        List<Map<String, Object>> arr = new ArrayList<>();
+        for (var m : messages) arr.add(m.toMap());
+        return arr;
     }
-  }
 
-  /** 提取 choices[0].delta.content（非 null 时返回；否则 null） */
-  private static JsonNode firstChoiceDeltaContent(JsonNode root) {
-    JsonNode choices = root.path("choices");
-    if (!choices.isArray() || choices.isEmpty()) return null;
-    JsonNode delta = choices.get(0).path("delta");
-    if (delta.has("content") && !delta.get("content").isNull()) {
-      return delta.get("content");
+    /**
+     * Parser 单元接口（pipeline 节点；提供给子类扩展或覆盖）
+     */
+    public interface SsePayloadParser {
+        /**
+         * 尝试从 root 解析一个 chunk；不适用时返回 empty（pipeline 继续尝试下一个 parser）。
+         *
+         * @param root 已解析的 JSON 根节点
+         * @return 解析出的 chunk；不适用时返回 empty
+         */
+        Optional<StreamChunk> parse(JsonNode root);
     }
-    return null;
-  }
 
-  /** 从 root 节点读 usage 字段 */
-  private static StreamChunk.Usage parseUsage(JsonNode root) {
-    if (!root.has("usage") || root.get("usage").isNull()) return null;
-    JsonNode u = root.get("usage");
-    return new StreamChunk.Usage(
-        u.path("prompt_tokens").asInt(0), u.path("completion_tokens").asInt(0));
-  }
+    /**
+     * 解析 choices[0].delta.content → TextDelta
+     */
+    static final class ChoiceContentParser implements SsePayloadParser {
+        @Override
+        public Optional<StreamChunk> parse(JsonNode root) {
+            JsonNode content = firstChoiceDeltaContent(root);
+            if (content == null) return Optional.empty();
+            return Optional.of(new StreamChunk.TextDelta(content.asText()));
+        }
+    }
 
-  /** wire format finish_reason 字符串 → 内部枚举 */
-  private static FinishReason toFinishReason(String s) {
-    return switch (s) {
-      case "stop" -> FinishReason.STOP;
-      case "tool_calls" -> FinishReason.TOOL_CALLS;
-      case "length" -> FinishReason.LENGTH;
-      default -> FinishReason.ERROR;
-    };
-  }
+    /**
+     * 解析 choices[0].delta.tool_calls[0] → ToolCallEnd
+     */
+    static final class ChoiceToolCallParser implements SsePayloadParser {
+        @Override
+        public Optional<StreamChunk> parse(JsonNode root) {
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) return Optional.empty();
+            JsonNode delta = choices.get(0).path("delta");
+            if (!delta.has("tool_calls")) return Optional.empty();
+            JsonNode tc = delta.get("tool_calls").get(0);
+            return Optional.of(
+                    new StreamChunk.ToolCallEnd(
+                            tc.path("id").asText(),
+                            tc.path("function").path("name").asText(),
+                            tc.path("function").path("arguments").asText("{}")));
+        }
+    }
+
+    /**
+     * 解析 choices[0].finish_reason + usage → Finished
+     */
+    static final class ChoiceFinishReasonParser implements SsePayloadParser {
+        @Override
+        public Optional<StreamChunk> parse(JsonNode root) {
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) return Optional.empty();
+            JsonNode choice0 = choices.get(0);
+            JsonNode fr = choice0.path("finish_reason");
+            if (fr.isNull() || fr.asText().isEmpty()) return Optional.empty();
+            return Optional.of(
+                    new StreamChunk.Finished(toFinishReason(fr.asText()), parseUsage(root)));
+        }
+    }
+
+    /**
+     * 顶层 usage（choices 为空但 SSE 流最后一块仍带 usage）
+     */
+    static final class TopLevelUsageParser implements SsePayloadParser {
+        @Override
+        public Optional<StreamChunk> parse(JsonNode root) {
+            StreamChunk.Usage usage = parseUsage(root);
+            return usage == null
+                    ? Optional.empty()
+                    : Optional.of(
+                    new StreamChunk.Usage(usage.promptTokens(), usage.completionTokens()));
+        }
+    }
+
+    /**
+     * 提取 choices[0].delta.content（非 null 时返回；否则 null）
+     */
+    private static JsonNode firstChoiceDeltaContent(JsonNode root) {
+        JsonNode choices = root.path("choices");
+        if (!choices.isArray() || choices.isEmpty()) return null;
+        JsonNode delta = choices.get(0).path("delta");
+        if (delta.has("content") && !delta.get("content").isNull()) {
+            return delta.get("content");
+        }
+        return null;
+    }
+
+    /**
+     * 从 root 节点读 usage 字段
+     */
+    private static StreamChunk.Usage parseUsage(JsonNode root) {
+        if (!root.has("usage") || root.get("usage").isNull()) return null;
+        JsonNode u = root.get("usage");
+        return new StreamChunk.Usage(
+                u.path("prompt_tokens").asInt(0), u.path("completion_tokens").asInt(0));
+    }
+
+    /**
+     * wire format finish_reason 字符串 → 内部枚举
+     */
+    private static FinishReason toFinishReason(String s) {
+        return switch (s) {
+            case "stop" -> FinishReason.STOP;
+            case "tool_calls" -> FinishReason.TOOL_CALLS;
+            case "length" -> FinishReason.LENGTH;
+            default -> FinishReason.ERROR;
+        };
+    }
 }

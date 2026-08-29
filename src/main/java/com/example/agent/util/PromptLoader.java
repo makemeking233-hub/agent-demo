@@ -17,23 +17,23 @@ import java.nio.charset.StandardCharsets;
  * }</pre>
  */
 public final class PromptLoader {
-  /**
-   * 从 classpath 加载文本资源；缺失或 IO 异常时返回 fallback。
-   *
-   * @param classpathPath 资源路径（含前导 {@code /}）
-   * @param fallback 缺失/失败时的兜底字符串（不可空）
-   * @param <T> 调用方类型（用于链式）
-   * @return 加载到的文本；fallback 在异常路径下返回
-   */
-  public static String loadOrFallback(String classpathPath, String fallback) {
-    ClassLoader cl = PromptLoader.class.getClassLoader();
-    try (InputStream in = cl.getResourceAsStream(classpathPath)) {
-      if (in == null) return fallback;
-      return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-    } catch (IOException e) {
-      return fallback;
+    /**
+     * 从 classpath 加载文本资源；缺失或 IO 异常时返回 fallback。
+     *
+     * @param classpathPath 资源路径（含前导 {@code /}）
+     * @param fallback 缺失/失败时的兜底字符串（不可空）
+     * @param <T> 调用方类型（用于链式）
+     * @return 加载到的文本；fallback 在异常路径下返回
+     */
+    public static String loadOrFallback(String classpathPath, String fallback) {
+        ClassLoader cl = PromptLoader.class.getClassLoader();
+        try (InputStream in = cl.getResourceAsStream(classpathPath)) {
+            if (in == null) return fallback;
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return fallback;
+        }
     }
-  }
 
-  private PromptLoader() {}
+    private PromptLoader() {}
 }
