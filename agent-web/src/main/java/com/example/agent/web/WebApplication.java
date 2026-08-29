@@ -24,6 +24,11 @@ public class WebApplication {
     public static void main(String[] args) {
         SpringApplication app = new SpringApplication(WebApplication.class);
         app.setWebApplicationType(WebApplicationType.REACTIVE);
+        // 强制激活 web profile: WebApplication 是纯 web 入口, 必须让 @Profile("web") 的
+        // web bean (TrustedHostFilter / ChatController / ChatStreamService / WebAgentRuntime 等)
+        // 全部加载, 否则 /api/** 端点不存在 → 前端 send 500。
+        // 否则默认 spring.profiles.active=local (来自 application.yml, CLI 用) 会让 web 功能全为空。
+        app.setAdditionalProfiles("web");
         app.run(args);
     }
 }
