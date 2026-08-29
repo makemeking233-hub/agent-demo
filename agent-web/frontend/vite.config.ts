@@ -22,4 +22,11 @@ export default defineConfig({
       },
     },
   },
+  // vitest 配置: T10.3 前端单测 (jsdom + jest-dom)
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/vitest.setup.ts',
+    include: ['**/*.{test,spec}.{ts,tsx}'],
+  },
 });
