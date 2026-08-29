@@ -17,6 +17,7 @@ import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.ToolResult;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -36,7 +37,7 @@ class AgentLoopTest {
         when(provider.streamChat(any()))
                 .thenReturn(
                         Flux.just(
-                                (StreamChunk) new StreamChunk.ToolCallStart("1", "fake"),
+                                (StreamChunk) new StreamChunk.ToolCallStart("1", "fake", null),
                                 new StreamChunk.ToolCallEnd("1", "fake", "{}"),
                                 new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)));
 
@@ -45,6 +46,8 @@ class AgentLoopTest {
         when(fakeTool.name()).thenReturn("fake");
         when(fakeTool.description()).thenReturn("fake tool");
         when(fakeTool.inputSchema()).thenReturn(java.util.Map.of());
+        // Mockito 不执行接口 default 方法，需显式 stub parseArguments（否则返回 null → Mono.empty → 工具结果丢失）
+        when(fakeTool.parseArguments(any())).thenReturn("{}");
         when(fakeTool.execute(any(), any())).thenReturn(Mono.just(ToolResult.ok("ok", "1")));
         doReturn(fakeTool).when(tools).getRaw("fake");
         when(tools.list()).thenReturn(List.of(fakeTool));
@@ -106,7 +109,7 @@ class AgentLoopTest {
         when(provider.streamChat(any()))
                 .thenReturn(
                         Flux.just(
-                                new StreamChunk.ToolCallStart("1", "ghost"),
+                                new StreamChunk.ToolCallStart("1", "ghost", null),
                                 new StreamChunk.ToolCallEnd("1", "ghost", "{}"),
                                 new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
                 // 第二轮：没有工具调用，正常结束
@@ -201,5 +204,140 @@ class AgentLoopTest {
 
         loop.processTurn(new Message.User("hi")).block();
         assertEquals(null, captor.getValue().systemPrompt());
+    }
+
+    @Test
+    void deserializesArgumentsBeforeExecute() {
+        // fakeTool：parseArguments 加前缀，验证 AgentLoop 先反序列化再 execute（不再传裸 String）
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Tool fakeTool =
+                new Tool() {
+                    @Override
+                    public String name() {
+                        return "fake";
+                    }
+
+                    @Override
+                    public String description() {
+                        return "fake tool";
+                    }
+
+                    @Override
+                    public java.util.Map<String, Object> inputSchema() {
+                        return java.util.Map.of();
+                    }
+
+                    @Override
+                    public String renderUse(Object input) {
+                        return "fake()";
+                    }
+
+                    @Override
+                    public String renderResult(Object output) {
+                        return String.valueOf(output);
+                    }
+
+                    @Override
+                    public Object parseArguments(String argumentsJson) {
+                        return "PARSED:" + argumentsJson;
+                    }
+
+                    @Override
+                    public Mono<ToolResult<Object>> execute(Object input, ToolContext ctx) {
+                        return Mono.just(ToolResult.ok("got=" + input, "<auto>"));
+                    }
+                };
+
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                (StreamChunk)
+                                        new StreamChunk.ToolCallStart(
+                                                "1", "fake", "{\"path\":\"/tmp/a.txt\"}"),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        doReturn(fakeTool).when(tools).getRaw("fake");
+        when(tools.list()).thenReturn(List.of());
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+
+        TurnResult result = loop.processTurn(new Message.User("hi")).block();
+        assertEquals("done", result.finalMessage());
+        boolean hasParsed =
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult t
+                                                && t.content().startsWith("got=PARSED:{\"path\":"));
+        assertEquals(true, hasParsed, "execute 应收到反序列化后的输入而非裸 JSON 字符串");
+    }
+
+    @Test
+    void realToolReceivesDeserializedInput(@TempDir java.nio.file.Path tmp) throws Exception {
+        // 真实 ReadFileTool 全链路：argumentsJson → Input → 读文件（复现用户遇到的 cast 崩溃场景）
+        java.nio.file.Path file = tmp.resolve("note.txt");
+        java.nio.file.Files.writeString(file, "hello from file");
+        // Windows 反斜杠路径必须由 Jackson 正确转义（直接字符串拼接会产生非法 JSON 转义）
+        String argsJson =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(java.util.Map.of("path", file.toString()));
+
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                (StreamChunk)
+                                        new StreamChunk.ToolCallStart("1", "ReadFile", argsJson),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+
+        ToolRegistry tools = new ToolRegistry();
+        tools.register(new com.example.agent.tools.file.ReadFileTool());
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        tmp);
+
+        TurnResult result = loop.processTurn(new Message.User("hi")).block();
+        assertEquals("done", result.finalMessage());
+        boolean hasContent =
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult t
+                                                && !t.isError()
+                                                && t.content().contains("hello from file"));
+        assertEquals(true, hasContent, "ReadFile 应成功读到文件内容（JSON 参数被正确反序列化）");
     }
 }

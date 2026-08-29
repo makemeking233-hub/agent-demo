@@ -160,7 +160,16 @@ public class OpenAiCompatibleMapper {
     }
 
     /**
-     * 解析 choices[0].delta.tool_calls[0] → ToolCallEnd
+     * 解析 choices[0].delta.tool_calls[0] → ToolCallStart / ToolCallDelta
+     *
+     * <p>兼容两种上游格式：
+     *
+     * <ul>
+     *   <li>一次性完整参数：首 chunk 携带 id + name + 完整 arguments（DeepSeek 默认），生成
+     *       {@link ToolCallStart}（arguments 作为增量随 Start 携带）
+     *   <li>OpenAI 标准增量流：首 chunk 只有 id + name，后续 chunk 无 id、仅携带 arguments
+     *       增量，生成 {@link ToolCallDelta}；由 finish_reason=tool_calls 收尾
+     * </ul>
      */
     static final class ChoiceToolCallParser implements SsePayloadParser {
         @Override
@@ -170,11 +179,16 @@ public class OpenAiCompatibleMapper {
             JsonNode delta = choices.get(0).path("delta");
             if (!delta.has("tool_calls")) return Optional.empty();
             JsonNode tc = delta.get("tool_calls").get(0);
-            return Optional.of(
-                    new StreamChunk.ToolCallEnd(
-                            tc.path("id").asText(),
-                            tc.path("function").path("name").asText(),
-                            tc.path("function").path("arguments").asText("{}")));
+            String id = tc.path("id").asText("");
+            String name = tc.path("function").path("name").asText("");
+            String args = tc.path("function").path("arguments").asText("");
+            if (id.isEmpty() && args.isEmpty()) return Optional.empty();
+            if (!id.isEmpty()) {
+                // 首 chunk：携带 id（可能同时带 name 与首个参数增量）
+                return Optional.of(new StreamChunk.ToolCallStart(id, name, args.isEmpty() ? null : args));
+            }
+            // 后续增量 chunk（OpenAI 标准无 id，仅 index + arguments 增量）
+            return Optional.of(new StreamChunk.ToolCallDelta("", args));
         }
     }
 

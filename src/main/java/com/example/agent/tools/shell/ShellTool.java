@@ -37,6 +37,10 @@ import java.util.concurrent.TimeUnit;
 public class ShellTool implements Tool<ShellTool.Input, String> {
     private static final Logger log = LoggerFactory.getLogger(ShellTool.class);
 
+    /** JSON 反序列化器（Shell 输入 record） */
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
     /** I/O 缓冲：每次 read 的字节数（规范 13.5 大文件读写需缓冲） */
     private static final int IO_BUFFER_BYTES = 4096;
 
@@ -95,6 +99,16 @@ public class ShellTool implements Tool<ShellTool.Input, String> {
     @Override
     public String description() {
         return "执行 shell 命令（跨平台，含黑名单与超时）";
+    }
+
+    @Override
+    public Input parseArguments(String argumentsJson) {
+        try {
+            return JSON.readValue(argumentsJson, Input.class);
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                    "参数 JSON 解析失败 (" + argumentsJson + "): " + e.getMessage(), e);
+        }
     }
 
     @Override

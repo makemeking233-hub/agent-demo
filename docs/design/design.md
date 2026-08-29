@@ -188,7 +188,9 @@ agent-demo/
 ├── pom.xml
 ├── README.md
 ├── docs/
-│   └── design.md
+│   ├── design/
+│   │   └── design.md
+│   └── guides/
 └── src/
     ├── main/java/com/example/agent/
     │   ├── AgentCli.java

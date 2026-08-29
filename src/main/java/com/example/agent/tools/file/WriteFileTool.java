@@ -41,6 +41,11 @@ public class WriteFileTool extends AbstractFileTool<WriteFileTool.Input> {
     }
 
     @Override
+    protected Class<Input> inputClass() {
+        return Input.class;
+    }
+
+    @Override
     public Map<String, Object> inputSchema() {
         return Map.of(
                 "type",

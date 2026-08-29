@@ -2,6 +2,8 @@ package com.example.agent.tools;
 
 import com.example.agent.tools.file.ToolInput;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +30,9 @@ public abstract class AbstractFileTool<I extends ToolInput> implements Tool<I, S
     /** 子类日志（按具体类名生成 logger） */
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
+    /** JSON 反序列化器（record Input 由 Jackson 2.15+ 原生支持） */
+    private static final ObjectMapper JSON = new ObjectMapper();
+
     /** 执行入口：模板方法（normalize → bounds 检查 → doExecute） */
     @Override
     public final Mono<ToolResult<String>> execute(I input, Tool.ToolContext ctx) {
@@ -35,6 +40,30 @@ public abstract class AbstractFileTool<I extends ToolInput> implements Tool<I, S
         if (r.error() != null) return Mono.just(r.error());
         return doExecute(input, r.path(), ctx);
     }
+
+    /**
+     * 把模型参数 JSON 反序列化为类型化输入（子类声明 {@link #inputClass()}）。
+     *
+     * @param argumentsJson 模型生成的参数 JSON
+     * @return 反序列化后的输入对象
+     * @throws IllegalArgumentException JSON 格式错误时抛出（AgentLoop 转成错误 ToolResult）
+     */
+    @Override
+    public I parseArguments(String argumentsJson) {
+        try {
+            return JSON.readValue(argumentsJson, inputClass());
+        } catch (Exception e) {
+            throw new IllegalArgumentException(
+                    "参数 JSON 解析失败 (" + argumentsJson + "): " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 输入类型（供 {@link #parseArguments} 反序列化）。
+     *
+     * @return 输入 record 的 Class
+     */
+    protected abstract Class<I> inputClass();
 
     /**
      * 子类实现的实际执行逻辑（在路径已校验通过后调用）。

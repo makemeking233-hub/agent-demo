@@ -76,4 +76,40 @@ class OpenAiCompatibleMapperTest {
     void doneLineReturnsEmpty() {
         assertTrue(mapper.parseSseLine("data: [DONE]").isEmpty());
     }
+
+    @Test
+    void parsesToolCallStartChunk() {
+        String sse =
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\","
+                    + "\"type\":\"function\",\"function\":{\"name\":\"ReadFile\",\"arguments\":"
+                    + "\"{\\\"path\\\":\\\"/tmp/a.txt\\\"}\"}}]}}]}";
+        StreamChunk chunk = mapper.parseSseLine(sse).orElseThrow();
+        assertInstanceOf(StreamChunk.ToolCallStart.class, chunk);
+        StreamChunk.ToolCallStart s = (StreamChunk.ToolCallStart) chunk;
+        assertEquals("call_1", s.id());
+        assertEquals("ReadFile", s.name());
+        // 一次性完整参数场景：完整 arguments 随 Start 携带
+        assertEquals("{\"path\":\"/tmp/a.txt\"}", s.argumentsDelta());
+    }
+
+    @Test
+    void parsesIncrementalToolCallDeltaChunk() {
+        // OpenAI 标准增量流：后续 chunk 无 id，仅携带 arguments 增量
+        String sse =
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":"
+                    + "{\"arguments\":\"{\\\"path\\\":\\\"/tmp/\"}}]}}]}";
+        StreamChunk chunk = mapper.parseSseLine(sse).orElseThrow();
+        assertInstanceOf(StreamChunk.ToolCallDelta.class, chunk);
+        StreamChunk.ToolCallDelta d = (StreamChunk.ToolCallDelta) chunk;
+        assertEquals("", d.id());
+        assertEquals("{\"path\":\"/tmp/", d.argumentsDelta());
+    }
+
+    @Test
+    void ignoresToolCallChunkWithoutIdAndArguments() {
+        String sse =
+                "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,"
+                    + "\"function\":{}}]}}]}";
+        assertTrue(mapper.parseSseLine(sse).isEmpty());
+    }
 }

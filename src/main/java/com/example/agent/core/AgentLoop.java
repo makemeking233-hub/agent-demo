@@ -256,28 +256,51 @@ public class AgentLoop {
     /**
      * 并行执行模型产生的所有工具调用。
      *
+     * <p>执行前先把 {@code argumentsJson} 反序列化为类型化输入（{@link Tool#parseArguments}）；
+     * 解析或执行失败时返回错误 {@link ToolResult}，不让单次失败打断整轮。
+     *
      * @param calls 模型返回的工具调用列表
      * @return 每个工具的执行结果（错误时返回 error 结果）
      */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"rawtypes", "unchecked"})
     private Flux<List<ToolResult<Object>>> executeTools(List<ToolCall> calls) {
-        return Flux.fromIterable(calls)
-                .flatMap(
-                        call -> {
-                            Tool tool = tools.getRaw(call.name());
-                            if (tool == null) {
-                                ToolResult<Object> err =
-                                        ToolResult.<Object>error("工具不存在: " + call.name());
-                                return Mono.just(List.of(err));
-                            }
-                            return tool.execute(call.argumentsJson(), toolContext)
-                                    .map(
-                                            r -> {
-                                                ToolResult<Object> typed = (ToolResult<Object>) r;
-                                                return List.of(typed);
-                                            })
-                                    .flux();
+        return Flux.fromIterable(calls).flatMap(call -> executeOne(call, tools.getRaw(call.name())));
+    }
+
+    /**
+     * 执行单个工具调用：反序列化参数 → 执行 → 错误兜底（单次失败不打断整轮）。
+     *
+     * @param call 工具调用（id + name + argumentsJson）
+     * @param tool 已查到的工具（{@code null} 时返回"工具不存在"）
+     * @return 单条工具结果（错误时返回 error 结果）
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Mono<List<ToolResult<Object>>> executeOne(ToolCall call, Tool tool) {
+        if (tool == null) {
+            return Mono.just(List.of(ToolResult.<Object>error("工具不存在: " + call.name())));
+        }
+        return Mono.fromCallable(() -> (Object) tool.parseArguments(call.argumentsJson()))
+                // raw cast 隔离到 executeTool，主链保持强类型，onErrorResume 的 e 才能正确推断为 Throwable
+                .flatMap(input -> executeTool(tool, input))
+                .map(r -> List.of((ToolResult<Object>) r))
+                .onErrorResume(
+                        e -> {
+                            log.warn("工具执行失败 [{}]: {}", call.name(), e.getMessage());
+                            return Mono.just(
+                                    List.of(ToolResult.<Object>error("工具执行失败: " + e.getMessage())));
                         });
+    }
+
+    /**
+     * 执行工具并做类型归一化（raw cast 集中在此，避免污染调用链的类型推断）。
+     *
+     * @param tool 工具（raw 通配符）
+     * @param input 类型化输入
+     * @return 归一化后的工具结果 monad
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Mono<ToolResult<Object>> executeTool(Tool tool, Object input) {
+        return (Mono<ToolResult<Object>>) (Mono) tool.execute(input, toolContext);
     }
 
     /**

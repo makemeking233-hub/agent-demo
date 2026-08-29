@@ -1,7 +1,7 @@
 # agent-demo 架构详解
 
 > v0.1 实现完成（`a597f36`，94 测试全绿，jacoco 门禁通过）。
-> 配套文档：`docs/design.md`（技术设计）/ `docs/test-design.md`（测试设计）/ `docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md`（实施计划）。
+> 配套文档：`docs/design/design.md`（技术设计）/ `docs/design/test-design.md`（测试设计）/ `docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md`（实施计划）。
 
 ---
 

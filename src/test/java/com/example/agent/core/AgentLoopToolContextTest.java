@@ -34,7 +34,8 @@ import java.util.List;
  *   <li>C3：setHistory() 切换后，新 turn 写入新 history
  * </ul>
  *
- * <p>不依赖 ReadFileTool 的 JSON→Input 解析（v0.1 已知缺陷，留 v0.2）。
+ * <p>JSON→Input 反序列化（AgentLoop.executeOne + Tool.parseArguments）已有专门测试覆盖，
+ * 本测试聚焦 ToolContext 传递与 setHistory 切换，参数解析用透传 stub。
  */
 class AgentLoopToolContextTest {
 
@@ -70,6 +71,12 @@ class AgentLoopToolContextTest {
                     }
 
                     @Override
+                    public Object parseArguments(String argumentsJson) {
+                        // 该测试聚焦 ToolContext 传递，参数解析直接透传
+                        return argumentsJson;
+                    }
+
+                    @Override
                     public Mono<ToolResult<Object>> execute(Object input, ToolContext ctx) {
                         return Mono.just(
                                 ToolResult.ok(
@@ -83,7 +90,7 @@ class AgentLoopToolContextTest {
         when(provider.streamChat(any()))
                 .thenReturn(
                         Flux.just(
-                                (StreamChunk) new StreamChunk.ToolCallStart("1", "fake"),
+                                (StreamChunk) new StreamChunk.ToolCallStart("1", "fake", null),
                                 new StreamChunk.ToolCallEnd("1", "fake", "{}"),
                                 new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
                 .thenReturn(

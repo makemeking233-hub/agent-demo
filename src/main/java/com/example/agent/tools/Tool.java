@@ -80,6 +80,20 @@ public interface Tool<I, O> {
     String renderResult(O output);
 
     /**
+     * 把模型返回的工具参数 JSON 字符串解析为类型化输入。
+     *
+     * <p>v0.1 由各 Tool 自行实现（详见 ToolCall 注释）；v0.2 已明确为通用 JSON → Input 转换，
+     * 基类（如 {@code AbstractFileTool}）提供 Jackson 默认实现。
+     *
+     * @param argumentsJson 模型生成的参数 JSON（如 {@code {"path": "/tmp/a.txt"}}）
+     * @return 类型化输入对象
+     * @throws IllegalArgumentException JSON 解析失败或工具未实现时抛出
+     */
+    default I parseArguments(String argumentsJson) {
+        throw new UnsupportedOperationException(name() + " 未实现 parseArguments");
+    }
+
+    /**
      * 异步执行。
      *
      * @param input 工具输入

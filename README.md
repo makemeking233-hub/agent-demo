@@ -149,7 +149,7 @@ agent chat --auto-approve-write          # E2E 测试：跳过写权限确认
 - 类 Unix：`rm -rf /`、`mkfs`、`dd if=...of=/dev/...`、`chmod -R 777 /`、`shutdown`、`reboot`
 - Windows：`format`、`rd /s /q C:\`、`del /f /s /q C:\*`、`diskpart`、`bcdedit`、`reg delete HKLM`
 
-> 实际匹配语义与完整黑名单见 [`docs/design.md` §6.6](./docs/design.md)。
+> 实际匹配语义与完整黑名单见 [`docs/design/design.md` §6.6](./docs/design/design.md)。
 
 ---
 
@@ -169,7 +169,7 @@ agent chat --auto-approve-write          # E2E 测试：跳过写权限确认
 └── logs/                # agent.log
 ```
 
-详细配置项（含 provider 切换、cost 限额、shell 黑名单）见 [`docs/design.md` §9](./docs/design.md)。
+详细配置项（含 provider 切换、cost 限额、shell 黑名单）见 [`docs/design/design.md` §9](./docs/design/design.md)。
 
 ---
 
@@ -319,7 +319,7 @@ sequenceDiagram
 
 ## 11. 详细设计文档
 
-完整设计（含模块拆分、数据契约、错误处理重试边界、Context 压缩机制、Memory 设计、Windows 编码三重防御、Ctrl+C 信号处理等）见 [`docs/design.md`](./docs/design.md)。
+完整设计（含模块拆分、数据契约、错误处理重试边界、Context 压缩机制、Memory 设计、Windows 编码三重防御、Ctrl+C 信号处理等）见 [`docs/design/design.md`](./docs/design/design.md)。
 
 参考的 Claude Code 源码解析：
 

@@ -43,6 +43,11 @@ public class LsTool extends AbstractFileTool<LsTool.Input> {
     }
 
     @Override
+    protected Class<Input> inputClass() {
+        return Input.class;
+    }
+
+    @Override
     public Map<String, Object> inputSchema() {
         return Map.of(
                 "type",

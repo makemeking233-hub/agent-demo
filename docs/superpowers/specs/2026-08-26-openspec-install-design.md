@@ -13,7 +13,7 @@
 ## 2. 背景
 
 - `agent-demo` 是 Claude Code 风格的 Java Agent CLI，v0.1 完整跑通 50 个 Task
-- `docs/design.md`（500+ 行）和 `docs/test-design.md`（170+ 行）目前是 spec 真相源，但仅 Markdown
+- `docs/design/design.md`（500+ 行）和 `docs/design/test-design.md`（170+ 行）目前是 spec 真相源，但仅 Markdown
 - md-main 已深度研究 OpenSpec（v1.5+ npm 包 `@fission-ai/openspec`），社区采用率 20 万+/周
 - DSH = **DeepSeek Harness**（用户当前会话运行的 Agent 平台，端口 3080）
 
@@ -37,7 +37,7 @@ OpenSpec 解决的核心问题：
 ### 3.2 不包含
 
 - 不写 v0.1 已完成功能的"反向 spec"（plan §8.6.1 建议："不要先文档化整个系统，从第一个真实 change 开始"）
-- 不修改 `docs/design.md`（OpenSpec 与 design.md 并存，分别管"行为契约 vs 技术细节"）
+- 不修改 `docs/design/design.md`（OpenSpec 与 design.md 并存，分别管"行为契约 vs 技术细节"）
 - 不动 DSH 全局配置（只写项目级 skills）
 
 ## 4. 设计
@@ -70,7 +70,7 @@ context: |
   agent-demo: Claude Code 风格 Java Agent CLI
   技术栈: JDK 17 + Spring Boot 3.2 + Maven 3.9 + picocli 4.7 + JLine3 3.25 + JTokkit 0.6.1
   LLM Provider: DeepSeek (OpenAI 兼容协议)
-  文档: docs/design.md (技术设计) / docs/test-design.md (测试设计) / docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md (实施计划)
+  文档: docs/design/design.md (技术设计) / docs/design/test-design.md (测试设计) / docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md (实施计划)
   v0.1 状态: 已完成 M0-M10 (92 个测试全绿 + jacoco 门禁通过)
   v0.2 候选: /resume /model Ctrl+C 中断 deepseek-reasoner 等
   规范: .codex/rules/Codex本地开发规范-Java篇.md (AOSP 风格 + 阿里 P3C + 华为 CleanCode)
@@ -224,7 +224,7 @@ DSH 集成路径（OpenSpec 1.5+ 推测，未验证）：
 如果 OpenSpec 与当前 v0.1 工作流冲突，方案：
 - `openspec init` 生成的目录不进 Git（修改 `.gitignore`）
 - 仅用 OpenSpec CLI 作为本地 spec 工具，不影响 v0.1 已完成的 92 个测试
-- 设计文档继续用 `docs/design.md`（唯一真相源）
+- 设计文档继续用 `docs/design/design.md`（唯一真相源）
 
 ---
 
