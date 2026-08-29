@@ -72,7 +72,21 @@ public class OpenAiCompatibleMapper {
             body.put("messages", toMessageArray(req.messages()));
         }
         if (req.tools() != null && !req.tools().isEmpty()) {
-            body.put("tools", req.tools());
+            // OpenAI 标准 tools 格式：{"type":"function","function":{name,description,parameters}}
+            // ToolSpec record 字段是 name/description/inputSchema，需要包装
+            List<Map<String, Object>> tools = new ArrayList<>();
+            for (com.example.agent.llm.ToolSpec spec : req.tools()) {
+                tools.add(
+                        Map.of(
+                                "type",
+                                "function",
+                                "function",
+                                Map.of(
+                                        "name", spec.name(),
+                                        "description", spec.description(),
+                                        "parameters", spec.inputSchema())));
+            }
+            body.put("tools", tools);
             body.put("tool_choice", "auto");
         }
         if (req.extra() != null) body.putAll(req.extra());

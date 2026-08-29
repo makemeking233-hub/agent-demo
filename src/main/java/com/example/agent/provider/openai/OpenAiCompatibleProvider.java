@@ -4,10 +4,13 @@ import com.example.agent.llm.ChatRequest;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.util.Optional;
 
@@ -27,6 +30,8 @@ import java.util.Optional;
  * <p>子类通过构造器注入 API key；HTTP 客户端（WebClient）由基类统一构建（自动加 {@code Authorization: Bearer} header）。
  */
 public abstract class OpenAiCompatibleProvider implements LlmProvider {
+
+  private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleProvider.class);
 
     /**
      * HTTP 客户端（带 Authorization: Bearer header）
@@ -72,6 +77,26 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(String.class)
+                // 4xx/5xx：把错误体转为 "[HTTP xxx] {body}" 字符串，让后续 parseSseLine 失败但内容可见
+                .onErrorResume(
+                        org.springframework.web.reactive.function.client.WebClientResponseException.class,
+                        ex -> {
+                            int status = ex.getStatusCode().value();
+                            String errBody =
+                                    ex.getResponseBodyAsString() == null
+                                            ? ""
+                                            : ex.getResponseBodyAsString();
+                            log.warn(
+                                    "[{} {}] {}",
+                                    status,
+                                    chatEndpoint(),
+                                    errBody.length() > 500
+                                            ? errBody.substring(0, 500) + "..."
+                                            : errBody);
+                            return Mono.error(
+                                    new RuntimeException(
+                                            "[HTTP " + status + "] " + errBody, ex));
+                        })
                 .flatMapMany(
                         payload ->
                                 Flux.fromIterable(
