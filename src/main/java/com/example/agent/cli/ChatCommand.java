@@ -20,6 +20,11 @@ import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.session.SessionStore;
 import com.example.agent.tools.ToolRegistry;
+import com.example.agent.tools.file.LsTool;
+import com.example.agent.tools.shell.BashAdapter;
+import com.example.agent.tools.shell.CmdAdapter;
+import com.example.agent.tools.shell.ShellAdapter;
+import com.example.agent.tools.shell.ShellTool;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -178,6 +183,7 @@ public class ChatCommand implements Runnable {
                 new AtomicReference<>(new MessageHistory(estimator));
         ToolRegistry tools = new ToolRegistry();
         ToolRegistry.registerMemoryTools(tools);
+        registerShellAndLs(tools, cfg);
         StreamingPrinter printer = new StreamingPrinter();
         PermissionManager perms = new PermissionManager(); // v0.1 placeholder
 
@@ -301,6 +307,22 @@ public class ChatCommand implements Runnable {
                 + "- 会话存档目录: `"
                 + sessionsDir
                 + "`（`<会话ID>.jsonl`）";
+    }
+
+    /**
+     * 注册 shell 与 ls 工具（v0.1 运行时工具集：ReadFile/WriteFile/EditFile/Ls/Shell）。
+     *
+     * <p>按平台选 adapter（Windows=cmd，其余=bash）；超时/输出上限来自 {@code cfg.shell()}。 提取为静态方法便于单测。
+     *
+     * @param tools 目标注册表
+     * @param cfg   当前配置
+     */
+    static void registerShellAndLs(ToolRegistry tools, AgentConfig cfg) {
+        boolean windows = System.getProperty("os.name").toLowerCase().contains("win");
+        ShellAdapter adapter = windows ? new CmdAdapter() : new BashAdapter();
+        int timeoutSec = Math.max(1, cfg.shell().timeoutMs() / 1000);
+        tools.register(new ShellTool(adapter, timeoutSec, cfg.shell().maxOutputBytes(), true));
+        tools.register(new LsTool());
     }
 
     /**
