@@ -45,3 +45,6 @@ secrets.yml
 secrets.yaml
 .env
 .env.local
+
+# agent-demo 运行时遗留（记忆目录被误生成在工作目录；正确位置应为 ~/.agent-demo/）
+.agent-demo/
