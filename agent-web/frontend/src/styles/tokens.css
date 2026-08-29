@@ -1,0 +1,66 @@
+/* DSW tokens (亮色默认) — 复刻 deepseek-harness design-platform.css
+ * 主题切换: body[data-ds-dark-theme] 覆盖到 tokens-dark.css 变量 */
+
+:root {
+  --dsw-static-surface-default: #ffffff;
+  --dsw-static-surface-raised: #fafafa;
+  --dsw-static-surface-sunken: #f5f5f5;
+  --dsw-static-surface-overlay: rgba(0, 0, 0, 0.4);
+  --dsw-static-surface-canvas: #f8fafc;
+
+  --dsw-static-text-primary: #1f2937;
+  --dsw-static-text-secondary: #4b5563;
+  --dsw-static-text-muted: #6b7280;
+  --dsw-static-text-inverse: #ffffff;
+  --dsw-static-text-link: #2563eb;
+
+  --dsw-static-border-default: #e5e7eb;
+  --dsw-static-border-strong: #d1d5db;
+  --dsw-static-border-subtle: #f3f4f6;
+
+  --dsw-static-accent-default: #2563eb;
+  --dsw-static-accent-hover: #1d4ed8;
+  --dsw-static-accent-subtle: #dbeafe;
+
+  --dsw-static-neutral-50: #f8fafc;
+  --dsw-static-neutral-100: #f1f5f9;
+  --dsw-static-neutral-200: #e2e8f0;
+  --dsw-static-neutral-300: #cbd5e1;
+  --dsw-static-neutral-400: #94a3b8;
+  --dsw-static-neutral-500: #64748b;
+  --dsw-static-neutral-600: #475569;
+  --dsw-static-neutral-700: #334155;
+  --dsw-static-neutral-800: #1e293b;
+  --dsw-static-neutral-900: #0f172a;
+
+  --dsw-static-warning-default: #d97706;
+  --dsw-static-warning-bg: #fef3c7;
+  --dsw-static-success-default: #16a34a;
+  --dsw-static-success-bg: #dcfce7;
+  --dsw-static-danger-default: #dc2626;
+  --dsw-static-danger-bg: #fee2e2;
+
+  --dsw-alias-bg: var(--dsw-static-surface-default);
+  --dsw-alias-bg-raised: var(--dsw-static-surface-raised);
+  --dsw-alias-text: var(--dsw-static-text-primary);
+  --dsw-alias-text-muted: var(--dsw-static-text-muted);
+  --dsw-alias-border: var(--dsw-static-border-default);
+  --dsw-alias-accent: var(--dsw-static-accent-default);
+  --dsw-alias-radius: 8px;
+  --dsw-alias-radius-sm: 4px;
+  --dsw-alias-shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --dsw-alias-shadow-md: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--dsw-alias-text);
+  background: var(--dsw-alias-bg);
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--dsw-static-neutral-300); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dsw-static-neutral-400); }

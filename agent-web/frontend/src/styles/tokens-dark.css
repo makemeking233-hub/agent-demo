@@ -1,0 +1,44 @@
+/* 暗色 token 覆盖: 仅在 body[data-ds-dark-theme] 生效 */
+
+body[data-ds-dark-theme] {
+  --dsw-static-surface-default: #0f172a;
+  --dsw-static-surface-raised: #1e293b;
+  --dsw-static-surface-sunken: #0b1220;
+  --dsw-static-surface-overlay: rgba(0, 0, 0, 0.6);
+  --dsw-static-surface-canvas: #020617;
+
+  --dsw-static-text-primary: #f1f5f9;
+  --dsw-static-text-secondary: #cbd5e1;
+  --dsw-static-text-muted: #94a3b8;
+  --dsw-static-text-inverse: #0f172a;
+  --dsw-static-text-link: #60a5fa;
+
+  --dsw-static-border-default: #334155;
+  --dsw-static-border-strong: #475569;
+  --dsw-static-border-subtle: #1e293b;
+
+  --dsw-static-accent-default: #60a5fa;
+  --dsw-static-accent-hover: #93c5fd;
+  --dsw-static-accent-subtle: #1e3a8a;
+
+  --dsw-static-neutral-50: #f8fafc;
+  --dsw-static-neutral-100: #f1f5f9;
+  --dsw-static-neutral-200: #e2e8f0;
+  --dsw-static-neutral-300: #cbd5e1;
+  --dsw-static-neutral-400: #94a3b8;
+  --dsw-static-neutral-500: #64748b;
+  --dsw-static-neutral-600: #475569;
+  --dsw-static-neutral-700: #334155;
+  --dsw-static-neutral-800: #1e293b;
+  --dsw-static-neutral-900: #0f172a;
+
+  --dsw-static-warning-default: #fbbf24;
+  --dsw-static-warning-bg: #422006;
+  --dsw-static-success-default: #4ade80;
+  --dsw-static-success-bg: #052e16;
+  --dsw-static-danger-default: #f87171;
+  --dsw-static-danger-bg: #450a0a;
+}
+
+body[data-ds-dark-theme] ::-webkit-scrollbar-thumb { background: var(--dsw-static-neutral-700); }
+body[data-ds-dark-theme] ::-webkit-scrollbar-thumb:hover { background: var(--dsw-static-neutral-600); }

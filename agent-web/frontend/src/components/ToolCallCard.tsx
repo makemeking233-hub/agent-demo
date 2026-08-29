@@ -1,15 +1,51 @@
-export function ToolCallCard(props: { name: string; status: 'running' | 'ok' | 'fail'; text?: string; durationMs?: number }) {
-  const color = props.status === 'running' ? '#3b82f6' : props.status === 'ok' ? '#10b981' : '#ef4444';
-  const label = props.status === 'running' ? '执行中' : props.status === 'ok' ? '完成' : '失败';
+import { AlertCircle, CheckCircle2, Loader2, Terminal } from "lucide-react";
+import styles from "./ToolCallCard.module.css";
+
+export function ToolCallCard(props: {
+  name: string;
+  status: "running" | "ok" | "fail";
+  text?: string;
+  durationMs?: number;
+}) {
+  const config = STATUS_CONFIG[props.status];
+  const Icon = config.icon;
   return (
-    <div style={{ border: `1px solid ${color}`, borderRadius: 6, margin: '4px 0', padding: 8, background: '#fafafa' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <strong style={{ color }}>🔧 {props.name}</strong>
-        <span style={{ color, fontSize: 12 }}>{label}{props.durationMs != null ? ` (${props.durationMs}ms)` : ''}</span>
+    <div className={`${styles.card} ${config.cardClass}`}>
+      <div className={styles.header}>
+        <span className={config.titleClass}>
+          <Icon size={14} className={props.status === "running" ? styles.spin : ""} />
+          <Terminal size={12} />
+          <span>{props.name}</span>
+        </span>
+        <span className={config.metaClass}>
+          {`${config.label}${props.durationMs != null ? ` · ${props.durationMs}ms` : ""}`}
+        </span>
       </div>
-      {props.text && (
-        <pre style={{ margin: '4px 0 0', fontSize: 12, whiteSpace: 'pre-wrap', color: '#374151' }}>{props.text}</pre>
-      )}
+      {props.text && <pre className={styles.output}>{props.text}</pre>}
     </div>
   );
 }
+
+const STATUS_CONFIG = {
+  running: {
+    label: "执行中",
+    icon: Loader2,
+    cardClass: "cardRunning",
+    titleClass: "titleRunning",
+    metaClass: "metaRunning",
+  },
+  ok: {
+    label: "完成",
+    icon: CheckCircle2,
+    cardClass: "cardOk",
+    titleClass: "titleOk",
+    metaClass: "metaOk",
+  },
+  fail: {
+    label: "失败",
+    icon: AlertCircle,
+    cardClass: "cardFail",
+    titleClass: "titleFail",
+    metaClass: "metaFail",
+  },
+} as const;

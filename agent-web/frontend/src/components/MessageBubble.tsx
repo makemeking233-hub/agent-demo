@@ -1,15 +1,21 @@
-import ReactMarkdown from 'react-markdown';
+import { User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import styles from "./MessageBubble.module.css";
 
-export function MessageBubble(props: { role: 'user' | 'assistant'; text: string }) {
-  const bg = props.role === 'user' ? '#dbeafe' : '#f3f4f6';
-  const align = props.role === 'user' ? 'flex-end' : 'flex-start';
+export function MessageBubble(props: { role: "user" | "assistant"; text: string }) {
+  const isUser = props.role === "user";
   return (
-    <div style={{ display: 'flex', justifyContent: align, margin: '4px 0' }}>
-      <div style={{ maxWidth: '80%', background: bg, padding: '8px 12px', borderRadius: 8 }}>
+    <div className={`${styles.row} ${isUser ? styles.rowUser : styles.rowAssistant}`}>
+      <div className={styles.avatar}>
+        {isUser ? <User size={16} /> : <span className={styles.botAvatar}>AI</span>}
+      </div>
+      <div className={isUser ? styles.bubbleUser : styles.bubbleAssistant}>
         {props.text ? (
-          <ReactMarkdown>{props.text}</ReactMarkdown>
+          <div className={styles.markdown}>
+            <ReactMarkdown>{props.text}</ReactMarkdown>
+          </div>
         ) : (
-          <span style={{ color: '#888', fontStyle: 'italic' }}>…</span>
+          <span className={styles.cursor}>…</span>
         )}
       </div>
     </div>

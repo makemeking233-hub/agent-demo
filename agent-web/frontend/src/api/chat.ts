@@ -9,8 +9,8 @@ export interface SendRequest {
 }
 
 export interface SendResponse {
-  streamId: string;
-  sessionId: string;
+  stream_id: string;
+  session_id: string;
   model: string;
 }
 

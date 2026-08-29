@@ -1,0 +1,53 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--dsw-alias-border);
+  background: var(--dsw-alias-bg-raised);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandIcon {
+  color: var(--dsw-alias-accent);
+}
+
+.title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--dsw-alias-text-muted);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--dsw-alias-radius-sm);
+  color: var(--dsw-alias-text);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--dsw-static-surface-sunken);
+}
+

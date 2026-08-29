@@ -1,0 +1,55 @@
+.card {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: var(--dsw-static-warning-bg);
+  border: 1px solid var(--dsw-static-warning-default);
+  border-radius: var(--dsw-alias-radius);
+  font-size: 13px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--dsw-static-warning-default);
+}
+
+.reason {
+  margin: 6px 0 8px;
+  color: var(--dsw-alias-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.button {
+  padding: 4px 12px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  background: var(--dsw-alias-bg);
+  color: var(--dsw-alias-text);
+  border: 1px solid var(--dsw-alias-border);
+  border-radius: var(--dsw-alias-radius-sm);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--dsw-static-surface-sunken);
+}
+
+.resolved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 4px 10px;
+  background: var(--dsw-static-success-bg);
+  color: var(--dsw-static-success-default);
+  border-radius: var(--dsw-alias-radius-sm);
+  font-size: 12px;
+}

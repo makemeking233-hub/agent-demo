@@ -1,0 +1,16 @@
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--dsw-alias-radius-sm);
+  color: var(--dsw-alias-text);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--dsw-static-surface-sunken);
+}
