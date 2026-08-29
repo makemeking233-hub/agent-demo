@@ -12,7 +12,7 @@
 - [x] 2.2 `TrustedHostFilter` (`OncePerRequestFilter`): 对 `/api/**` 校验 RemoteAddr；loopback 永远放行；非 loopback 必须命中 trusted-hosts；不命中返回 403 + `{"error":"host_not_trusted"}`
 - [x] 2.3 `StaticResourceConfig` (`WebFluxConfigurer` + `RouterFunction`): 配 `/assets/**` 永久缓存 (`Cache-Control: public, max-age=31536000, immutable`)，其他路径 SPA fallback 到 `/index.html`
 - [x] 2.4 `HealthController` (`GET /api/health`): 返回 `{"status":"ok"|"degraded","version","uptime_s","reason"?}`；`/api/health` 跳过 TrustedHostFilter（spec §Health Check 永远 200）
-- [x] 2.5 placeholder (T6.1 解除 blocking；集成测试本体仍 blocked — WebIntegrationTest 置 @Disabled 占位)
+- [x] 2.5 `WebIntegrationTest` (`@SpringBootTest(classes=WebApplication)` + `@AutoConfigureWebTestClient`): 起真实 WebFlux server 验证 `/api/health` 200 / SPA fallback；解除阻塞（根因乃 SPA RouterFunction 抢占 `/api/**`，已用仅匹配客户端路由前缀修复）
 
 ## 3. Backend — chat send + SSE stream
 
@@ -39,10 +39,10 @@
 
 ## 6. Backend — profile 切换与 CLI 隔离
 
-- [x] 6.1 `AgentCli.java` 加 `--web` flag (或单独入口)；`-Dspring.profiles.active=web` 启动时：禁读 stdin、不启动 REPL、仅启动 web server（实现：`run()` 检测 active profiles 含 `web` 则早返回，不调 picocli / 不 System.exit）
-- [ ] 6.2 `application-web.yml` 默认值：`agent.web.host=127.0.0.1`, `port=8080`, `trusted-hosts=[]` (空 = 仅 loopback)
-- [ ] 6.3 启动 banner：web profile 下打印 `dsh web: http://<host>:<port>` (单行, ANSI 颜色可选)；CLI profile 不变 (无此 banner)
-- [ ] 6.4 `mvn spring-boot:run` (无 profile) 行为测试：CLI REPL 正常 + 无端口监听
+- [x] 6.1 `AgentCli.java` 加 `--web` flag (或单独入口)；`-Dspring.profiles.active=web` 启动时：禁读 stdin、不启动 REPL、仅启动 web server（实现：`AgentCli.run()` 检测 active profiles 含 `web` 则早返回，不调 picocli / 不 System.exit；另建 `WebApplication` 作为 web 独立 `@SpringBootApplication` 入口，显式 `web-application-type=reactive`）
+- [x] 6.2 `application-web.yml` 默认值：`agent.web.host=127.0.0.1`, `port=8080`, `trusted-hosts=[]` (空 = 仅 loopback)；并补 `spring.main.web-application-type=reactive`（base application.yml 为 none，web profile 必须覆盖，否则内嵌服务器不启动）
+- [x] 6.3 启动 banner：web profile 下打印 `dsh web: http://<host>:<port>` (单行, ANSI 颜色可选)；CLI profile 不变 (无此 banner)（`WebStartupBanner` 在 `ApplicationReadyEvent` 打印，`@Profile("web")`）
+- [ ] 6.4 `mvn spring-boot:run` (无 profile) 行为测试：CLI REPL 正常 + 无端口监听（v0.1 已有 AgentCliTest 覆盖 CLI；此条留待补「无 profile 时无 web server」的显式用例）
 
 ## 7. Frontend — 基础设施
 

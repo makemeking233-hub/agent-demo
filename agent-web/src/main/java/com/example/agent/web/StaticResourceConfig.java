@@ -14,13 +14,8 @@ import reactor.core.publisher.Mono;
 /**
  * SPA fallback (spec §Requirement: Static Resource Serving / Scenario: Client-side routes serve same index).
  *
- * <p>职责:
- * <ul>
- *   <li>/assets/** 与根路径 / 由 Spring Boot 默认 static resource handling 接管
- *       (classpath:static/), 1 年 immutable cache 走 application-web.yml 配置</li>
- *   <li>本 config 只补 SPA fallback: 非 /api/, 非 /assets/, 非 / 的路径返 index.html,
- *       让 React Router 接管客户端路由</li>
- * </ul>
+ * <p>只匹配知名客户端路由前缀, 不匹配 /api/** 与 /assets/**.
+ * 客户端路由前缀 v0.1: /sessions, /help, /settings, /chat.
  */
 @Configuration
 @Profile("web")
@@ -28,19 +23,20 @@ public class StaticResourceConfig {
 
     private static final Resource INDEX_HTML = new ClassPathResource("static/index.html");
 
+    private static final String[] CLIENT_ROOT_PREFIXES = {"/sessions", "/help", "/settings", "/chat"};
+
     @Bean
     public RouterFunction<ServerResponse> spaFallbackRouter() {
-        return RouterFunctions.route()
-                .GET("/**", req -> {
-                    String p = req.path();
-                    if (p.startsWith("/api/") || p.startsWith("/assets/") || "/".equals(p)) {
-                        return ServerResponse.notFound().build();
-                    }
-                    return ServerResponse.ok()
-                            .contentType(MediaType.TEXT_HTML)
-                            .bodyValue(INDEX_HTML);
-                })
-                .before(req -> req)
-                .build();
+        RouterFunctions.Builder builder = RouterFunctions.route();
+        for (String prefix : CLIENT_ROOT_PREFIXES) {
+            builder = builder.GET(prefix, req -> okIndex()).GET(prefix + "/{*path}", req -> okIndex());
+        }
+        return builder.build();
+    }
+
+    private static Mono<ServerResponse> okIndex() {
+        return ServerResponse.ok()
+                .contentType(MediaType.TEXT_HTML)
+                .bodyValue(INDEX_HTML);
     }
 }
