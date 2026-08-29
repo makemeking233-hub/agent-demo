@@ -53,12 +53,12 @@ agent-core/                                  agent-web/                         
 
 ```yaml
 server:
-  port: 8080
+  port: 8090
 
 agent:
   web:
     host: 127.0.0.1        # 绑 loopback; LAN 写具体 IP, 0.0.0.0 启动时拒
-    port: 8080              # 与 server.port 一致
+    port: 8090              # 与 server.port 一致
     trusted-hosts: []       # 空=仅 loopback, LAN 设 ['192.168.1.0/24'] 或 ['192.168.1.42']
 ```
 
@@ -67,7 +67,7 @@ agent:
 ## 5. 开发模式
 
 - 后端: `mvn -pl agent-core spring-boot:run` (默认 CLI profile) 或 `-Dspring.profiles.active=web` 起 web
-- 前端: `cd agent-web/frontend && npm run dev` (Vite :5173, /api proxy 到 8080)
+- 前端: `cd agent-web/frontend && npm run dev` (Vite :5173, /api proxy 到 8090)
 - 一体化: `mvn -pl agent-web clean package && java -jar agent-web/target/agent-web.jar`
 
 ## 6. 已知限制 (v0.1)
