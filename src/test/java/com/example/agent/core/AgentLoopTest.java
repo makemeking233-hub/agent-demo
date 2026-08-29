@@ -5,8 +5,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
 import com.example.agent.core.exception.MaxIterationsExceededException;
+import com.example.agent.llm.ChatRequest;
 import com.example.agent.llm.FinishReason;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
@@ -136,5 +136,70 @@ class AgentLoopTest {
         boolean hasError =
                 hist.all().stream().anyMatch(m -> m instanceof Message.ToolResult t && t.isError());
         assertEquals(true, hasError);
+    }
+
+    @Test
+    void passesSystemPromptToRequest() {
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        org.mockito.ArgumentCaptor<ChatRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ChatRequest.class);
+        when(provider.streamChat(captor.capture()))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("ok"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        when(tools.list()).thenReturn(List.of());
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."),
+                        "SYSTEM_PROMPT_TEST");
+
+        loop.processTurn(new Message.User("hi")).block();
+        assertEquals("SYSTEM_PROMPT_TEST", captor.getValue().systemPrompt());
+    }
+
+    @Test
+    void nullSystemPromptStaysNull() {
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        org.mockito.ArgumentCaptor<ChatRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ChatRequest.class);
+        when(provider.streamChat(captor.capture()))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("ok"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        when(tools.list()).thenReturn(List.of());
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+
+        loop.processTurn(new Message.User("hi")).block();
+        assertEquals(null, captor.getValue().systemPrompt());
     }
 }

@@ -89,7 +89,12 @@ public class AgentLoop {
     private final String model;
 
     /**
-     * 构造 Agent 主循环。
+     * 系统提示词（{@code null} 表示不注入 system 消息；由 SystemPromptBuilder 组装或用户 --system-prompt 覆盖）
+     */
+    private final String systemPrompt;
+
+    /**
+     * 构造 Agent 主循环（无系统提示词；等价于 {@code systemPrompt = null}）。
      *
      * @param provider          LLM provider
      * @param tools             工具注册表
@@ -107,12 +112,37 @@ public class AgentLoop {
             int maxToolIterations,
             String model,
             Path workingDir) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, null);
+    }
+
+    /**
+     * 构造 Agent 主循环。
+     *
+     * @param provider          LLM provider
+     * @param tools             工具注册表
+     * @param history           初始消息历史
+     * @param printer           流式打印机
+     * @param maxToolIterations 单轮最大工具调用次数（超过熔断）
+     * @param model             模型名（{@code null} 用默认 deepseek-chat）
+     * @param workingDir        工作目录（所有相对路径的基准）
+     * @param systemPrompt      系统提示词（{@code null} 不注入；OpenAiCompatibleMapper 合并到 messages 头部）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
         this.printer = printer;
         this.maxToolIterations = maxToolIterations;
         this.model = model;
+        this.systemPrompt = systemPrompt;
         this.toolContext = new Tool.ToolContext(workingDir, new PermissionManager(), () -> false);
     }
 
@@ -180,7 +210,7 @@ public class AgentLoop {
         List<com.example.agent.core.Message> msgs = new ArrayList<>(history.all());
         return new ChatRequest(
                 model != null ? model : DEFAULT_MODEL,
-                null,
+                systemPrompt,
                 msgs,
                 specs,
                 DEFAULT_TEMPERATURE,

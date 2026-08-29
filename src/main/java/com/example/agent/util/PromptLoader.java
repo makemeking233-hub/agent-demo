@@ -26,8 +26,9 @@ public final class PromptLoader {
      * @return 加载到的文本；fallback 在异常路径下返回
      */
     public static String loadOrFallback(String classpathPath, String fallback) {
-        ClassLoader cl = PromptLoader.class.getClassLoader();
-        try (InputStream in = cl.getResourceAsStream(classpathPath)) {
+        // 用 Class.getResourceAsStream（支持前导 "/"），ClassLoader.getResourceAsStream 对
+        // 以 "/" 开头的路径会返回 null（v0.1 既有 bug：导致所有模板静默回退 fallback）
+        try (InputStream in = PromptLoader.class.getResourceAsStream(classpathPath)) {
             if (in == null) return fallback;
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {

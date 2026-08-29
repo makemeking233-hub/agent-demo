@@ -10,7 +10,10 @@ import com.example.agent.core.MessageHistory;
 import com.example.agent.core.TurnResult;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
+import com.example.agent.memory.MemoryDir;
+import com.example.agent.memory.MemoryPromptBuilder;
 import com.example.agent.permission.PermissionManager;
+import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.ToolRegistry;
 
@@ -30,6 +33,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -140,6 +144,28 @@ public class ChatCommand implements Runnable {
                             "未知 provider 类型: " + cfg.provider().type() + "（支持 deepseek / minimax）");
                 };
         TokenEstimator estimator = new TokenEstimator();
+
+        // 组装系统提示词：模型无关默认模板 + provider/model 元数据 + 长期记忆 + 用户 --system-prompt 覆盖
+        // （SystemPromptBuilder 内部对占位符做替换；后续新增 provider 无需改此处，除非要注入 provider 特有段）
+        String providerName =
+                cfg.provider().type() == null ? "deepseek" : cfg.provider().type().toLowerCase();
+        String userHome =
+                System.getenv("AGENT_DEMO_HOME") != null
+                                && !System.getenv("AGENT_DEMO_HOME").isBlank()
+                        ? System.getenv("AGENT_DEMO_HOME")
+                        : System.getProperty("user.home");
+        MemoryDir memoryDir = new MemoryDir(Paths.get(userHome, ".agent-demo", "memory"));
+        String memorySection =
+                new MemoryPromptBuilder(memoryDir).build(String.join("\n", cfg.memoryInject()));
+        String systemPrompt =
+                new SystemPromptBuilder()
+                        .build(
+                                providerName,
+                                resolvedModel,
+                                memorySection,
+                                List.of(),
+                                this.systemPrompt);
+
         // AtomicReference: lambda-friendly mutable holder for the active MessageHistory
         // (AtomicReference replaces single-element MessageHistory[] array used in v0.1)
         AtomicReference<MessageHistory> history =
@@ -165,7 +191,8 @@ public class ChatCommand implements Runnable {
                         printer,
                         DEFAULT_MAX_TOOL_ITERATIONS,
                         resolvedModel,
-                        workingDir);
+                        workingDir,
+                        systemPrompt);
 
         AtomicBoolean aborted = new AtomicBoolean(false);
         AbortSignal abortSignal = () -> aborted.get();
