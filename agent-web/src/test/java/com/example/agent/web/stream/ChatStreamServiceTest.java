@@ -77,4 +77,42 @@ class ChatStreamServiceTest {
         assertThat(closed.await(30, TimeUnit.SECONDS)).as("stream should close after turn").isTrue();
         assertThat(eventTypes).contains("message_start", "message_delta", "message_stop");
     }
+
+    @Test
+    void submitDecisionForUnknownPermissionReturnsFalse() {
+        WebAgentRuntime runtime = mock(WebAgentRuntime.class);
+        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            SessionLogSink sink = inv.getArgument(1);
+                            return loopWithMockProvider(sink);
+                        });
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("session-1", "deepseek-chat");
+
+        // 没有待决策的 permission_id → return false
+        assertThat(svc.submitDecision(meta.streamId(), "no-such-permission", "yes")).isFalse();
+    }
+
+    @Test
+    void decisionEndpointWakesWaitingThread() throws Exception {
+        // 验证 submitDecision 走 PermissionBridge 唤醒一个 waitForDecision 线程。
+        PermissionBridge bridge = new PermissionBridge();
+        String permissionId = bridge.newPermissionId();
+        String[] result = new String[1];
+        Thread waiting =
+                new Thread(
+                        () ->
+                                result[0] =
+                                        bridge.waitForDecision(permissionId, "tc1", "write_file", "理由", java.util.List.of("yes", "no", "always")));
+        waiting.start();
+        // 等 waitForDecision 注册 waiter
+        long deadline = System.currentTimeMillis() + 5000;
+        while (!bridge.hasPending(permissionId) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertThat(bridge.submitDecision(permissionId, "yes")).isTrue();
+        waiting.join(5000);
+        assertThat(result[0]).isEqualTo("yes");
+    }
 }

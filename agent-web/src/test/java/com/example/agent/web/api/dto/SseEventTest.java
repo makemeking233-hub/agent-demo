@@ -7,6 +7,7 @@ import com.example.agent.web.api.dto.SseEvent.MessageDelta;
 import com.example.agent.web.api.dto.SseEvent.MessageStart;
 import com.example.agent.web.api.dto.SseEvent.MessageStop;
 import com.example.agent.web.api.dto.SseEvent.PermissionRequest;
+import com.example.agent.web.api.dto.SseEvent.PermissionResponse;
 import com.example.agent.web.api.dto.SseEvent.ToolCallEnd;
 import com.example.agent.web.api.dto.SseEvent.ToolCallStart;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +27,7 @@ class SseEventTest {
         assertThat(new ToolCallEnd("c1", "read_file", true, "ok", 5L).type()).isEqualTo("tool_call_end");
         assertThat(new PermissionRequest("p1", "c1", "write_file", "deny?", List.of("yes", "no")).type())
                 .isEqualTo("permission_request");
+        assertThat(new PermissionResponse("p1", "yes").type()).isEqualTo("permission_response");
         assertThat(new MessageStop("stop").type()).isEqualTo("message_stop");
         assertThat(new Error("aborted", "by user").type()).isEqualTo("error");
     }

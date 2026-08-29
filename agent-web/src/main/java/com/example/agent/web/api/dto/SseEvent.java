@@ -45,6 +45,13 @@ public sealed interface SseEvent {
         }
     }
 
+    record PermissionResponse(@JsonProperty("type") String type, @JsonProperty("permission_id") String permissionId,
+                              @JsonProperty("decision") String decision) implements SseEvent {
+        public PermissionResponse(String permissionId, String decision) {
+            this("permission_response", permissionId, decision);
+        }
+    }
+
     record MessageStop(@JsonProperty("type") String type, @JsonProperty("finish_reason") String finishReason) implements SseEvent {
         public MessageStop(String finishReason) {
             this("message_stop", finishReason);

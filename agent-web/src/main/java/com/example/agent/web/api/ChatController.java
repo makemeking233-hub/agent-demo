@@ -52,4 +52,20 @@ public class ChatController {
         streams.abort(streamId);
         return Mono.just(ResponseEntity.ok(AbortResponse.ofAborted()));
     }
+
+    /**
+     * 用户提交 in-chat 权限决策 (spec §Requirement: permission_request 决策)。
+     *
+     * @param streamId 流 id
+     * @param req 决策载荷 (permission_id + decision)
+     */
+    @PostMapping("/decision/{streamId}")
+    public Mono<ResponseEntity<Map<String, Object>>> decision(
+            @PathVariable String streamId, @RequestBody com.example.agent.web.api.dto.DecisionRequest req) {
+        boolean submitted = streams.submitDecision(streamId, req.permissionId(), req.decision());
+        if (!submitted) {
+            return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "permission_not_found")));
+        }
+        return Mono.just(ResponseEntity.ok(Map.of("ok", true, "permission_id", req.permissionId(), "decision", req.decision())));
+    }
 }

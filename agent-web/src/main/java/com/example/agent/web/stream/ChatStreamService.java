@@ -9,6 +9,7 @@ import com.example.agent.web.api.dto.SseEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -71,13 +72,18 @@ public class ChatStreamService {
         Sinks.Many<ServerSentEvent<Object>> sink = Sinks.many().replay().all();
         SseSessionLogSink adapter = new SseSessionLogSink(this, streamId);
         java.util.concurrent.atomic.AtomicBoolean aborted = new java.util.concurrent.atomic.AtomicBoolean(false);
-        // 权限桥包装成 PermissionConfirmer：confirm(prompt) 阻塞等待前端决策。
+        // 权限桥包装成 PermissionConfirmer：confirm(prompt) emit permission_request 后阻塞等待前端决策。
         PermissionConfirmer confirmer =
-                prompt ->
-                        "yes"
-                                .equals(
-                                        permissionBridge.waitForDecision(
-                                                permissionBridge.newPermissionId(), null, prompt, prompt, null));
+                prompt -> {
+                    String permissionId = permissionBridge.newPermissionId();
+                    // AgentLoop 传的是 "toolName → 描述" 的 prompt; 取 toolName 首段, reason 为全文。
+                    String toolName = prompt.split("→", 2)[0].trim();
+                    emit(streamId, new SseEvent.PermissionRequest(permissionId, null, toolName, prompt, DECISION_CHOICES));
+                    String decision =
+                            permissionBridge.waitForDecision(permissionId, null, toolName, prompt, DECISION_CHOICES);
+                    emit(streamId, new SseEvent.PermissionResponse(permissionId, decision));
+                    return "yes".equals(decision);
+                };
         // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
         AgentLoop loop = runtime.createLoop(streamId, adapter, confirmer, aborted::get);
         ActiveStream meta =
@@ -157,6 +163,23 @@ public class ChatStreamService {
 
     /** 保留时长上限(ms): 完成后仍允许客户端在此窗口内订阅 / 用 Last-Event-ID 重连。 */
     private static final long STREAM_RETENTION_MS = 10 * 60 * 1000L;
+
+    /** 权限决策选项 (spec §Requirement: permission_request 载荷)。 */
+    private static final List<String> DECISION_CHOICES = List.of("yes", "no", "always");
+
+    /**
+     * 用户提交权限决策 (spec §Requirement: permission_request 决策)。把 yes/no/always 交给
+     * {@link PermissionBridge#submitDecision} 唤醒等待线程。返回 {@code true} 表示找到待决策流并已提交。
+     *
+     * @param streamId 流 id
+     * @param permissionId 待决策的 permission_id
+     * @param decision 决策值 (yes/no/always)
+     * @return 是否成功提交 (找到 permission_id 且决策合法)
+     */
+    public boolean submitDecision(String streamId, String permissionId, String decision) {
+        if (actives.get(streamId) == null) return false;
+        return permissionBridge.submitDecision(permissionId, decision);
+    }
 
     /** 惰性清理: 超过保留时长的已结束流从 map 移除, 防内存泄漏。 */
     private void evictIfExpired(ActiveStream meta, long retentionMs) {

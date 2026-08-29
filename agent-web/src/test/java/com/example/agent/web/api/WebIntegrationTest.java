@@ -198,4 +198,14 @@ class WebIntegrationTest {
                 .expectStatus()
                 .isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    @Test
+    void decisionUnknownPermissionReturns404() {
+        client.post()
+                .uri("/api/chat/decision/{id}", "some-stream")
+                .bodyValue(Map.of("permission_id", "no-such", "decision", "yes"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
 }
