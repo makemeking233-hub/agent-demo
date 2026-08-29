@@ -240,6 +240,64 @@ public class SessionStore implements AutoCloseable {
     }
 
     /**
+     * 读取指定 sessions 目录下 mtime 最新的 .jsonl 文件，反序列化为所有 entry（v0.2 /resume 命令用）。
+     *
+     * <p>行为：
+     *
+     * <ul>
+     *   <li>目录不存在 / 目录为空 / 没有 .jsonl 文件 → 返回空 list
+     *   <li>多个 .jsonl 文件 → 选 {@link java.nio.file.attribute.FileTime} 最大的（mtime 排序）
+     *   <li>读取所有非空行，反序列化为 {@link SessionEntry}
+     * </ul>
+     *
+     * @param sessionsDir sessions 目录路径（如 {@code ~/.agent-demo/sessions/}）
+     * @return entry 列表（按文件中出现顺序）；无文件或异常时返回空 list
+     */
+    public static List<SessionEntry> loadLatest(Path sessionsDir) {
+        if (sessionsDir == null || !Files.isDirectory(sessionsDir)) {
+            return List.of();
+        }
+        try (var stream = Files.list(sessionsDir)) {
+            var files =
+                    stream
+                            .filter(Files::isRegularFile)
+                            .filter(p -> p.getFileName().toString().endsWith(".jsonl"))
+                            .toList();
+            if (files.isEmpty()) {
+                return List.of();
+            }
+            // 找 mtime 最大的文件
+            Path latest = null;
+            java.nio.file.attribute.FileTime latestMtime = null;
+            for (Path f : files) {
+                java.nio.file.attribute.FileTime mt = Files.getLastModifiedTime(f);
+                if (latestMtime == null || mt.compareTo(latestMtime) > 0) {
+                    latest = f;
+                    latestMtime = mt;
+                }
+            }
+            if (latest == null) {
+                return List.of();
+            }
+            // 读所有行 + 反序列化
+            ObjectMapper mapper = new ObjectMapper();
+            List<SessionEntry> result = new ArrayList<>();
+            for (String line : Files.readAllLines(latest)) {
+                if (line == null || line.isBlank()) continue;
+                try {
+                    result.add(mapper.readValue(line, SessionEntry.class));
+                } catch (Exception parseEx) {
+                    log.warn("跳过无法解析的 session 行: {}", line, parseEx);
+                }
+            }
+            return result;
+        } catch (IOException e) {
+            log.warn("loadLatest 读取 sessions 目录失败: {}", sessionsDir, e);
+            return List.of();
+        }
+    }
+
+    /**
      * @return 调试用字符串（含 file / lastSyncedOffset / batchSize / intervalMs）
      */
     @Override
