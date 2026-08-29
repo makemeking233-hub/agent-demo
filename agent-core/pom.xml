@@ -88,6 +88,11 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <mainClass>com.example.agent.AgentCli</mainClass>
+                    <!-- 关键: 用 classifier=exec 把 repackage 的 fat jar 命名为 agent-cli-exec.jar,
+                         保留 agent-cli.jar 为普通库 jar。否则 repackage 会把 agent-cli.jar 替换成
+                         Spring Boot fat jar (BOOT-INF/ 内层结构), 同一 reactor 里 agent-web 编译时
+                         无法解析 com.example.agent.* 类 (见 SseSessionLogSink 编译失败根因)。 -->
+                    <classifier>exec</classifier>
                 </configuration>
             </plugin>
             <plugin>
