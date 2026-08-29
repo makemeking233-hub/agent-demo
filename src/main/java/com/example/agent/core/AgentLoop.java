@@ -6,6 +6,7 @@ import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.ToolCall;
 import com.example.agent.llm.ToolSpec;
+import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionManager;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.Tool;
@@ -94,6 +95,11 @@ public class AgentLoop {
     private final String systemPrompt;
 
     /**
+     * 会话日志观察者（可空；默认 no-op，见 {@link SessionLogSink#NOOP}）
+     */
+    private final SessionLogSink sink;
+
+    /**
      * 构造 Agent 主循环（无系统提示词；等价于 {@code systemPrompt = null}）。
      *
      * @param provider          LLM provider
@@ -112,7 +118,7 @@ public class AgentLoop {
             int maxToolIterations,
             String model,
             Path workingDir) {
-        this(provider, tools, history, printer, maxToolIterations, model, workingDir, null);
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, null, SessionLogSink.NOOP);
     }
 
     /**
@@ -136,6 +142,32 @@ public class AgentLoop {
             String model,
             Path workingDir,
             String systemPrompt) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, systemPrompt, SessionLogSink.NOOP);
+    }
+
+    /**
+     * 构造 Agent 主循环（带会话日志观察者）。
+     *
+     * @param provider          LLM provider
+     * @param tools             工具注册表
+     * @param history           初始消息历史
+     * @param printer           流式打印机
+     * @param maxToolIterations 单轮最大工具调用次数（超过熔断）
+     * @param model             模型名（{@code null} 用默认 deepseek-chat）
+     * @param workingDir        工作目录（所有相对路径的基准）
+     * @param systemPrompt      系统提示词（{@code null} 不注入）
+     * @param sink              会话日志观察者（{@code null} 用 no-op）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt,
+            SessionLogSink sink) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
@@ -143,6 +175,7 @@ public class AgentLoop {
         this.maxToolIterations = maxToolIterations;
         this.model = model;
         this.systemPrompt = systemPrompt;
+        this.sink = sink != null ? sink : SessionLogSink.NOOP;
         this.toolContext = new Tool.ToolContext(workingDir, new PermissionManager(), () -> false);
     }
 
@@ -162,8 +195,14 @@ public class AgentLoop {
      * @return 该轮拼接后的 {@link TurnResult}（finalMessage + token 累计）
      */
     public Mono<TurnResult> processTurn(Message.User userMsg) {
+        sink.onTurnStart(0);
+        sink.onUser(userMsg);
         history.append(userMsg);
-        return streamUntilToolsSettled(0).next().map(this::buildTurnResult);
+        return streamUntilToolsSettled(0)
+                .next()
+                .map(this::buildTurnResult)
+                .doOnSuccess(sink::onTurnEnd)
+                .doOnError(e -> sink.onTurnEnd(new TurnResult("", 0, 0, 0)));
     }
 
     /**
@@ -183,6 +222,7 @@ public class AgentLoop {
                 .flatMapMany(
                         chunks -> {
                             Message.Assistant assistant = extractAssistant(chunks);
+                            sink.onAssistant(assistant, List.of());
                             history.append(assistant);
                             if (assistant.toolCalls() == null || assistant.toolCalls().isEmpty()) {
                                 printer.onFinished();
@@ -277,17 +317,30 @@ public class AgentLoop {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Mono<List<ToolResult<Object>>> executeOne(ToolCall call, Tool tool) {
         if (tool == null) {
-            return Mono.just(List.of(ToolResult.<Object>error("工具不存在: " + call.name())));
+            return Mono.just(
+                    List.of(ToolResult.<Object>error(call.id(), "工具不存在: " + call.name())));
         }
+        sink.onToolCall(call);
+        long startNs = System.nanoTime();
         return Mono.fromCallable(() -> (Object) tool.parseArguments(call.argumentsJson()))
                 // raw cast 隔离到 executeTool，主链保持强类型，onErrorResume 的 e 才能正确推断为 Throwable
                 .flatMap(input -> executeTool(tool, input))
-                .map(r -> List.of((ToolResult<Object>) r))
+                .map(r -> {
+                    // error 结果缺 toolCallId 时补全调用 id（否则回流 400: tool_call_id 不能为 null）
+                    ToolResult<Object> typed = (ToolResult<Object>) r;
+                    if (typed.toolCallId() == null && typed instanceof ToolResult.Err<?> err) {
+                        typed = ToolResult.error(call.id(), err.message());
+                    }
+                    sink.onToolResult(typed, (System.nanoTime() - startNs) / 1_000_000L);
+                    return List.of(typed);
+                })
                 .onErrorResume(
                         e -> {
                             log.warn("工具执行失败 [{}]: {}", call.name(), e.getMessage());
-                            return Mono.just(
-                                    List.of(ToolResult.<Object>error("工具执行失败: " + e.getMessage())));
+                            ToolResult<Object> err =
+                                    ToolResult.error(call.id(), "工具执行失败: " + e.getMessage());
+                            sink.onToolResult(err, (System.nanoTime() - startNs) / 1_000_000L);
+                            return Mono.just(List.of(err));
                         });
     }
 

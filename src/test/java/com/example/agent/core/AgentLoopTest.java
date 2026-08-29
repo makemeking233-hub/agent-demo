@@ -340,4 +340,137 @@ class AgentLoopTest {
                                                 && t.content().contains("hello from file"));
         assertEquals(true, hasContent, "ReadFile 应成功读到文件内容（JSON 参数被正确反序列化）");
     }
+
+    @Test
+    void toolFailureResultCarriesToolCallId(@TempDir java.nio.file.Path tmp) throws Exception {
+        // 工具 doExecute 返回 error（toolCallId=null）时，回流消息必须补全调用 id（否则 DeepSeek 400:
+        // "messages[i]: invalid type: null, expected a string"）
+        String argsJson =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .writeValueAsString(
+                                java.util.Map.of("path", tmp.resolve("missing.txt").toString()));
+
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                (StreamChunk)
+                                        new StreamChunk.ToolCallStart("1", "ReadFile", argsJson),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+
+        ToolRegistry tools = new ToolRegistry();
+        tools.register(new com.example.agent.tools.file.ReadFileTool());
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        tmp);
+
+        loop.processTurn(new Message.User("hi")).block();
+        boolean hasErrorWithId =
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult t
+                                                && t.isError()
+                                                && "1".equals(t.toolCallId()));
+        assertEquals(true, hasErrorWithId, "error tool_result 必须携带调用 id，否则回流 400");
+    }
+
+    @Test
+    void parseFailureResultCarriesToolCallId() {
+        // parseArguments 抛异常（onErrorResume 路径）时，error 结果同样必须携带调用 id
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Tool fakeTool =
+                new Tool() {
+                    @Override
+                    public String name() {
+                        return "fake";
+                    }
+
+                    @Override
+                    public String description() {
+                        return "fake tool";
+                    }
+
+                    @Override
+                    public java.util.Map<String, Object> inputSchema() {
+                        return java.util.Map.of();
+                    }
+
+                    @Override
+                    public String renderUse(Object input) {
+                        return "fake()";
+                    }
+
+                    @Override
+                    public String renderResult(Object output) {
+                        return String.valueOf(output);
+                    }
+
+                    @Override
+                    public Object parseArguments(String argumentsJson) {
+                        throw new IllegalArgumentException("bad json");
+                    }
+
+                    @Override
+                    public Mono<ToolResult<Object>> execute(Object input, ToolContext ctx) {
+                        return Mono.just(ToolResult.ok("ok", "<auto>"));
+                    }
+                };
+
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                (StreamChunk)
+                                        new StreamChunk.ToolCallStart(
+                                                "1", "fake", "{\"path\":\"x\"}"),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        doReturn(fakeTool).when(tools).getRaw("fake");
+        when(tools.list()).thenReturn(List.of());
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+
+        loop.processTurn(new Message.User("hi")).block();
+        boolean hasErrorWithId =
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult t
+                                                && t.isError()
+                                                && "1".equals(t.toolCallId()));
+        assertEquals(true, hasErrorWithId, "parseArguments 失败产生的 error 也必须携带调用 id");
+    }
 }

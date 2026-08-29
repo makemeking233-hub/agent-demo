@@ -31,9 +31,22 @@ public sealed interface ToolResult<O> {
         return new Ok<>(toolCallId, output, false);
     }
 
-    /** 构造错误结果 */
+    /** 构造错误结果（toolCallId 为 {@code null}；回流给模型前由 AgentLoop 补全调用 id） */
     static <O> ToolResult<O> error(String message) {
         return new Err<>(null, message, true);
+    }
+
+    /**
+     * 构造错误结果（带调用 id）。
+     *
+     * <p>回流给模型的 {@code tool_result} 消息要求 {@code tool_call_id} 非空（DeepSeek 对 null
+     * 返回 400），工具内部产生的 error 结果由 AgentLoop 用本工厂补全。
+     *
+     * @param toolCallId 关联的工具调用 ID
+     * @param message 错误信息
+     */
+    static <O> ToolResult<O> error(String toolCallId, String message) {
+        return new Err<>(toolCallId, message, true);
     }
 
     /**
