@@ -91,6 +91,9 @@ export function ChatPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div style={{ padding: '6px 16px', borderBottom: '1px solid #eee', textAlign: 'right' }}>
+        <a href="#/logs" style={{ fontSize: 13, color: '#1890ff' }}>📋 会话日志</a>
+      </div>
       <div ref={listRef} style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {items.map((it) => {
           if (it.kind === 'text') return <MessageBubble key={it.id} role={it.role} text={it.text} />;
