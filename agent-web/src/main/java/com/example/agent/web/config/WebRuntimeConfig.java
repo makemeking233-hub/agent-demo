@@ -11,6 +11,7 @@ import java.nio.file.Paths;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
 
 /**
  * web 运行时共享 bean（add-web-ui-v0-1 / D2）。
@@ -19,15 +20,19 @@ import org.springframework.context.annotation.Profile;
  * 由 {@link com.example.agent.web.stream.WebAgentRuntime} 注入。集成测试可用 {@code @MockBean}
  * 替换 provider 以注入固定 chunk 序列，无需真实调用外部 LLM。
  *
- * <p>API key 优先级与 CLI 一致：env &gt; application-local.yml &gt; ~/.agent-demo/config.yaml。
+ * <p>API key 优先级与 CLI 一致：env(DEEPSEEK_API_KEY) &gt; application-local.yml(agent.provider.api-key)
+ * &gt; ~/.agent-demo/config.yaml。这保证用户在 git 忽略的 application-local.yml 里填真实 key 后，
+ * web 也能直接用（无需改 ~/.agent-demo/config.yaml）。
  */
 @Configuration
 @Profile("web")
 public class WebRuntimeConfig {
 
     private final AgentConfig cfg;
+    private final Environment env;
 
-    public WebRuntimeConfig() {
+    public WebRuntimeConfig(Environment env) {
+        this.env = env;
         this.cfg =
                 new ConfigLoader()
                         .load(
@@ -39,7 +44,12 @@ public class WebRuntimeConfig {
 
     @Bean
     public LlmProvider webLlmProvider() {
-        String apiKey = pickFirstNonBlank(System.getenv("DEEPSEEK_API_KEY"), cfg.provider().apiKey());
+        // 与 CLI 一致的 key 优先级: env > application-local.yml(agent.provider.api-key) > config.yaml
+        String apiKey =
+                pickFirstNonBlank(
+                        env.getProperty("DEEPSEEK_API_KEY"),
+                        env.getProperty("agent.provider.api-key"),
+                        cfg.provider().apiKey());
         return AgentLoopFactory.buildProvider(cfg, apiKey);
     }
 

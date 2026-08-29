@@ -32,8 +32,7 @@ import reactor.core.publisher.Flux;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "DEEPSEEK_API_KEY=sk-test-fake",
-            "agent.web.trusted-hosts=0.0.0.0,::0,127.0.0.1,::1",
-            "spring.main.web-application-type=reactive"
+            "agent.web.trusted-hosts=0.0.0.0,::0,127.0.0.1,::1"
         })
 @AutoConfigureWebTestClient
 @ActiveProfiles("web")

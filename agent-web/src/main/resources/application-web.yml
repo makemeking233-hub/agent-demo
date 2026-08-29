@@ -10,6 +10,14 @@ server:
   # HTTP 端口; agent.web.port 跟这个对齐 (v0.1 不支持 port override)
   port: 8080
 
+# 关键: base application.yml 的 spring.main.web-application-type=none (CLI 不需要内嵌 server)。
+# web profile 必须覆盖为 reactive, 否则 Spring 不起 HTTP server, WebApplication 启动后立刻退出
+# (banner 打印后无 Netty started, 进程退出码 0)。WebApplication.main() 的 setWebApplicationType(REACTIVE)
+# 会被配置文件覆盖, 因此必须在 profile 配置文件里显式声明。
+spring:
+  main:
+    web-application-type: reactive
+
 agent:
   web:
     # 绑定的网卡 IP. 默认 loopback (单用户本地).

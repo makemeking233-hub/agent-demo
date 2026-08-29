@@ -34,14 +34,22 @@ public class ChatController {
         if (req.content() == null || req.content().isBlank()) {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "content_empty")));
         }
-        String key = env.getProperty("DEEPSEEK_API_KEY");
+        // 与 CLI 一致的 key 优先级: env(DEEPSEEK_API_KEY) > application-local.yml(agent.provider.api-key)
+        String key = pickFirstNonBlank(env.getProperty("DEEPSEEK_API_KEY"), env.getProperty("agent.provider.api-key"));
         if (key == null || key.isBlank()) {
-            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", "provider_not_configured", "hint", "set DEEPSEEK_API_KEY")));
+            return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", "provider_not_configured", "hint", "set DEEPSEEK_API_KEY 或 application-local.yml 的 agent.provider.api-key")));
         }
         String sessionId = req.sessionId() != null ? req.sessionId() : UUID.randomUUID().toString();
         ChatStreamService.ActiveStream meta = streams.create(sessionId, "deepseek-chat");
         streams.start(meta.streamId(), req.content());
         return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, "deepseek-chat")));
+    }
+
+    private static String pickFirstNonBlank(String... candidates) {
+        for (String s : candidates) {
+            if (s != null && !s.isBlank()) return s;
+        }
+        return null;
     }
 
     @PostMapping("/abort/{streamId}")

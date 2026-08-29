@@ -10,7 +10,8 @@ class WebRuntimeConfigTest {
 
     @Test
     void webRuntimeConfigBuildsBeans() {
-        WebRuntimeConfig cfg = new WebRuntimeConfig();
+        // WebRuntimeConfig 现用 Spring Environment 解析 key 链, 测试注入 MockEnvironment
+        WebRuntimeConfig cfg = new WebRuntimeConfig(new org.springframework.mock.env.MockEnvironment());
         assertThat(cfg.webLlmProvider()).isNotNull();
         assertThat(cfg.webToolRegistry()).isNotNull();
         assertThat(cfg.webToolRegistry().list()).isNotEmpty();
