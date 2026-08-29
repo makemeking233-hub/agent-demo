@@ -77,8 +77,9 @@
 - [ ] 11.1 `docs/design/web-ui-design.md`: 本 design.md 镜像精简版，附 SSE 协议 cheat sheet
 - [ ] 11.2 `README.md` 加 web profile 启动说明 (中文)
 - [ ] 11.3 `application-web.yml` 配置项加注释；`-Dagent.web.trusted-hosts=192.168.1.0/24` 用法进 README
-- [ ] 11.4 `mvn -pl agent-web verify` 全绿；commit + push (per AGENTS.md §2.2 `commit 即 push`)
+- [x] 11.4 `mvn -pl agent-web verify` 全绿；commit + push (per AGENTS.md §2.2 `commit 即 push`)
 - [ ] 11.5 准备 archive: `openspec validate add-web-ui-v0-1` 通过；`openspec archive add-web-ui-v0-1` 把 delta spec 合到 `openspec/specs/web-ui/spec.md`
+
 
 
 
