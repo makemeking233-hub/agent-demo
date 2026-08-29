@@ -122,4 +122,44 @@ class DeepSeekProviderTest {
                                         "$.stream_options.include_usage",
                                         WireMock.equalTo("true"))));
     }
+
+    @Test
+    void buffersResponseLargerThanDefault256kLimit() {
+        // 300KB 的 content 超过 WebClient 默认 256KB 内存上限，验证已放大 maxInMemorySize 不会截断
+        String content = "x".repeat(300_000);
+        wm.stubFor(
+                post(urlEqualTo("/v1/chat/completions"))
+                        .willReturn(
+                                aResponse()
+                                        .withStatus(200)
+                                        .withHeader("Content-Type", "text/event-stream")
+                                        .withBody(
+                                                "data: {\"choices\":[{\"delta\":{\"content\":\""
+                                                        + content
+                                                        + "\"}}]}\n\n"
+                                                        + "data: [DONE]\n\n")));
+
+        ChatRequest req =
+                new ChatRequest(
+                        "deepseek-chat",
+                        null,
+                        List.of(new Message.User("hello")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        Map.of());
+
+        StepVerifier.create(provider.streamChat(req).collectList())
+                .assertNext(
+                        chunks ->
+                                assertTrue(
+                                        chunks.stream()
+                                                .anyMatch(
+                                                        c ->
+                                                                c instanceof StreamChunk.TextDelta t
+                                                                        && t.text().length()
+                                                                                == 300_000),
+                                        "期望 TextDelta 长度 300000；实际 " + chunks))
+                .verifyComplete();
+    }
 }

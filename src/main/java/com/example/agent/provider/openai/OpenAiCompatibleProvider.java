@@ -34,6 +34,14 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
   private static final Logger log = LoggerFactory.getLogger(OpenAiCompatibleProvider.class);
 
     /**
+     * 响应体最大内存缓冲（字节）。
+     *
+     * <p>v0.1 用 {@code bodyToMono(String.class)} 一次性缓冲完整 SSE 响应后按行解析；WebClient 默认
+     * 256KB 上限会在长响应（长文档 / 大工具参数）时触发 {@code DataBufferLimitException}，这里放大到 16MB。
+     */
+    private static final int MAX_IN_MEMORY_BYTES = 16 * 1024 * 1024;
+
+    /**
      * HTTP 客户端（带 Authorization: Bearer header）
      */
     protected final WebClient client;
@@ -54,6 +62,7 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
                 WebClient.builder()
                         .baseUrl(baseUrl)
                         .defaultHeader("Authorization", "Bearer " + apiKey)
+                        .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_BYTES))
                         .build();
         this.mapper = new OpenAiCompatibleMapper();
     }
