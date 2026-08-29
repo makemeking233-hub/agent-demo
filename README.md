@@ -28,7 +28,7 @@
 - ✅ Slash 命令：`/help` `/clear` `/quit` `/history`（`/model` `/resume` v0.2）
 - ✅ Memory 记忆：长期记忆写入 `~/.agent-demo/memory/`，下次会话按相关度自动召回
 - ✅ 上下文压缩：128K 上限前自动触发 compact，失败熔断防止死循环
-- ✅ 错误重试：网络 / 5xx / 429 自动重试；401 立即停止
+- ✅ 错误重试：网络 / 5xx / 429 自动重试；401 立即停止，REPL 打印友好提示（key 未设 / 失效 / 网络 / 限流）后继续等待输入而非退出进程
 - ✅ Ctrl+C 中断：第一次优雅取消当前生成、第二次（500ms 内）强制退出
 - ✅ 跨平台：Windows / Linux / macOS；中文编码三重防御（GBK↔UTF-8 回退）
 - ✅ 成本可见：每轮 token 累计，`/history` 显示估算费用，达到阈值告警 / 停止
@@ -80,6 +80,8 @@ provider:
 > 推荐用环境变量覆盖 API key：`export DEEPSEEK_API_KEY=sk-...`
 >
 > 优先级：环境变量 > `~/.agent-demo/config.yaml` > `application.yml` 内置默认值。
+>
+> **401/网络错误**：单次 LLM 调用失败 REPL 不退出进程，会打印友好提示（"key 未设或失效 / baseUrl 错 / 限流 / 网络问题"）后继续等待输入。`/clear` 可清空历史重试。
 
 ### 4.3 启动交互
 
