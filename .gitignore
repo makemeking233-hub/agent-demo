@@ -22,6 +22,14 @@ docs/test-design.md.corrupt.bak
 # 注意：必须用 /tools/ 而非 tools/，否则会误匹配 src/main/java/com/example/agent/tools/
 /tools/
 
+# 本地 gitleaks 二进制（22MB，勿提交；配置 .gitleaks.toml 与 CI 工作流保留提交）
+/.tools/
+
+# gitleaks 本地扫描残留（测试假密钥文件 / JSON 报告）
+.gitleaks-test-fake-secret.txt
+.rbase.json
+gitleaks-report*.json
+
 # Node.js dependencies（mermaid 验证脚本等需要）
 node_modules/
 

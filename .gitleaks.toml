@@ -1,0 +1,93 @@
+# gitleaks 配置 (v8.x)
+# 文档: https://github.com/gitleaks/gitleaks/blob/master/config/gitleaks.toml.example
+#
+# 策略:
+# - useDefault = true 加载内置 100+ 规则 (AWS / GitHub / OpenAI / private-key / JWT / Slack ...)
+# - 叠加 2 条自定义规则: deepseek-api-key, openai-style-api-key (项目专属)
+# - allowlist 精确放行已知占位符 / 文档示例 / 测试 fixture
+#
+# 关键: 所有同时含 `paths` + `regexes` 的 allowlist 必须带 `condition = "AND"`,
+# 否则默认 OR 会命中 path 即跳过整个文件, 从而漏掉真正泄漏。已实测验证。
+#
+# .gitignore 已隔离 application-local.yml / .env / *.local.yml 等, CI 跑 git 模式不会命中。
+
+title = "agent-demo gitleaks config"
+
+# ──────────── 加载 gitleaks 8.x 内置默认规则 ────────────
+[extend]
+useDefault = true
+
+# ──────────── 文档占位符放行 ────────────
+# docs/ 中关于"如何配置 API key"的说明文字含 'sk-...' 占位符,
+# 这些是用户教育内容, 不是真实凭证。condition=AND 保证:
+#   path 命中 docs/*.md 且 secret 命中占位符正则时才放行,
+#   真实泄露(如 sk-<32hex>)不会被整文件跳过。
+[[allowlists]]
+  description = "docs/ 中 API key 配置说明的占位符 (sk-... / sk-xxx / $env:...='sk-...')"
+  condition = "AND"
+  targetRules = ["generic-api-key", "openai-style-api-key", "deepseek-api-key"]
+  paths = ['''docs/.*\.md$''']
+  regexes = [
+    '''sk[-a-z]*\.{1,3}''',                              # sk-...  / sk-ant...
+    '''sk[-a-z]*\bxxx+\b''',                              # sk-xxx / sk-test-xxxxxxx
+    '''\$env:[A-Z_]+=['\''"]sk[-a-z]*\.{1,3}['\''"]''',  # $env:XXX='sk-...'
+  ]
+
+# CI / 构建脚本中命令模板含 sk-... 占位
+[[allowlists]]
+  description = "build/CI 脚本中命令模板的 sk-... 占位符"
+  condition = "AND"
+  targetRules = ["generic-api-key", "openai-style-api-key", "deepseek-api-key"]
+  paths = [
+    '''(?:^|/)(?:\.github|tools|scripts)/.*\.(?:sh|bash|ps1|yml|yaml|json)(?:\.|$)''',
+    '''(?:^|/)docs/.*\.(?:sh|bash|ps1)(?:\.|$)''',
+  ]
+  regexes = [
+    '''sk[-a-z]*\.{1,3}''',
+    '''sk[-a-z]*\bxxx+\b''',
+    '''\$env:[A-Z_]+=['\''"]sk[-a-z]*\.{1,3}['\''"]''',
+  ]
+
+# tests/ 中模拟密钥 (fixture)
+[[allowlists]]
+  description = "测试 fixture 中的模拟密钥 (sk-test-/sk-fake-/sk-mock- 等)"
+  condition = "AND"
+  targetRules = ["generic-api-key", "openai-style-api-key", "deepseek-api-key"]
+  paths = ['''(?:^|/)src/test/.*$''']
+  regexes = [
+    '''sk-(?:test|fake|mock|demo|example|placeholder)[-_a-zA-Z0-9]*''',
+  ]
+
+# git SHA-1 在文档中的引用 (经常被误判为 secret)
+# 用 regexTarget="match": 只有被 gitleaks 捕获的 match 本身是 SHA-1 才放行,
+# 避免 path 命中即跳过整文件。
+[[allowlists]]
+  description = "git SHA-1 引用 (在文档中被误判为 secret)"
+  condition = "AND"
+  regexTarget = "match"
+  regexes = ['''\b[a-f0-9]{7,40}\b''']
+  paths = ['''docs/.*\.md$''']
+
+# ──────────── 自定义规则 ────────────
+# 强化 DeepSeek API key 检测 (32 字符 hex, 比 generic 更精确)
+[[rules]]
+  id = "deepseek-api-key"
+  description = "DeepSeek API Key (sk- + 32 字符 hex)"
+  regex = '''\bsk-[a-f0-9]{32}\b'''
+  tags = ["key", "deepseek", "llm"]
+  keywords = ["sk-"]
+  entropy = 3.0
+  [rules.allowlist]
+    description = "测试 fixture / 文档占位符"
+    regexes = [
+      '''sk-(?:test|fake|mock|demo|example|placeholder)[-_a-zA-Z0-9]*''',
+    ]
+
+# 加强 OpenAI 风格 key 检测
+[[rules]]
+  id = "openai-style-api-key"
+  description = "OpenAI/Anthropic 风格 API key (sk- + 20+ 字符)"
+  regex = '''\bsk-(?:proj-|ant-|or-|live-)?[A-Za-z0-9_-]{20,}\b'''
+  tags = ["key", "openai", "anthropic"]
+  keywords = ["sk-"]
+  entropy = 3.5
