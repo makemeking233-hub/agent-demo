@@ -109,6 +109,28 @@ public class MessageHistory {
         compactFailures.set(0);
     }
 
+    /**
+     * 整体替换消息历史（v0.2 /resume 命令用）。
+     *
+     * <p>行为：
+     *
+     * <ul>
+     *   <li>清空当前 {@link #messages} 列表
+     *   <li>重置 {@link #compactFailures} 计数器（resume 后 compact 应从 0 开始计数）
+     *   <li>不重置 {@link #recentFileContents}（Post-Compact 重注入仍可能复用旧文件缓存）
+     * </ul>
+     *
+     * @param newMessages 新消息列表（{@code null} 视为空 list）
+     */
+    public void replaceAll(List<Message> newMessages) {
+        this.messages.clear();
+        if (newMessages != null) {
+            this.messages.addAll(newMessages);
+        }
+        // reset compact counter：resume 后从干净状态开始计压缩失败
+        this.compactFailures.set(0);
+    }
+
     /** 在 history 头部插入"前面的对话已被压缩为摘要"的 system 边界消息（M4 Post-Compact 用） */
     public void prependSystemBoundaryMessage(String summary) {
         messages.add(0, new Message.System("[COMPACTED]\n" + summary));

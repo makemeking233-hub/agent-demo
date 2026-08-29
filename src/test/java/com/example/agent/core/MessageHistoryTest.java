@@ -57,4 +57,46 @@ class MessageHistoryTest {
         assertTrue(((Message.System) top).content().contains("[RECENT FILES]"));
         assertTrue(((Message.System) top).content().contains("/tmp/a.txt"));
     }
+
+    @Test
+    void replaceAllClearsAndReplacesHistory() {
+        // 先放一些内容
+        hist.append(new Message.User("old1"));
+        hist.append(new Message.Assistant("old2", java.util.List.of()));
+        assertEquals(2, hist.size());
+
+        // replaceAll 应该清空 + 替换
+        hist.replaceAll(
+                java.util.List.of(
+                        new Message.User("new1"),
+                        new Message.Assistant("new2", java.util.List.of()),
+                        new Message.User("new3")));
+
+        assertEquals(3, hist.size());
+        assertEquals("new1", hist.all().get(0).content());
+        assertEquals("new2", hist.all().get(1).content());
+        assertEquals("new3", hist.all().get(2).content());
+    }
+
+    @Test
+    void replaceAllWithEmptyListClearsHistory() {
+        hist.append(new Message.User("will be cleared"));
+        assertEquals(1, hist.size());
+
+        hist.replaceAll(java.util.List.of());
+
+        assertEquals(0, hist.size());
+    }
+
+    @Test
+    void replaceAllResetsCompactFailureCounter() {
+        hist.incrementCompactFailures();
+        hist.incrementCompactFailures();
+        assertEquals(2, hist.consecutiveCompactFailures());
+
+        // replaceAll 后应该重置（resume 后续 compact 应从 0 开始）
+        hist.replaceAll(java.util.List.of(new Message.User("fresh start")));
+
+        assertEquals(0, hist.consecutiveCompactFailures());
+    }
 }

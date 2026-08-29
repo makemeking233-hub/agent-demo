@@ -463,14 +463,19 @@ public class ChatCommand implements Runnable {
                         },
                         ctx.sessionsDir(),
                         messages -> {
-                            // /resume 回调：T2 阶段仅打印（T3 将调 MessageHistory.replaceAll 真替换）
+                            // /resume 回调：调 MessageHistory.replaceAll 整体替换
+                            MessageHistory fresh = new MessageHistory(ctx.estimator());
+                            fresh.replaceAll(messages);
+                            ctx.history().set(fresh);
+                            ctx.loop().setHistory(fresh);
+                            if (ctx.recorder() != null) ctx.recorder().flush();
+                            // 累计 token 数组重置（/resume 前的累计不适用于新历史）
+                            ctx.totalPrompt()[0] = 0;
+                            ctx.totalCompletion()[0] = 0;
                             if (messages.isEmpty()) {
                                 System.out.println("[/resume] 当前无可恢复会话");
                             } else {
-                                System.out.println(
-                                        "[/resume] 准备恢复 "
-                                                + messages.size()
-                                                + " 条消息（T3 真正替换 history）");
+                                System.out.println("[/resume] 已恢复 " + messages.size() + " 条消息");
                             }
                         });
     }
