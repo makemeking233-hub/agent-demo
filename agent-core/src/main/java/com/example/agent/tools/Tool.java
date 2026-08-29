@@ -1,6 +1,6 @@
 package com.example.agent.tools;
 
-import com.example.agent.AbortSignal;
+import com.example.agent.signal.AbortSignal;
 import com.example.agent.permission.PermissionDecision;
 import com.example.agent.permission.PermissionManager;
 

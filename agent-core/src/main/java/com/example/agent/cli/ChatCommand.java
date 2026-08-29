@@ -1,6 +1,6 @@
 package com.example.agent.cli;
 
-import com.example.agent.AbortSignal;
+import com.example.agent.signal.AbortSignal;
 import com.example.agent.config.AgentConfig;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
