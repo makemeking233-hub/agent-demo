@@ -40,7 +40,7 @@ public class ChatController {
         }
         String sessionId = req.sessionId() != null ? req.sessionId() : UUID.randomUUID().toString();
         ChatStreamService.ActiveStream meta = streams.create(sessionId, "deepseek-chat");
-        streams.stop(meta.streamId(), "stop");
+        streams.start(meta.streamId(), req.content());
         return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, "deepseek-chat")));
     }
 
