@@ -2,8 +2,8 @@
 
 - [x] 1.1 父 pom 加 `agent-web` module 声明 + 子 pom 写依赖 (spring-boot-starter-webflux / frontend-maven-plugin / nodejs / npm 目标)
 - [x] 1.2 `agent-web` 子模块建 `src/main/java/com/example/agent/web/` 空包 + `src/main/resources/application-web.yml`
-- [ ] 1.3 `agent-web/frontend/` 初始化: `npm init -y`, 装 vite@6 + react@18 + react-dom + typescript, 写 `vite.config.ts` 输出到 `../src/main/resources/static/`
-- [ ] 1.4 frontend `src/main.tsx` + `src/App.tsx` 最简骨架 (空 div + Vite logo 验证 build)
+- [x] 1.3 `agent-web/frontend/` 初始化: `npm init -y`, 装 vite@6 + react@18 + react-dom + typescript, 写 `vite.config.ts` 输出到 `../src/main/resources/static/`
+- [x] 1.4 frontend `src/main.tsx` + `src/App.tsx` 最简骨架 (空 div + Vite logo 验证 build)
 - [ ] 1.5 验证 `mvn -pl agent-web -am clean package` 能跑通且 `agent-web.jar` 含 `static/index.html` + `static/assets/index-*.js`
 
 ## 2. Backend — health + static + 配置

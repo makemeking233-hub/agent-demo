@@ -1,0 +1,25 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// frontend-maven-plugin: mvn package 阶段跑 `npm run build` 调到这里.
+// 产物输出到 agent-web/src/main/resources/static/, 让 Spring Boot 直接托管.
+// 开发期: `npm run dev` 起 vite dev server (proxy /api 到 http://localhost:8080).
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: '../src/main/resources/static',
+    emptyOutDir: true,
+    sourcemap: true,
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        ws: true,
+      },
+    },
+  },
+});
