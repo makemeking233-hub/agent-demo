@@ -24,11 +24,11 @@
 
 ## 4. 日志保留策略
 
-- [ ] 4.1 `AgentConfig.Logging` 增加 `retentionMaxAgeDays`（默认 30）/ `retentionKeepSessions`（默认 50），ConfigLoader 解析（测试：缺省默认值）
-- [ ] 4.2 新增 `log/SessionRetentionCleaner`：新建会话时清理过期目录 + 超数量删最旧，单目录失败只 WARN（测试：过期删除、数量上限、删除失败跳过）
-- [ ] 4.3 `SessionLogger` 构造时调用 cleaner（测试：构造后旧目录被清）
-- [ ] 4.4 logback.xml 改 `SizeAndTimeBasedRollingPolicy`（10MB × 7 天）（测试：配置加载不报错；`mvn test` 日志正常）
-- [ ] 4.5 本组完成后 `mvn test` 全绿 + commit + push
+- [x] 4.1 `AgentConfig.Logging` 增加 `retentionMaxAgeDays`（默认 30）/ `retentionKeepSessions`（默认 50），ConfigLoader 解析（测试：缺省默认值）
+- [x] 4.2 新增 `log/SessionRetentionCleaner`：新建会话时清理过期目录 + 超数量删最旧，单目录失败只 WARN（测试：过期删除、数量上限、删除失败跳过）
+- [x] 4.3 `SessionLogger` 构造时调用 cleaner（测试：构造后旧目录被清）
+- [x] 4.4 logback.xml 改 `SizeAndTimeBasedRollingPolicy`（10MB × 7 天）（测试：配置加载不报错；`mvn test` 日志正常）
+- [x] 4.5 本组完成后 `mvn test` 全绿 + commit + push
 
 ## 5. 日志驱动测试基建
 
@@ -55,3 +55,4 @@
 - [ ] 8.2 更新 `docs/test-agent-demo/test-design.md`：日志驱动测试与回放的测试设计
 - [ ] 8.3 全量 `mvn verify`（含 jacoco LINE≥80% / BRANCH≥70%）通过
 - [ ] 8.4 最终 commit + push，汇报里程碑
+
