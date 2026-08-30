@@ -3,9 +3,7 @@
 ## Purpose
 
 会话可观测性：全动作事件记录、context 快照、敏感信息脱敏、日志保留策略。
-
 ## Requirements
-
 ### Requirement: 全动作事件记录
 
 系统 SHALL 将会话事件流（`session.jsonl`）扩展为覆盖 agent 全部动作的结构化事件序列：除现有 `user/message`、`assistant/message`、`tool/call`、`tool/result`、`turn/start`、`turn/end` 外，SHALL 追加 `context/snapshot`、`system/config`、`system/compact`、`system/retry`、`system/error`、`permission/decision` 六类事件，且现有事件形状不变（向后兼容）。
@@ -86,3 +84,23 @@
 
 - **WHEN** 清理过程中单个目录删除失败（权限等）
 - **THEN** 该目录跳过、记录 WARN，清理继续处理其余目录，新会话正常启动
+
+### Requirement: HTTP Client Timeouts
+
+The system SHALL configure explicit HTTP timeouts on the LLM provider WebClient to prevent indefinite blocking on slow or hung upstream services.
+
+#### Scenario: connection timeout fires
+
+- GIVEN the LLM provider WebClient is configured with `connectTimeout=10s`
+- WHEN the upstream host is unreachable (TCP SYN times out)
+- THEN the HTTP call fails within 10s with a `WebClientRequestException`
+- AND the failure is logged at WARN level
+- AND `SlashCommand.dispatch` propagates the failure to the REPL user
+
+#### Scenario: response timeout fires
+
+- GIVEN the LLM provider WebClient is configured with `responseTimeout=60s`
+- WHEN the upstream returns headers but no body within 60s
+- THEN the HTTP call fails with a timeout exception
+- AND the failure is logged at WARN level
+
