@@ -88,6 +88,16 @@ public final class AgentLoopFactory {
      */
     public static String buildSystemPrompt(
             AgentConfig cfg, String resolvedModel, String override) {
+        return buildSystemPrompt(cfg, resolvedModel, override, null);
+    }
+
+    /**
+     * 组装 system prompt（含 sideQuery 语义召回）。
+     *
+     * @param provider LLM provider（可空；null 时 memory 注入走纯字面召回，不调 sideQuery）
+     */
+    public static String buildSystemPrompt(
+            AgentConfig cfg, String resolvedModel, String override, LlmProvider provider) {
         String providerName = cfg.provider().type() == null
                 ? "deepseek"
                 : cfg.provider().type().toLowerCase();
@@ -101,8 +111,18 @@ public final class AgentLoopFactory {
                 MemoryDir.forScope(MemoryScope.USER, userHome, cwd),
                 MemoryDir.forScope(MemoryScope.PROJECT, userHome, cwd),
                 MemoryDir.forScope(MemoryScope.LOCAL, userHome, cwd));
-        String memorySection = new MemoryPromptBuilder(memoryDirs.get(0))
-                .build(memoryDirs, String.join("\n", cfg.memoryInject()));
+        MemoryPromptBuilder builder = new MemoryPromptBuilder(memoryDirs.get(0));
+        String memorySection;
+        AgentConfig.SideQuery sideQuery = cfg.memory() != null ? cfg.memory().sideQuery() : null;
+        if (provider != null && sideQuery != null) {
+            com.example.agent.memory.MemoryRetriever retriever =
+                    new com.example.agent.memory.MemoryRetriever(
+                            provider, resolvedModel, new com.example.agent.memory.MemoryRecall(), sideQuery);
+            memorySection = builder.build("", memoryDirs, retriever,
+                    String.join("\n", cfg.memoryInject()), 5);
+        } else {
+            memorySection = builder.build(memoryDirs, String.join("\n", cfg.memoryInject()));
+        }
         String storageSection = buildStorageSection(cfg, userHome);
         return new SystemPromptBuilder()
                 .build(
@@ -165,7 +185,7 @@ public final class AgentLoopFactory {
                 MAX_TOOL_ITERATIONS,
                 model,
                 Paths.get(System.getProperty("user.dir")),
-                buildSystemPrompt(cfg, model, null),
+                buildSystemPrompt(cfg, model, null, provider),
                 sink,
                 agentDataDir,
                 confirmer,

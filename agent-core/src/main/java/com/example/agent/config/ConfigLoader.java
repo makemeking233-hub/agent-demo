@@ -57,7 +57,8 @@ public class ConfigLoader {
                     base.context(),
                     base.shell(),
                     base.memoryInject(),
-                    mergeLogging(base.logging(), map));
+                    mergeLogging(base.logging(), map),
+                    mergeMemory(base.memory(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -89,7 +90,8 @@ public class ConfigLoader {
                 base.context(),
                 base.shell(),
                 base.memoryInject(),
-                base.logging());
+                base.logging(),
+                base.memory());
     }
 
     /**
@@ -131,6 +133,33 @@ public class ConfigLoader {
                 : base.retentionKeepSessions();
         return new AgentConfig.Logging(
                 enabled, dir, resultMaxChars, snapshotMaxChars, retentionMaxAgeDays, retentionKeepSessions);
+    }
+
+    /**
+     * 合并 user yaml 的 {@code memory.sideQuery} 段到 base（缺失段保持 base 值）。
+     *
+     * @param base 当前 memory 配置
+     * @param map user yaml 顶层字典
+     * @return 合并后的 {@link AgentConfig.Memory}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Memory mergeMemory(AgentConfig.Memory base, Map<String, Object> map) {
+        Object seg = map.get("memory");
+        if (!(seg instanceof Map<?, ?> mm)) return base;
+        Map<String, Object> m = (Map<String, Object>) mm;
+        AgentConfig.SideQuery baseSql = base.sideQuery();
+        Object sq = m.get("sideQuery");
+        AgentConfig.SideQuery sql;
+        if (sq instanceof Map<?, ?> sqm) {
+            Map<String, Object> s = (Map<String, Object>) sqm;
+            boolean enabled = s.containsKey("enabled") ? BoolVal(s.get("enabled"), baseSql.enabled()) : baseSql.enabled();
+            int maxCandidates = s.containsKey("maxCandidates") ? intVal(s, "maxCandidates", baseSql.maxCandidates()) : baseSql.maxCandidates();
+            int minCandidates = s.containsKey("minCandidates") ? intVal(s, "minCandidates", baseSql.minCandidates()) : baseSql.minCandidates();
+            sql = new AgentConfig.SideQuery(enabled, maxCandidates, minCandidates);
+        } else {
+            sql = baseSql;
+        }
+        return new AgentConfig.Memory(sql);
     }
 
     /**

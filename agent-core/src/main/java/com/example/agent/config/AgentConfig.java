@@ -14,6 +14,7 @@ import java.util.List;
  * @param shell ShellTool 沙箱参数
  * @param memoryInject 注入到 system prompt 的额外 memory 指引
  * @param logging 会话结构化日志配置
+ * @param memory Memory 相关配置（含 sideQuery 语义召回）
  */
 public record AgentConfig(
         Provider provider,
@@ -22,7 +23,8 @@ public record AgentConfig(
         Context context,
         Shell shell,
         List<String> memoryInject,
-        Logging logging) {
+        Logging logging,
+        Memory memory) {
 
     /**
      * LLM provider 配置。
@@ -95,6 +97,22 @@ public record AgentConfig(
             int retentionKeepSessions) {}
 
     /**
+     * Memory 配置。
+     *
+     * @param sideQuery 语义召回（sideQuery）配置
+     */
+    public record Memory(SideQuery sideQuery) {}
+
+    /**
+     * sideQuery 语义召回配置（见 add-memory-sidequery change）。
+     *
+     * @param enabled 是否启用 sideQuery 语义补充；关闭时仅字面 token 重叠召回
+     * @param maxCandidates 送入 sideQuery 的候选条目数上限（控制 prompt 长度）
+     * @param minCandidates 触发 sideQuery 所需的最小候选条目数（低于则直接 l字面结果）
+     */
+    public record SideQuery(boolean enabled, int maxCandidates, int minCandidates) {}
+
+    /**
      * v0.1 内置默认配置。
      *
      * @return 默认 {@link AgentConfig}
@@ -127,6 +145,7 @@ public record AgentConfig(
                         30_000,
                         2_000,
                         30,
-                        50));
+                        50),
+                new Memory(new SideQuery(true, 8, 3)));
     }
 }
