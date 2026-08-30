@@ -91,7 +91,7 @@ public class AgentLoop {
     /**
      * 模型名（{@code null} 时回落到 {@link #DEFAULT_MODEL}）
      */
-    private final String model;
+    private volatile String model;
 
     /**
      * 系统提示词（{@code null} 表示不注入 system 消息；由 SystemPromptBuilder 组装或用户 --system-prompt 覆盖）
@@ -269,6 +269,15 @@ public class AgentLoop {
      */
     public void setHistory(MessageHistory history) {
         this.history = history;
+    }
+
+    /**
+     * 运行时切换 model（{@code /model} slash 命令用）。volatile 保证多线程可见。
+     *
+     * @param newModel 新 model 名（{@code null} 视为不切换；实际应被 SlashCommand 白名单拦截）
+     */
+    public void setModel(String newModel) {
+        this.model = newModel;
     }
 
     /**
