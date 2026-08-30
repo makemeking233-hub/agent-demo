@@ -52,10 +52,10 @@ class ChatStreamServiceTest {
     void createThenStartRunsTurnAndClosesStream() throws Exception {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
         // mock 接受 runtime 传入的 sink，确保 SSE 事件确实被 ChatStreamService 下发
-        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+        when(runtime.createLoop(any(String.class), any(String.class), any(SessionLogSink.class), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(1);
+                            SessionLogSink sink = inv.getArgument(2);
                             return loopWithMockProvider(sink);
                         });
 
@@ -81,10 +81,10 @@ class ChatStreamServiceTest {
     @Test
     void submitDecisionForUnknownPermissionReturnsFalse() {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
-        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+        when(runtime.createLoop(any(String.class), any(String.class), any(SessionLogSink.class), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(1);
+                            SessionLogSink sink = inv.getArgument(2);
                             return loopWithMockProvider(sink);
                         });
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
@@ -119,10 +119,10 @@ class ChatStreamServiceTest {
     @Test
     void getReturnsActiveStream() {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
-        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+        when(runtime.createLoop(any(String.class), any(String.class), any(SessionLogSink.class), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(1);
+                            SessionLogSink sink = inv.getArgument(2);
                             return loopWithMockProvider(sink);
                         });
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
@@ -134,10 +134,10 @@ class ChatStreamServiceTest {
     @Test
     void abortUnknownStreamIsNoop() {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
-        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+        when(runtime.createLoop(any(String.class), any(String.class), any(SessionLogSink.class), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(1);
+                            SessionLogSink sink = inv.getArgument(2);
                             return loopWithMockProvider(sink);
                         });
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
@@ -147,10 +147,10 @@ class ChatStreamServiceTest {
     @Test
     void submitDecisionUnknownStreamReturnsFalse() {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
-        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+        when(runtime.createLoop(any(String.class), any(String.class), any(SessionLogSink.class), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(1);
+                            SessionLogSink sink = inv.getArgument(2);
                             return loopWithMockProvider(sink);
                         });
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
@@ -160,10 +160,10 @@ class ChatStreamServiceTest {
     @Test
     void shutdownCompletesActiveStreamsAndStopsExecutor() {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
-        when(runtime.createLoop(any(String.class), any(SessionLogSink.class), any(), any()))
+        when(runtime.createLoop(any(String.class), any(String.class), any(SessionLogSink.class), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(1);
+                            SessionLogSink sink = inv.getArgument(2);
                             return loopWithMockProvider(sink);
                         });
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
@@ -171,3 +171,4 @@ class ChatStreamServiceTest {
         svc.shutdown(); // 不抛即通过
     }
 }
+
