@@ -82,7 +82,10 @@ public class ChatStreamService {
                     String decision =
                             permissionBridge.waitForDecision(permissionId, null, toolName, prompt, DECISION_CHOICES);
                     emit(streamId, new SseEvent.PermissionResponse(permissionId, decision));
-                    return "yes".equals(decision);
+                    // "yes" 与 "always" 都放行（v0.1 简化：always 不持久化到 PermissionPolicy，
+                    // 仅本次放行；v0.2 应改为真正记忆同类工具为 allowAll）。
+                    // 修 bug: 之前只 "yes".equals(decision) 导致 "always" 被错误当成拒绝.
+                    return !"no".equals(decision);
                 };
         // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
         AgentLoop loop = runtime.createLoop(streamId, sessionId, adapter, confirmer, aborted::get);
