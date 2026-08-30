@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
  * SPA fallback (spec §Requirement: Static Resource Serving / Scenario: Client-side routes serve same index).
  *
  * <p>只匹配知名客户端路由前缀, 不匹配 /api/** 与 /assets/**.
- * 客户端路由前缀 v0.1: /sessions, /help, /settings, /chat.
+ * 客户端路由前缀 v0.1: /sessions, /help, /settings, /chat, /logs.
  */
 @Configuration
 @Profile("web")
@@ -23,7 +23,7 @@ public class StaticResourceConfig {
 
     private static final Resource INDEX_HTML = new ClassPathResource("static/index.html");
 
-    private static final String[] CLIENT_ROOT_PREFIXES = {"/sessions", "/help", "/settings", "/chat"};
+    private static final String[] CLIENT_ROOT_PREFIXES = {"/sessions", "/help", "/settings", "/chat", "/logs"};
 
     @Bean
     public RouterFunction<ServerResponse> spaFallbackRouter() {
