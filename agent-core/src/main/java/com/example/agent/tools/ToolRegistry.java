@@ -5,6 +5,8 @@ import com.example.agent.tools.file.ReadFileTool;
 import com.example.agent.tools.file.WriteFileTool;
 import com.example.agent.skill.Skill;
 import com.example.agent.skill.SkillTool;
+import com.example.agent.mcp.McpClient;
+import com.example.agent.mcp.McpTool;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,6 +55,17 @@ public class ToolRegistry {
         if (skills == null) return;
         for (Skill s : skills) {
             registry.register(new SkillTool(s));
+        }
+    }
+
+    /** Add-mcp-client：把每个已连接 MCP server 的工具融合注册为工具（server 连接失败跳过）。 */
+    public static void registerMcpTools(ToolRegistry registry, List<McpClient> clients) {
+        if (clients == null) return;
+        for (McpClient client : clients) {
+            if (!client.initialize()) continue; // 握手失败跳过该 server
+            for (McpClient.ToolDescriptor desc : client.listTools()) {
+                registry.register(new McpTool(client, desc));
+            }
         }
     }
 }

@@ -86,6 +86,15 @@ public final class AgentLoopFactory {
                 Paths.get(cwd, ".agent-demo", "skills"));
         ToolRegistry.registerSkillTools(
                 tools, com.example.agent.skill.SkillCatalog.discover(skillRoots));
+        // MCP：从 config 连接 MCP server 并融合其工具
+        AgentConfig.Mcp mcp = cfg.mcp();
+        if (mcp != null && mcp.servers() != null && !mcp.servers().isEmpty()) {
+            java.util.List<com.example.agent.mcp.McpClient> clients = new java.util.ArrayList<>();
+            for (AgentConfig.McpServer s : mcp.servers()) {
+                clients.add(com.example.agent.mcp.McpClient.create(s.url(), s.name()));
+            }
+            ToolRegistry.registerMcpTools(tools, clients);
+        }
         return tools;
     }
 

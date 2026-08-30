@@ -6,6 +6,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 /** 三层优先级配置加载：env &gt; user config &gt; defaults（详见 design.md §9）。 */
@@ -58,7 +59,8 @@ public class ConfigLoader {
                     base.shell(),
                     base.memoryInject(),
                     mergeLogging(base.logging(), map),
-                    mergeMemory(base.memory(), map));
+                    mergeMemory(base.memory(), map),
+                    mergeMcp(base.mcp(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -91,7 +93,8 @@ public class ConfigLoader {
                 base.shell(),
                 base.memoryInject(),
                 base.logging(),
-                base.memory());
+                base.memory(),
+                base.mcp());
     }
 
     /**
@@ -160,6 +163,31 @@ public class ConfigLoader {
             sql = baseSql;
         }
         return new AgentConfig.Memory(sql);
+    }
+
+    /**
+     * 合并 user yaml 的 {@code mcp.servers} 段到 base（缺失段保持 base 值）。
+     *
+     * @param base 当前 mcp 配置
+     * @param map user yaml 顶层字典
+     * @return 合并后的 {@link AgentConfig.Mcp}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Mcp mergeMcp(AgentConfig.Mcp base, Map<String, Object> map) {
+        Object seg = map.get("mcp");
+        if (!(seg instanceof Map<?, ?> mm)) return base;
+        Object servers = ((Map<String, Object>) mm).get("servers");
+        if (!(servers instanceof List<?> list)) return base;
+        java.util.List<AgentConfig.McpServer> result = new java.util.ArrayList<>();
+        for (Object o : list) {
+            if (!(o instanceof Map<?, ?> m)) continue;
+            Map<String, Object> sm = (Map<String, Object>) m;
+            String name = str(sm, "name", null);
+            String url = str(sm, "url", null);
+            if (name == null || name.isBlank() || url == null || url.isBlank()) continue;
+            result.add(new AgentConfig.McpServer(name.trim(), url.trim()));
+        }
+        return new AgentConfig.Mcp(result);
     }
 
     /**

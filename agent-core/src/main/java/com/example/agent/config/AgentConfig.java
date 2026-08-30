@@ -15,6 +15,7 @@ import java.util.List;
  * @param memoryInject 注入到 system prompt 的额外 memory 指引
  * @param logging 会话结构化日志配置
  * @param memory Memory 相关配置（含 sideQuery 语义召回）
+ * @param mcp MCP 客户端配置
  */
 public record AgentConfig(
         Provider provider,
@@ -24,7 +25,8 @@ public record AgentConfig(
         Shell shell,
         List<String> memoryInject,
         Logging logging,
-        Memory memory) {
+        Memory memory,
+        Mcp mcp) {
 
     /**
      * LLM provider 配置。
@@ -113,6 +115,21 @@ public record AgentConfig(
     public record SideQuery(boolean enabled, int maxCandidates, int minCandidates) {}
 
     /**
+     * MCP 客户端配置。
+     *
+     * @param servers MCP server 列表
+     */
+    public record Mcp(List<McpServer> servers) {}
+
+    /**
+     * 单个 MCP server 配置。
+     *
+     * @param name server 名（用于日志/标识）
+     * @param url  MCP server 的 Streamable HTTP endpoint URL
+     */
+    public record McpServer(String name, String url) {}
+
+    /**
      * v0.1 内置默认配置。
      *
      * @return 默认 {@link AgentConfig}
@@ -146,6 +163,7 @@ public record AgentConfig(
                         2_000,
                         30,
                         50),
-                new Memory(new SideQuery(true, 8, 3)));
+                new Memory(new SideQuery(true, 8, 3)),
+                new Mcp(List.of()));
     }
 }
