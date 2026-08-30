@@ -85,7 +85,7 @@ public class ChatStreamService {
                     return "yes".equals(decision);
                 };
         // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
-        AgentLoop loop = runtime.createLoop(streamId, adapter, confirmer, aborted::get);
+        AgentLoop loop = runtime.createLoop(streamId, sessionId, adapter, confirmer, aborted::get);
         ActiveStream meta =
                 new ActiveStream(
                         streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted);

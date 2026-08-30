@@ -14,6 +14,8 @@ import com.example.agent.signal.AbortSignal;
 import com.example.agent.tools.ToolRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -49,6 +51,9 @@ public class WebAgentRuntime {
     /** 已加载的配置。 */
     private final AgentConfig cfg;
 
+    /** session 级对话历史缓存（按 sessionId 复用，支撑多轮对话记忆；v0.1 内存缓存，不落盘）。 */
+    private final Map<String, MessageHistory> sessionHistories = new ConcurrentHashMap<>();
+
     public WebAgentRuntime(LlmProvider provider, ToolRegistry tools, TokenEstimator estimator) {
         this.provider = provider;
         this.tools = tools;
@@ -70,30 +75,47 @@ public class WebAgentRuntime {
     }
 
     /**
-     * 为单个 web 会话生成 {@link AgentLoop}（独立 history）。
+     * 为单个 web 会话生成 {@link AgentLoop}（按 sessionId 复用 history，支撑多轮对话记忆）。
      *
      * <p>{@code sink} 为 web 的 SSE 通知（SseSessionLogSink）；{@code confirmer} 为权限交互桥
      * （web 用 PermissionBridge）。printer 用 no-op（stdout 打印交给 CLI；web 只通过
      * SessionLogSink 下发粗粒度事件）。
      *
      * @param streamId 当前流 id（留作扩展）
+     * @param sessionId 会话 id（用于复用该会话的 history；同一 sessionId 连续对话共享上下文）
      * @param sink 会话日志观察者（web 转 SSE）
      * @param confirmer 权限确认器（可 null = fail-closed 拒绝）
      * @return 装配好的 {@link AgentLoop}
      */
     public AgentLoop createLoop(
-            String streamId, SessionLogSink sink, PermissionConfirmer confirmer, AbortSignal abortSignal) {
+            String streamId, String sessionId, SessionLogSink sink, PermissionConfirmer confirmer, AbortSignal abortSignal) {
         return AgentLoopFactory.buildLoop(
                 cfg,
                 provider,
                 tools,
-                new MessageHistory(estimator),
+                historyFor(sessionId),
                 new StreamingPrinter(),
                 model,
                 sink,
                 agentDataDir,
                 confirmer,
                 abortSignal);
+    }
+
+    /**
+     * 按 sessionId 获取（或新建）该会话的 {@link MessageHistory}。
+     *
+     * <p>同一 sessionId 复用同一 history 实例 → 多轮对话时模型能看到之前轮次的上下文
+     * （修复 web 会话无记忆/无状态缺陷）。v0.1 为内存缓存（不落盘）；v0.2 可接 SessionStore。
+     *
+     * @param sessionId 会话 id（{@code null} 时也用独立 history，但不缓存）
+     * @return 该会话的 history
+     */
+    public MessageHistory historyFor(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return new MessageHistory(estimator);
+        }
+        return sessionHistories.computeIfAbsent(sessionId, k -> new MessageHistory(estimator));
     }
 
     public ToolRegistry tools() {

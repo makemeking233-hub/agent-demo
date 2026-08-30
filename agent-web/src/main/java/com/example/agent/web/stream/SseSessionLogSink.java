@@ -7,10 +7,14 @@ import com.example.agent.log.SessionLogSink;
 import com.example.agent.tools.ToolResult;
 import com.example.agent.web.api.dto.SseEvent;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class SseSessionLogSink implements SessionLogSink {
     private final ChatStreamService stream;
     private final String streamId;
+    // 记录 toolCallId → 工具名：onToolCall 记下 name，onToolResult 回流 ToolCallEnd 时用真实 name（而非硬编码 "unknown"）
+    private final Map<String, String> toolNames = new ConcurrentHashMap<>();
 
     public SseSessionLogSink(ChatStreamService stream, String streamId) {
         this.stream = stream;
@@ -35,7 +39,11 @@ public class SseSessionLogSink implements SessionLogSink {
         }
     }
 
-    @Override public void onToolCall(ToolCall call) {}
+    @Override
+    public void onToolCall(ToolCall call) {
+        // 记录 toolCallId → name，供 onToolResult 回流 ToolCallEnd 时用真实工具名
+        toolNames.put(call.id(), call.name());
+    }
 
     @Override
     public void onToolResult(ToolResult<?> result, long elapsedMs) {
@@ -44,7 +52,9 @@ public class SseSessionLogSink implements SessionLogSink {
         if (result instanceof ToolResult.Err<?> err) {
             resultPayload = err.message();
         }
-        stream.emit(streamId, new SseEvent.ToolCallEnd(result.toolCallId(), "unknown", ok, resultPayload, elapsedMs));
+        // 用真实工具名（onToolCall 记录）；找不到再落到占位
+        String name = toolNames.getOrDefault(result.toolCallId(), "unknown");
+        stream.emit(streamId, new SseEvent.ToolCallEnd(result.toolCallId(), name, ok, resultPayload, elapsedMs));
     }
 
     @Override

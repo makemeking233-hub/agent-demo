@@ -17,6 +17,11 @@ export function ChatPanel() {
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [streamId, setStreamId] = useState<string | null>(null);
+  // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
+  // （React 闭包捕获的是函数创建时的值；SSE 异步到达时闭包里的 streamId 可能仍是 null → 权限提交被跳过）。
+  const streamIdRef = useRef<string | null>(null);
+  // sessionIdRef: 跨轮次复用同一会话 id，使后端按 session_id 复用 history → 多轮对话有记忆。
+  const sessionIdRef = useRef<string | null>(null);
   const clientRef = useRef<SseClient | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -33,6 +38,24 @@ export function ChatPanel() {
     setItems((prev) => prev.map((it) => (it.id === id ? ({ ...it, ...patch } as Item) : it)));
   }
 
+  // 关键修复: 用函数式 setItems 追加文本到"最后一条 assistant 文本项"。
+  // 不能用闭包里的 items(陈旧), 否则 message_delta 永远匹配不到 last 项 → 界面空白。
+  function appendTextToLastAssistant(text: string) {
+    setItems((prev) => {
+      // 从后向前找最后一条 assistant 文本项
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const it = prev[i];
+        if (it.kind === "text" && it.role === "assistant") {
+          const updated = [...prev];
+          updated[i] = { ...it, text: (it as { text: string }).text + text };
+          return updated;
+        }
+      }
+      // 没有 assistant 文本项则追加一条
+      return [...prev, { kind: "text", id: "a-" + Date.now(), role: "assistant", text }];
+    });
+  }
+
   async function startStream(content: string) {
     if (busy) return;
     setBusy(true);
@@ -41,6 +64,7 @@ export function ChatPanel() {
     if (content.trim() === "/clear") {
       setItems([]);
       setBusy(false);
+      sessionIdRef.current = null; // /clear 开新会话，重置 session_id（下轮从新会话开始）
       return;
     }
     if (content.trim() === "/help") {
@@ -53,8 +77,10 @@ export function ChatPanel() {
     }
 
     try {
-      const resp = await api.send({ content });
+      const resp = await api.send({ content, session_id: sessionIdRef.current ?? undefined });
       setStreamId(resp.stream_id);
+      streamIdRef.current = resp.stream_id;
+      sessionIdRef.current = resp.session_id; // 记住会话，下轮复用 → 后端按 session_id 复用 history
       appendItem({ kind: "text", id: "a-" + Date.now(), role: "assistant", text: "" });
       const client = new SseClient({
         url: api.streamUrl(resp.stream_id),
@@ -72,12 +98,13 @@ export function ChatPanel() {
 
   function handleEvent(ev: SseEvent) {
     if (ev.type === "message_start") return;
-    const last = items[items.length - 1];
-    if (ev.type === "message_delta" && ev.delta_type === "text" && last?.kind === "text" && last.role === "assistant") {
-      updateItem(last.id, { text: (last as { text: string }).text + ev.content });
+    if (ev.type === "message_delta" && ev.delta_type === "text") {
+      // 函数式追加，避免闭包捕获陈旧 items 导致界面空白
+      appendTextToLastAssistant(ev.content);
     } else if (ev.type === "message_stop") {
       setBusy(false);
       setStreamId(null);
+      streamIdRef.current = null;
     } else if (ev.type === "tool_call_start") {
       appendItem({ kind: "tool", id: ev.tool_call_id, name: ev.name, toolCallId: ev.tool_call_id, status: "running" });
     } else if (ev.type === "tool_call_end") {
@@ -89,14 +116,15 @@ export function ChatPanel() {
   }
 
   async function submitPermission(permissionId: string, decision: "yes" | "no" | "always", itemId: string) {
-    const sid = streamId;
+    const sid = streamIdRef.current; // 用 ref 拿最新 streamId（避免闭包陈旧导致提交被跳过）
     if (!sid) return;
     await api.submitDecision(sid, permissionId, decision);
     updateItem(itemId, { choices: [] } as Partial<Item>);
   }
 
   async function abortStream() {
-    if (streamId) await api.abort(streamId);
+    const sid = streamIdRef.current;
+    if (sid) await api.abort(sid);
   }
 
   return (
