@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.example.agent.config.AgentConfig;
 import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
 import com.example.agent.llm.TokenEstimator;
@@ -47,9 +48,18 @@ class SlashCommandTest {
 
   @Test
   void estimateCost() {
-    assertEquals(0, cmd.estimateCost(0, 0, "deepseek-chat"));
-    // 1M input + 1M output = 2 + 8 = 10 元
+    // 默认 cost (deepseek-chat 2/8)：1M input + 1M output = 2 + 8 = 10 元
     assertEquals(10, cmd.estimateCost(1_000_000, 1_000_000, "deepseek-chat"));
+    assertEquals(0, cmd.estimateCost(0, 0, "deepseek-chat"));
+  }
+
+  @Test
+  void estimateCostReadsConfig() {
+    // 自定义 cost：0.5/M 输入 + 4/M 输出
+    var customCmd = new SlashCommand();
+    customCmd.setCost(new AgentConfig.Cost(0.5, 4.0, 10.0, 20.0));
+    // 1M input × 0.5 + 1M output × 4 = 4.5 元（向下取整为 4）
+    assertEquals(4, customCmd.estimateCost(1_000_000, 1_000_000, "deepseek-chat"));
   }
 
   @Test

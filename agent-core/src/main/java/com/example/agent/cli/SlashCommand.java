@@ -1,5 +1,6 @@
 package com.example.agent.cli;
 
+import com.example.agent.config.AgentConfig;
 import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
 import com.example.agent.session.SessionStore;
@@ -22,6 +23,18 @@ public class SlashCommand {
     /** v0.2 支持的 model 列表（DeepSeek 系） */
     private static final List<String> SUPPORTED_MODELS =
             List.of("deepseek-chat", "deepseek-reasoner");
+
+    /** 成本配置（v0.2 从 AgentConfig.cost 注入；null 时用 DeepSeek-chat 默认 2/8） */
+    private AgentConfig.Cost cost = new AgentConfig.Cost(2.0, 8.0, 4.0, 5.0);
+
+    /**
+     * 注入成本配置（ChatCommand 启动时调；v0.3+ 可 per-model 覆盖）。
+     *
+     * @param cost AgentConfig.cost（不可空；null 视为不修改）
+     */
+    public void setCost(AgentConfig.Cost cost) {
+        if (cost != null) this.cost = cost;
+    }
 
     /**
      * 分发单行输入到 slash 命令处理（v0.1 兼容版：不支持 /resume）。
@@ -224,16 +237,16 @@ public class SlashCommand {
     }
 
     /**
-     * DeepSeek-chat 定价：输入 2 元/M tokens，输出 8 元/M tokens（占位，v0.2 读 config）。
+     * 估算累计费用（v0.2 改读注入的 cost 配置，不再硬编码）。
      *
      * @param prompt 累计 prompt token
      * @param completion 累计 completion token
-     * @param model 模型名（暂未用，预留 per-model 定价）
+     * @param model 模型名（v0.2 暂未用，预留 per-model 定价）
      * @return 估算费用（元，保留两位小数）
      */
     public int estimateCost(int prompt, int completion, String model) {
-        double p = prompt / 1_000_000.0 * 2.0;
-        double c = completion / 1_000_000.0 * 8.0;
+        double p = prompt / 1_000_000.0 * cost.inputPerMTokens();
+        double c = completion / 1_000_000.0 * cost.outputPerMTokens();
         return (int) Math.round((p + c) * 100) / 100;
     }
 

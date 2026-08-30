@@ -184,6 +184,7 @@ public class ChatCommand implements Runnable {
         AtomicBoolean aborted = new AtomicBoolean(false);
         AbortSignal abortSignal = () -> aborted.get();
         SlashCommand slash = new SlashCommand();
+        slash.setCost(cfg.cost());
         // Token accumulators (single-element arrays; passed by ref to SlashCommand which mutates
         // [0])
         int[] totalPrompt = {0};

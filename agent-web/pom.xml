@@ -98,7 +98,7 @@
                 <version>1.15.1</version>
                 <configuration>
                     <workingDirectory>frontend</workingDirectory>
-                    <skip>${skip.npm}</skip>
+                    <skip>${skipNpm}</skip>
                 </configuration>
                 <executions>
                     <execution>
@@ -130,6 +130,12 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <!-- spring-boot-maven-plugin: 让 mvn package 产出可执行 fat jar (java -jar agent-web.jar)
+                 此前未声明, jar 缺 Main-Class, 必须用 mvn spring-boot:run 启动 -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>
