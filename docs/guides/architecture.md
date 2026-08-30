@@ -28,7 +28,7 @@ flowchart TB
     subgraph provider["Provider 层"]
         LlmProvider["LlmProvider<br/>接口"]
         DeepSeek["DeepSeekProvider<br/>WebClient + SSE"]
-        Mapper["DeepSeekRequestMapper<br/>+ ResponseParser"]
+        Mapper["OpenAiCompatibleMapper<br/>请求映射 + 响应解析"]
         Retry["LlmRetry<br/>指数退避"]
     end
 
@@ -104,11 +104,11 @@ flowchart TB
 sequenceDiagram
     participant U as "用户"
     participant REPL as "ChatCommand (REPL)"
-    participant Loop as AgentLoop
+    participant MainLoop as AgentLoop
     participant Hist as MessageHistory
     participant Compressor as ContextCompressor
     participant LLM as DeepSeekProvider
-    participant Map as DeepSeekMapper
+    participant Map as OpenAiCompatibleMapper
     participant API as DeepSeek API (HTTPS/SSE)
 
     U->REPL: 输入 prompt
@@ -179,10 +179,10 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    ChatRequest["ChatRequest<br/>(model, msgs, tools)"] --> ReqMapper["DeepSeekRequestMapper<br/>toRequestBody()"]
+    ChatRequest["ChatRequest<br/>(model, msgs, tools)"] --> ReqMapper["OpenAiCompatibleMapper<br/>toRequestBody()"]
     ReqMapper --> Body["HTTP body<br/>+ stream_options.include_usage"]
 
-    SSEChunk["SSE: data: {json}\\n\\n"] --> RespParser["DeepSeekResponseParser<br/>parseSseLine()"]
+    SSEChunk["SSE data 内容"] --> RespParser["OpenAiCompatibleMapper<br/>parseSseLine()"]
     RespParser --> StreamChunk["sealed StreamChunk<br/>TextDelta / ToolCall* / Usage / Finished / Error"]
 ```
 
@@ -478,7 +478,7 @@ classDiagram
 
 | 原则 | 在本项目体现 |
 |------|-------------|
-| **单一职责** | `DeepSeekMapper` 拆 RequestMapper + ResponseParser；`PermissionManager` 拆 PermissionPathMatcher |
+| **单一职责** | `OpenAiCompatibleProvider` 拆 `OpenAiCompatibleMapper`；`PermissionManager` 拆 `PermissionPathMatcher` |
 | **开闭原则** | `LlmProvider` 接口 + `DeepSeekProvider` 实现，新增 provider 不改旧代码 |
 | **里氏替换** | `Message` sealed 子类型可在所有用 Message 的地方透明替换 |
 | **接口隔离** | `Tool` 接口最小化（8 方法），无 `fly()` 这种大而全 |
@@ -492,53 +492,113 @@ classDiagram
 
 ## 14. 后续演进
 
-| 版本 | 候选任务（plan §15） | 优先级 |
-|------|----------------------|:------:|
-| v0.2 | `/resume` slash 命令（SessionStore 加 load） | ⭐ |
-| v0.2 | `/model` 切换 provider（热插拔） | ⭐ |
-| v0.2 | Ctrl+C 中断（JLine3 + InterruptController） | ⭐ |
-| v0.2 | `deepseek-reasoner` 思维链渲染（折叠区） | ⭐ |
-| v0.2 | StreamingToolExecutor 状态机并发（v0.1 串行） | 🟡 |
-| v0.3 | MCP 客户端集成 | ⭐ |
-| v0.3 | Memory 三 scope（user / project / local） | 🟡 |
-| v0.3 | Resume 链路修复（snip / parallel tool_result） | 🟡 |
-| v0.3 | SideQuery 召回（替代 token 重叠） | 🟡 |
-| v0.4 | Team Memory 跨仓库同步 | 🟢 |
-| v1.0 | Web UI（TUI + REST 双形态） | 🟢 |
+| 版本 | 候选任务（plan §15） | 状态 | 优先级 |
+|------|----------------------|:----:|:------:|
+| v0.2 | `/resume` slash 命令（SessionStore 加 load） | ✅ 已完成（`af5ef8a`） | ⭐ |
+| v0.2 | `/model` 切换 provider（热插拔） | ✅ 已完成（`e37be9f`） | ⭐ |
+| v0.2 | Ctrl+C 中断（JLine3 + InterruptController） | ✅ 已完成 | ⭐ |
+| v0.2 | `deepseek-reasoner` 思维链渲染（折叠区） | ✅ 已完成 | ⭐ |
+| v0.2 | StreamingToolExecutor 状态机并发（v0.1 串行） | ✅ 已完成 | 🟡 |
+| v0.3 | MCP 客户端集成 | 待实现 | ⭐ |
+| v0.3 | Memory 三 scope（user / project / local） | 待实现 | 🟡 |
+| v0.3 | Resume 链路修复（snip / parallel tool_result） | 待实现 | 🟡 |
+| v0.3 | SideQuery 召回（替代 token 重叠） | 待实现 | 🟡 |
+| v0.3 | agent-web 模块（Web UI + SSE） | ✅ 已完成（`86ced52`） | ⭐ |
+| v0.3 | 可观测性（日志事件链路 / 脱敏 / 日志保留） | ✅ 已完成（T1-T8 组） | ⭐ |
+| v0.3 | 可测试性（session 回放 + golden E2E） | ✅ 已完成（T6 组） | 🟡 |
+| v0.3 | MiniMax provider（中国版 OpenAI 兼容） | ✅ 已完成（`499b81d`） | ⭐ |
+| v0.3 | OpenSpec 迭代流程落地 | ✅ 已完成（AGENTS.md §2.5） | ⭐ |
+| v0.4 | Team Memory 跨仓库同步 | 待实现 | 🟢 |
+| v1.0 | Team Memory / 远程同步 / Worktree / Plugin 系统 / Prompt Cache 复用 | 待实现 | 🟢 |
 
-OpenSpec 集成后（plan 中 todo）：所有 v0.2+ 变更通过 `/opsx:propose` 启动，写 delta spec → apply → archive 进 `openspec/specs/`。
+迭代流程：所有 v0.2+ 变更通过 `/opsx:propose` 启动（OpenSpec），写 delta spec → `apply-change` 实现 → `archive-change` 合并进 `openspec/specs/`。详见 `AGENTS.md` §2.5。
 
 ---
 
 ## 15. 关键文件索引
 
+> 路径相对于 `src/main/java/com/example/agent/`；`agent-web` 模块单独加前缀。
+
+### 15.1 Agent Core（`agent-core/`）
+
 | 路径 | 职责 | 行数 |
 |------|------|------|
-| `AgentCli.java` | 入口 + picocli 路由 | 30 |
-| `cli/ChatCommand.java` | REPL 主循环（readLine → slash / agent） | 137 |
-| `cli/SlashCommand.java` | `/help /clear /quit /history` | 53 |
-| `cli/InitCommand.java` | `~/.agent-demo/` 初始化 | 86 |
-| `agent/AgentLoop.java` | 主循环 + maxToolIterations 熔断 | 167 |
-| `agent/Message.java` | sealed Message（User/Assistant/ToolResult/System） | 39 |
-| `agent/MessageHistory.java` | 消息容器 + token 估算 + Post-Compact 文件重注入 | 95 |
-| `agent/ContextCompressor.java` | summary + 坍缩 + 熔断 + PTL fallback | 134 |
-| `provider/ChatRequest.java` | 请求 DTO（model/messages/tools/temperature） | 16 |
-| `provider/StreamChunk.java` | sealed chunk（TextDelta/ToolCall*/Usage/Finished/Error） | 40 |
-| `provider/LlmRetry.java` | 手写指数退避（兼容 Reactor 3.2） | 73 |
-| `provider/deepseek/DeepSeekProvider.java` | WebClient + bodyToMono + SSE 解析 | 49 |
-| `provider/deepseek/DeepSeekRequestMapper.java` | ChatRequest → DeepSeek body | 87 |
-| `provider/deepseek/DeepSeekResponseParser.java` | SSE line → StreamChunk | 91 |
-| `tools/Tool.java` | Tool 协议接口（Fail-Closed） | 41 |
-| `tools/ReadFileTool.java` | UTF-8 / GBK 双编码 | 60 |
-| `tools/WriteFileTool.java` | 写（父目录自动建） | 51 |
-| `tools/EditFileTool.java` | 原子写（tmp + rename） | 74 |
-| `tools/LsTool.java` | 列目录 | 59 |
-| `tools/ShellTool.java` | Shell 沙箱（超时 + 输出 + env + 进程树） | 190 |
-| `tools/ShellAdapter.java` | 跨平台 shell + 黑名单匹配 | 65 |
-| `tools/ToolRegistry.java` | 工具注册表 + schema 转换 | 41 |
-| `permission/PermissionManager.java` | 3 层裁决 | 79 |
-| `permission/PermissionPathMatcher.java` | Ant glob → 正则（独立可测试） | 55 |
-| `session/SessionStore.java` | JSONL + 双路径 flush | 122 |
-| `memory/MemoryDir.java` / `MemoryIndex.java` / `MemoryRecall.java` / `MemoryPromptBuilder.java` | 记忆 4 件套 | 各 40~60 |
-| `config/ConfigLoader.java` | 三层优先级（env > yaml > defaults） | 74 |
-| `config/AgentConfig.java` | 配置 record | 36 |
+| `core/AgentLoop.java` | 主循环 + maxToolIterations 熔断 + setModel + setHistory + abort | — |
+| `core/Message.java` | sealed Message（User/Assistant/ToolResult/System） | — |
+| `core/MessageHistory.java` | 消息容器 + token 估算 + 压缩熔断 + Post-Compact 文件重注入 | — |
+| `core/ContextCompressor.java` | summary + 坍缩 + 熔断 + PTL fallback | — |
+
+### 15.2 Provider Layer（`llm/` + `provider/`）
+
+| 路径 | 职责 | 行数 |
+|------|------|------|
+| `llm/LlmProvider.java` | Provider 接口 | — |
+| `llm/StreamChunk.java` | sealed chunk（TextDelta/ToolCall*/Usage/Finished/Error） | — |
+| `llm/ChatRequest.java` / `llm/ToolCall.java` / `llm/ToolSpec.java` | 请求 DTO | — |
+| `llm/LlmRetry.java` | 手写指数退避（兼容 Reactor 3.2） | — |
+| `llm/TokenEstimator.java` / `llm/FinishReason.java` | token 估算 / 结束原因 | — |
+| `provider/deepseek/DeepSeekProvider.java` | DeepSeek 实现（OpenAI 兼容） | — |
+| `provider/minimax/MiniMaxProvider.java` | MiniMax（中国版 OpenAI 兼容） | — |
+| `provider/openai/OpenAiCompatibleProvider.java` | OpenAI 通用实现（含超时） | — |
+| `provider/openai/OpenAiCompatibleMapper.java` | ChatRequest → OpenAI body + SSE line → StreamChunk | — |
+
+> DeepSeek / MiniMax 均复用 `OpenAiCompatibleMapper` 完成请求映射与响应解析，未分别实现 Mapper/Parser。
+
+### 15.3 Tool Layer
+
+| 路径 | 职责 | 行数 |
+|------|------|------|
+| `tools/Tool.java` | Tool 协议接口（Fail-Closed） | — |
+| `tools/ToolRegistry.java` / `tools/ToolCategory.java` / `tools/ToolResult.java` | 注册 / 分类 / 结果 | — |
+| `tools/AbstractFileTool.java` | 文件工具模板方法基类 | — |
+| `tools/file/ReadFileTool.java` | UTF-8 / GBK 双编码 | — |
+| `tools/file/WriteFileTool.java` | 写（父目录自动建） | — |
+| `tools/file/EditFileTool.java` | 原子写（tmp + rename） | — |
+| `tools/file/LsTool.java` | 列目录 | — |
+| `tools/file/ToolInput.java` | 文件工具输入 DTO | — |
+| `tools/shell/ShellTool.java` | Shell 沙箱（超时 + 输出 + env + 进程树） | — |
+| `tools/shell/ShellAdapter.java` / `tools/shell/BashAdapter.java` / `tools/shell/CmdAdapter.java` / `tools/shell/PowerShellAdapter.java` | 跨平台 shell + 三平台实现 | — |
+| `tools/shell/DenylistMatcher.java` / `tools/shell/DefaultDenylistMatcher.java` | 黑名单策略接口 + 实现 | — |
+| `tools/shell/ShellDefaults.java` | shell 默认安全配置 | — |
+| `tools/PathGuard.java` | 越界路径防护 | — |
+
+### 15.4 Permission / Memory / Session / Config / Render / Util
+
+| 路径 | 职责 |
+|------|------|
+| `permission/PermissionManager.java` | 3 层裁决（敏感路径 / 工具默认 / 工具级） |
+| `permission/PermissionPathMatcher.java` | Ant glob → 正则（独立可测试） |
+| `permission/PermissionDecision.java` | sealed Allow/Ask/Deny |
+| `memory/MemoryDir.java` / `memory/MemoryIndex.java` / `memory/MemoryRecall.java` / `memory/MemoryPromptBuilder.java` / `memory/MemoryEntry.java` / `memory/MemoryScope.java` | 记忆体系 |
+| `session/SessionStore.java` / `session/Session.java` / `session/SessionEntry.java` | JSONL append-only + 双路径 flush + synchronized 写 |
+| `config/ConfigLoader.java` / `config/AgentConfig.java` / `config/EnvKeys.java` | 三层配置加载（env > local profile > ~/.agent-demo/config.yaml > defaults） |
+| `render/StreamingPrinter.java` | 终端流式打印 |
+| `util/PromptLoader.java` | 提示词模板加载 |
+
+### 15.5 Observability / Testability（v0.3 新增，`log/` + web）
+
+| 路径 | 职责 |
+|------|------|
+| `log/Redactor.java` | 敏感信息脱敏（T3 组） |
+| `log/SessionRetentionCleaner.java` | 日志保留清理（T4 组） |
+| `log/SessionLogger.java` / `log/SessionLogSink.java` / `log/SessionRecorder.java` / `log/SessionEventReader.java` / `log/ContextSnapshot.java` / `log/SessionId.java` | 日志记录链路 |
+| `log/SessionReplay.java` | session.jsonl 重建 MessageHistory（T6 组） |
+
+### 15.6 CLI / Web 入口
+
+`agent-core/`（CLI）：
+
+| 路径 | 职责 |
+|------|------|
+| `AgentCli.java` | picocli 路由 + Spring Boot 启动（package `com.example.agent`） |
+| `cli/ChatCommand.java` | REPL 主循环（readLine → slash / agent；异常不退出 + friendlyError） |
+| `cli/SlashCommand.java` | `/help /clear /quit /history /resume /model` |
+| `cli/InitCommand.java` | `~/.agent-demo/` 初始化 |
+| `cli/Completion.java` | JLine3 命令补全 |
+
+`agent-web/`（独立 Web 应用，端口 18080）：
+
+| 路径 | 职责 |
+|------|------|
+| `web/api/LogController.java` | web /logs API（T7 组） |
+| `frontend/` | React 18 + Vite 6 前端 |

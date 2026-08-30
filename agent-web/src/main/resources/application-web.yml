@@ -3,7 +3,7 @@
 # 与 CLI profile 共存于同一个 Spring 上下文 (复用 agent-core 的 AgentLoop /
 # SessionStore / PermissionManager / ToolRegistry bean)
 #
-# 开发: mvn -pl agent-core spring-boot:run -Dspring-boot.run.profiles=web
+# 开发: mvn -pl agent-web spring-boot:run -Dspring-boot.run.profiles=web
 # 生产: mvn -pl agent-web clean package && java -jar agent-web/target/agent-web.jar
 
 server:

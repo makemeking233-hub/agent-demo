@@ -76,73 +76,42 @@
 
 ```text
 agent-demo/
-├── agent-core/                # Agent 核心：core/exception 子包
-│   ├── AgentLoop.java         # 主循环（含 maxToolIterations / setModel / setHistory / abort）
-│   ├── MessageHistory.java    # 消息列表 + token 估算 + 压缩熔断 + Post-Compact
-│   ├── ContextCompressor.java # summary + 坍缩 + PTL fallback
-│   └── exception/
-├── agent-cli/                 # CLI 入口
-│   ├── AgentCli.java          # picocli + Spring Boot 启动
-│   └── cli/                   # ChatCommand + SlashCommand + InitCommand + Completion
-├── agent-web/                 # Web UI（独立 Spring Boot 应用，端口 18080）
-│   ├── src/main/java/         # WebController + SSE + AgentLoop 复用
-│   └── frontend/              # React + Vite
-├── llm/                       # Provider 层（DeepSeek / OpenAI / MiniMax）
-│   ├── LlmProvider.java       # 接口
-│   ├── StreamChunk.java       # sealed chunk（TextDelta/ToolCall*/Usage/Finished/Error）
-│   ├── DeepSeekProvider.java  # DeepSeek 实现
-│   ├── OpenAiCompatibleProvider.java  # OpenAI 通用
-│   ├── MiniMaxProvider.java   # MiniMax 中国版 OpenAI 兼容
-│   ├── DeepSeekRequestMapper.java
-│   ├── DeepSeekResponseParser.java
-│   ├── LlmRetry.java          # 指数退避（手写兼容 Reactor 3.2）
-│   └── provider/
-├── file/                      # 文件工具
-│   ├── ReadFileTool.java
-│   ├── WriteFileTool.java
-│   ├── EditFileTool.java     # 原子写（write-temp-then-rename）
-│   ├── LsTool.java
-│   └── AbstractFileTool.java # 模板方法基类
-├── shell/                     # Shell 工具（Sandbox）
-│   ├── ShellTool.java         # 沙箱（黑名单 + 超时 + 输出上限 + env 清理 + 进程树回收）
-│   ├── ShellAdapter.java
-│   ├── BashAdapter.java
-│   ├── CmdAdapter.java
-│   ├── PowerShellAdapter.java
-│   └── DenylistMatcher.java   # 策略接口
-├── permission/                # 权限
-│   ├── PermissionManager.java
-│   ├── PermissionPathMatcher.java
-│   └── PermissionDecision.java
-├── memory/                     # Memory 系统（详见 docs/design/memory-design.md）
-│   ├── MemoryDir.java
-│   ├── MemoryIndex.java
-│   ├── MemoryRecall.java      # token 重叠评分召回
-│   ├── MemoryPromptBuilder.java
-│   └── PromptLoader.java      # 资源文件加载
-├── session/                   # JSONL 会话存储
-│   └── SessionStore.java     # 双路径 flush + synchronized 写
-├── config/                    # 配置加载
-│   ├── ConfigLoader.java
-│   └── AgentConfig.java
-├── render/                    # 终端渲染
-│   └── StreamingPrinter.java
-├── observability/             # 可观测性（T1-T8）
-│   ├── EventBus.java          # 事件总线
-│   ├── Redactor.java          # 敏感脱敏（T3）
-│   ├── LogRetention.java      # 日志保留策略（T4）
-│   └── LogController.java     # web /logs API（T7）
-├── testability/               # 可测试性（T6）
-│   └── SessionReplay.java     # session.jsonl 重建 MessageHistory
-├── docs/                      # 设计 / 测试 / 架构文档
-├── openspec/                  # 迭代流程（change / specs / config.yaml）
-├── tools/                     # 本地工具脚本（gitignored）
-├── bin/                       # launcher 脚本
-├── pom.xml                    # 多 module 聚合
-└── AGENTS.md                  # 项目级规则（含 OpenSpec 流程 §2.5）
+├── pom.xml                     # 多 module 聚合（agent-core + agent-web）
+├── agent-core/                 # 核心域 + CLI 入口
+│   ├── pom.xml                 # finalName=agent-cli；exec classifier 打可执行 fat jar
+│   ├── src/main/java/com/example/agent/
+│   │   ├── AgentCli.java       # picocli 路由 + Spring Boot 启动
+│   │   ├── AgentLoop.java      # 主循环（maxToolIterations / setModel / setHistory / abort）
+│   │   ├── MessageHistory.java # 消息列表 + token 估算 + 压缩熔断 + Post-Compact
+│   │   ├── ContextCompressor.java # summary + 坍缩 + PTL fallback
+│   │   ├── core/exception/     # MaxIterationsExceeded / CompactCircuitBroken
+│   │   ├── cli/                # ChatCommand + SlashCommand + InitCommand + Completion
+│   │   ├── llm/                # LlmProvider / StreamChunk / ChatRequest / LlmRetry / TokenEstimator
+│   │   ├── provider/           # deepseek / openai / minimax
+│   │   ├── tools/              # Tool + ToolRegistry + AbstractFileTool
+│   │   │   ├── file/           # ReadFile / WriteFile / EditFile / Ls / ToolInput
+│   │   │   └── shell/          # ShellTool + Adapters + DenylistMatcher
+│   │   ├── permission/         # PermissionManager + PermissionPathMatcher + PermissionDecision
+│   │   ├── memory/             # MemoryDir + MemoryIndex + MemoryRecall + MemoryPromptBuilder
+│   │   ├── session/            # SessionStore + Session + SessionEntry
+│   │   ├── config/             # ConfigLoader + AgentConfig + EnvKeys
+│   │   ├── render/             # StreamingPrinter
+│   │   ├── prompt/             # SystemPromptBuilder
+│   │   ├── signal/             # AbortSignal
+│   │   ├── util/               # PromptLoader
+│   │   └── log/                # 可观测性：Redactor / SessionRetentionCleaner / SessionLogger / SessionReplay ...
+├── agent-web/                  # Web UI（独立 Spring Boot 应用，端口 18080）
+│   ├── pom.xml                 # finalName=agent-web；frontend-maven-plugin 打包
+│   ├── src/main/java/          # WebApplication + WebController + SSE + LogController
+│   ├── src/main/resources/     # application-web.yml（web profile）
+│   └── frontend/               # React 18 + Vite 6（三栏 UI + SSE）
+├── docs/                       # 设计 / 测试 / 架构文档
+├── openspec/                   # 迭代流程（change / specs / config.yaml）
+├── bin/                        # launcher 脚本（agent.sh / agent.bat）
+└── AGENTS.md                   # 项目级规则（含 OpenSpec 流程 §2.5）
 ```
 
-> 多 module 拆分：`agent-core`（核心域）/`agent-cli`（CLI 入口）/`agent-web`（Web 入口）/ `llm` / `file` / `shell` / `permission` / `memory` / `session` / `config` / `render` / `observability` / `testability`（共享能力）
+> 多 module 拆分：`agent-core`（核心域 + CLI）/ `agent-web`（Web 入口）。`agent-core` 内部分为 `core / cli / llm / provider / tools / permission / memory / session / config / render / prompt / signal / util / log` 等包。
 
 ---
 
@@ -153,8 +122,8 @@ agent-demo/
 ```bash
 mvn clean install
 # 产物：
-#   agent-cli/target/agent-cli.jar   （CLI fat jar，~15 MB）
-#   agent-web/target/agent-web.jar   （Web fat jar，含前端 dist）
+#   agent-core/target/agent-cli-exec.jar  （CLI 可执行 fat jar，~15 MB）
+#   agent-web/target/agent-web.jar        （Web fat jar，含前端 dist）
 ```
 
 ### 5.2 配置 API key
@@ -183,7 +152,7 @@ java -jar agent-cli/target/agent-cli.jar chat
 
 ```bash
 # 类 Unix
-java -jar agent-cli/target/agent-cli.jar chat
+java -jar agent-core/target/agent-cli-exec.jar chat
 # 或 launcher（自动设置 UTF-8）
 ./bin/agent chat
 # Windows CMD
@@ -194,7 +163,7 @@ bin\agent.bat chat
 
 ```bash
 # 终端 A：后端（默认绑 127.0.0.1:18080）
-mvn -pl agent-core spring-boot:run -Dspring-boot.run.profiles=web
+mvn -pl agent-web spring-boot:run -Dspring-boot.run.profiles=web
 # 或独立 jar
 mvn -pl agent-web clean package
 java -jar agent-web/target/agent-web.jar
@@ -254,7 +223,7 @@ agent-demo 含 React 18 + Vite 6 Web UI，与 CLI 并存。详见 `docs/design/w
 
 ```bash
 # 终端 A：后端（web profile）
-mvn -pl agent-core spring-boot:run -Dspring-boot.run.profiles=web
+mvn -pl agent-web spring-boot:run -Dspring-boot.run.profiles=web
 
 # 终端 B：前端
 cd agent-web/frontend
@@ -294,7 +263,7 @@ mvn -pl agent-web verify # agent-web 模块独立验证
 |------|------|----------|
 | **v0.1** | ✅ 已完成 | CLI REPL + 5 工具 + Memory + JSONL + Slash 命令 + 50 个 Task（M0-M10） |
 | **v0.2** | ✅ 已完成 | `/resume` 加载最近 session / `/model` 运行时切换 / Session Memory Compaction |
-| **v0.3** | ✅ 已完成 | agent-web Web UI + 可观测性（T1-T8 组：事件总线 / 脱敏 / 日志保留 / LogController）+ 可测试性（session 回放）+ MiniMax provider |
+| **v0.3** | ✅ 已完成 | agent-web Web UI + 可观测性（T1-T8 组：日志事件链路 / 脱敏 / 日志保留 / LogController）+ 可测试性（session 回放）+ MiniMax provider |
 | **v0.4** | 进行中 | OpenSpec 迭代流程落地（已用 add-web-ui-v0-1 / add-observability-testability / polish-web-ui-frontend / add-model-switch-command 验证）；MCP 客户端（plan §15）；Skills 系统；Subagent |
 | **v0.5+** | 计划中 | Memory 三 scope 完整 + 语义召回（sideQuery）+ Resume 链路修复 + Memory Snapshot + Team Memory |
 

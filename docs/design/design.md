@@ -1084,33 +1084,52 @@ java -jar "%~dp0..\target\agent-cli.jar" %*
 
 ## 15. 后续版本预览
 
-### v0.2（1-2 周）
+> **当前进度**：v0.1 → v0.2 → v0.3 已完成（175 commits）。本节列出的任务按版本标注 ✅ 已完成 / 待实现。OpenSpec change 详情见 `openspec/`。
 
-- `/resume` 加载最近会话
-- `/model` 切换模型（热插拔 provider）
+### v0.1（CLI REPL，已完成 ✅）
+
+- 4 层架构（入口/REPL/Agent 编排/工具/基础设施）
+- 5 个 Tool（ReadFile/WriteFile/EditFile/Ls/Shell）+ 双编码回退
+- Memory 系统（MEMORY.md 索引 + token 重叠召回）
+- SessionStore（JSONL append-only）
+- ContextCompressor（熔断 + PTL fallback）
+- Slash 命令（/help /clear /quit /history）
+- 100+ 单测 + jacoco 门禁
+
+### v0.2（已完成 ✅）
+
+- `/resume` 加载最近会话（af5ef8a 归档 OpenSpec change）
+- `/model` 运行时切换 provider（`e37be9f` setModel 改 volatile）
+- Ctrl+C 中断（JLine3 + InterruptController）
+- `deepseek-reasoner` 思维链渲染（折叠区）
 - StreamingToolExecutor 状态机并发
-- Lite reader 快速列出会话
-- Memory 自动提取（从对话中沉淀记忆）
-- Memory 三 scope 完整（user / project / local）
 - Session Memory Compaction（compact 时优先用 SM）
-- **`deepseek-reasoner` 支持**：`reasoning_content` 字段（思维链）单独渲染到折叠区（`<think>...</think>` 灰显），用户可展开/收起；不让思维链污染主对话流
+- REPL 异常不退出（`friendlyError` 提示 401/429/网络 + 继续 REPL）
 
-### v0.3（2-4 周）
+### v0.3（已完成 ✅）
+
+- agent-web 模块：React 18 + Vite 6 三栏 UI + SSE 流
+- 可观测性 T1-T8 组（日志事件链路 / 脱敏 / 日志保留 / LogController）
+- 可测试性 T6 组（session 回放 + golden E2E）
+- MiniMax provider（中国版 OpenAI 兼容）
+- OpenSpec 迭代流程落地（AGENTS.md §2.5）
+
+### v0.4（待实现）
 
 - MCP 客户端集成
-- Skills 系统
-- Subagent
+- Memory 三 scope（user / project / local）
 - Resume 链路修复（snip / parallel tool_result）
-- Memory Snapshot（snapshot.json / .snapshot-synced.json）
-- Relevant Recall 升级为 sideQuery（用轻量模型做选择）
+- SideQuery 召回（替代 token 重叠）
+- Skills 系统 / Subagent
 
-### v1.0（4+ 周）
+### v1.0（计划）
 
-- Team Memory（带同步、checksum）
-- 远程同步（ingress 副本）
+- Team Memory / 远程同步
 - Worktree 模式
 - Plugin 系统
 - Prompt Cache 复用
+
+迭代流程：所有 v0.2+ 变更通过 `/opsx:propose` 启动（OpenSpec），写 delta spec → `apply-change` 实现 → `archive-change` 合并进 `openspec/specs/`。详见 `AGENTS.md` §2.5。
 
 ---
 
