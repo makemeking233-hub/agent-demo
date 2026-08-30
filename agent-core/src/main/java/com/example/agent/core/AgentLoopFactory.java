@@ -75,6 +75,17 @@ public final class AgentLoopFactory {
         int timeoutSec = Math.max(1, cfg.shell().timeoutMs() / 1000);
         tools.register(new ShellTool(adapter, timeoutSec, cfg.shell().maxOutputBytes(), true));
         tools.register(new LsTool());
+        // Skills：发现用户级 + 项目级技能并注册为工具
+        String userHome = System.getenv("AGENT_DEMO_HOME") != null
+                        && !System.getenv("AGENT_DEMO_HOME").isBlank()
+                ? System.getenv("AGENT_DEMO_HOME")
+                : System.getProperty("user.home");
+        String cwd = System.getProperty("user.dir");
+        java.util.List<Path> skillRoots = java.util.List.of(
+                Paths.get(userHome, ".agent-demo", "skills"),
+                Paths.get(cwd, ".agent-demo", "skills"));
+        ToolRegistry.registerSkillTools(
+                tools, com.example.agent.skill.SkillCatalog.discover(skillRoots));
         return tools;
     }
 
@@ -198,7 +209,7 @@ public final class AgentLoopFactory {
     public static String buildStorageSection(AgentConfig cfg, String userHome) {
         String logsDir = cfg.logging() != null && cfg.logging().dir() != null
                 ? cfg.logging().dir()
-                : Paths.get(userHome, ".agent-demo", "logs").toString();
+                : Paths.get(System.getProperty("user.dir"), "logs").toString();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")

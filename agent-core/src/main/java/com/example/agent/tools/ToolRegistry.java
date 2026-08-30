@@ -3,6 +3,8 @@ package com.example.agent.tools;
 import com.example.agent.tools.file.EditFileTool;
 import com.example.agent.tools.file.ReadFileTool;
 import com.example.agent.tools.file.WriteFileTool;
+import com.example.agent.skill.Skill;
+import com.example.agent.skill.SkillTool;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,5 +46,13 @@ public class ToolRegistry {
         registry.register(new ReadFileTool());
         registry.register(new WriteFileTool());
         registry.register(new EditFileTool());
+    }
+
+    /** Add-skills-system：把发现的技能注册为工具。 */
+    public static void registerSkillTools(ToolRegistry registry, List<Skill> skills) {
+        if (skills == null) return;
+        for (Skill s : skills) {
+            registry.register(new SkillTool(s));
+        }
     }
 }
