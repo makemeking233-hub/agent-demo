@@ -45,9 +45,12 @@ public class HealthController {
     }
 
     private boolean isProviderConfigured() {
-        // 检查环境变量 + 配置文件; v0.1 简化只看 DEEPSEEK_API_KEY
-        String key = env.getProperty("DEEPSEEK_API_KEY");
-        return key != null && !key.isBlank();
+        // 与 WebRuntimeConfig 同一 key 优先级：env(DEEPSEEK_API_KEY) > application-local.yml(agent.provider.api-key)
+        // 不能只看 env 变量，否则 application-local.yml 填充的 key 会导致 health 误报 degraded/provnot_configured
+        String fromEnv = env.getProperty("DEEPSEEK_API_KEY");
+        if (fromEnv != null && !fromEnv.isBlank()) return true;
+        String fromConfig = env.getProperty("agent.provider.api-key");
+        return fromConfig != null && !fromConfig.isBlank();
     }
 
     private String resolveVersion() {

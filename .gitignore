@@ -55,3 +55,5 @@ secrets.yaml
 
 # agent-demo 运行时遗留（记忆目录被误生成在工作目录；正确位置应为 ~/.agent-demo/）
 .agent-demo/
+# 测试/运行验证产生的本地日志（含 web/spring boot 启动 probe 日志）
+/test-logs/
