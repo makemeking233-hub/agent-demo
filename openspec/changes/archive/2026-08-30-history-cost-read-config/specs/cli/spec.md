@@ -2,9 +2,9 @@
 
 > 本文件是 `history-cost-read-config` 的 delta spec。在 archive 时合并到 `openspec/specs/cli/spec.md`。
 
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: History Cost Display (was: hardcoded 2/8)
+### Requirement: History Cost Display
 
 The system SHALL display the cost estimate in `/history` output by reading `agent.cost.inputPerMTokens` and `agent.cost.outputPerMTokens` from configuration, NOT hardcoded values.
 
