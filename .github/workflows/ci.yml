@@ -10,13 +10,19 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      # 显式固定 Node 版本 (与 agent-web/pom.xml frontend-maven-plugin 配置一致: v20.11.0);
-      # 缓存 ~/.npm 让 agent-web 的 npm ci 不每次重下 248 packages, 避免 7s 早期失败 (超时/网络抖动).
+      # 显式固定 Node 版本 (与 agent-web/pom.xml frontend-maven-plugin 配置一致: v20.11.0).
+      # 注: 不要用 setup-node 内置 cache='npm' (与 cache-dependency-path 组合会触发
+      # "Some specified paths were not resolved"), 改用独立的 actions/cache@v4.
       - uses: actions/setup-node@v4
         with:
           node-version: '20.11.0'
-          cache: 'npm'
-          cache-dependency-path: 'agent-web/frontend/package-lock.json'
+      - name: Cache npm registry (~/.npm)
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('agent-web/frontend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
       - name: Validate lockfile
         run: node -e "const l=require('./agent-web/frontend/package-lock.json'); console.log('lockfileVersion=' + l.lockfileVersion + ', packages=' + Object.keys(l.packages).length);"
       - name: Build
