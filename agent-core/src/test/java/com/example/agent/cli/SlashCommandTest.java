@@ -2,6 +2,7 @@ package com.example.agent.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.agent.core.Message;
@@ -83,5 +84,59 @@ class SlashCommandTest {
     assertEquals(2, resumed.get().size());
     assertEquals("hello", resumed.get().get(0).content());
     assertEquals("hi", resumed.get().get(1).content());
+  }
+
+  @Test
+  void modelWithoutArgListsCurrentModel() {
+    var hist = new MessageHistory(new TokenEstimator());
+    int[] p = {0}, c = {0};
+    java.util.concurrent.atomic.AtomicReference<String> resolved = new java.util.concurrent.atomic.AtomicReference<>();
+    cmd.dispatch(
+        "/model",
+        hist,
+        p,
+        c,
+        "deepseek-chat",
+        () -> {},
+        null,
+        null,
+        resolved::set);
+    assertNull(resolved.get()); // 无参数不调 setter
+  }
+
+  @Test
+  void modelWithArgTriggersCallback() {
+    var hist = new MessageHistory(new TokenEstimator());
+    int[] p = {0}, c = {0};
+    java.util.concurrent.atomic.AtomicReference<String> resolved = new java.util.concurrent.atomic.AtomicReference<>();
+    cmd.dispatch(
+        "/model deepseek-reasoner",
+        hist,
+        p,
+        c,
+        "deepseek-chat",
+        () -> {},
+        null,
+        null,
+        resolved::set);
+    assertEquals("deepseek-reasoner", resolved.get());
+  }
+
+  @Test
+  void modelWithUnknownArgDoesNotChangeCallback() {
+    var hist = new MessageHistory(new TokenEstimator());
+    int[] p = {0}, c = {0};
+    java.util.concurrent.atomic.AtomicReference<String> resolved = new java.util.concurrent.atomic.AtomicReference<>();
+    cmd.dispatch(
+        "/model gpt-99",
+        hist,
+        p,
+        c,
+        "deepseek-chat",
+        () -> {},
+        null,
+        null,
+        resolved::set);
+    assertNull(resolved.get()); // 未知 model 不调 setter
   }
 }

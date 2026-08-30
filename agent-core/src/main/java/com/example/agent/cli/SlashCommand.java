@@ -17,7 +17,11 @@ import java.util.function.Consumer;
 public class SlashCommand {
     /** v0.2 支持的 slash 命令清单（用于 help 输出与补全） */
     private static final List<String> COMMANDS =
-            List.of("/help", "/clear", "/quit", "/history", "/resume");
+            List.of("/help", "/clear", "/quit", "/history", "/resume", "/model");
+
+    /** v0.2 支持的 model 列表（DeepSeek 系） */
+    private static final List<String> SUPPORTED_MODELS =
+            List.of("deepseek-chat", "deepseek-reasoner");
 
     /**
      * 分发单行输入到 slash 命令处理（v0.1 兼容版：不支持 /resume）。
@@ -38,7 +42,7 @@ public class SlashCommand {
             String model,
             Runnable onClear) {
         return dispatch(
-                input, hist, totalPromptTokens, totalCompletionTokens, model, onClear, null, null);
+                input, hist, totalPromptTokens, totalCompletionTokens, model, onClear, null, null, null);
     }
 
     /**
@@ -63,6 +67,42 @@ public class SlashCommand {
             Runnable onClear,
             Path sessionsDir,
             Consumer<List<Message>> onResume) {
+        return dispatch(
+                input,
+                hist,
+                totalPromptTokens,
+                totalCompletionTokens,
+                model,
+                onClear,
+                sessionsDir,
+                onResume,
+                null);
+    }
+
+    /**
+     * 分发单行输入到 slash 命令处理（v0.2 完整版：支持 /resume / /model）。
+     *
+     * @param input 原始输入
+     * @param hist 当前消息历史（/history 读、/clear 替换）
+     * @param totalPromptTokens 累计 prompt token
+     * @param totalCompletionTokens 累计 completion token
+     * @param model 当前模型名（/history 显示用 + /model 校验）
+     * @param onClear /clear 触发的回调
+     * @param sessionsDir /resume 用的 sessions 目录
+     * @param onResume /resume 触发的回调
+     * @param onModel /model 触发的回调（接收新 model 名；null 时 /model 退化为 list-only）
+     * @return true=该行被 slash 命令消费
+     */
+    public boolean dispatch(
+            String input,
+            MessageHistory hist,
+            int[] totalPromptTokens,
+            int[] totalCompletionTokens,
+            String model,
+            Runnable onClear,
+            Path sessionsDir,
+            Consumer<List<Message>> onResume,
+            Consumer<String> onModel) {
         String trimmed = input.trim();
         if (!trimmed.startsWith("/")) return false;
         switch (trimmed) {
@@ -77,9 +117,40 @@ public class SlashCommand {
             case "/history" -> printHistory(
                     hist, totalPromptTokens[0], totalCompletionTokens[0], model);
             case "/resume" -> doResume(sessionsDir, onResume);
-            default -> System.out.println("[未知命令] 输入 /help 查看可用命令");
+            default -> {
+                if (trimmed.startsWith("/model")) {
+                    doModel(trimmed, model, onModel);
+                } else {
+                    System.out.println("[未知命令] 输入 /help 查看可用命令");
+                }
+            }
         }
         return true;
+    }
+
+    /**
+     * /model 处理：列表（无参数）/ 切换（有参数）。
+     *
+     * @param trimmed 完整输入（已 trim）
+     * @param currentModel 当前 model（用于无参数时显示）
+     * @param onModel setter 回调（null 时只 list 不调 setter）
+     */
+    private void doModel(String trimmed, String currentModel, Consumer<String> onModel) {
+        String[] parts = trimmed.split("\\s+", 2);
+        if (parts.length < 2 || parts[1].isBlank()) {
+            // /model 无参数：列出当前 + 支持
+            System.out.println("当前 model: " + currentModel);
+            System.out.println("支持: " + String.join(", ", SUPPORTED_MODELS));
+            return;
+        }
+        String target = parts[1].trim();
+        if (!SUPPORTED_MODELS.contains(target)) {
+            System.out.println(
+                    "[未知 model: " + target + "] 支持: " + String.join(", ", SUPPORTED_MODELS));
+            return;
+        }
+        if (onModel != null) onModel.accept(target);
+        System.out.println("[/model] 切换到 " + target);
     }
 
     /** 打印可用 slash 命令列表到 stdout */

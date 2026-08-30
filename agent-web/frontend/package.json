@@ -33,6 +33,9 @@
     "vitest": "^4.1.11"
   },
   "dependencies": {
-    "react-markdown": "^10.1.0"
+    "@tailwindcss/vite": "^4.3.3",
+    "lucide-react": "^1.37.0",
+    "react-markdown": "^10.1.0",
+    "tailwindcss": "^4.3.3"
   }
 }
