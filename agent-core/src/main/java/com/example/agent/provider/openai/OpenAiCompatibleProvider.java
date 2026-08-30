@@ -4,14 +4,18 @@ import com.example.agent.llm.ChatRequest;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
 
+import io.netty.channel.ChannelOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -42,7 +46,17 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
     private static final int MAX_IN_MEMORY_BYTES = 16 * 1024 * 1024;
 
     /**
-     * HTTP 客户端（带 Authorization: Bearer header）
+     * 默认整体请求-响应超时（首 token TTFT 上限）。reasoner 长思考留余量；可被新重载构造覆盖。
+     */
+    private static final Duration DEFAULT_RESPONSE_TIMEOUT = Duration.ofSeconds(60);
+
+    /**
+     * 默认 TCP 连接超时（三次握手）。
+     */
+    private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+
+    /**
+     * HTTP 客户端（带 Authorization: Bearer header + 显式超时）
      */
     protected final WebClient client;
 
@@ -52,16 +66,41 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
     protected final OpenAiCompatibleMapper mapper;
 
     /**
-     * 构造 OpenAI 兼容 Provider。
+     * 构造 OpenAI 兼容 Provider（使用默认超时：responseTimeout=60s, connectTimeout=10s）。
      *
      * @param apiKey  API key（Bearer token）
      * @param baseUrl API base URL
      */
     protected OpenAiCompatibleProvider(String apiKey, String baseUrl) {
+        this(apiKey, baseUrl, DEFAULT_RESPONSE_TIMEOUT, DEFAULT_CONNECT_TIMEOUT);
+    }
+
+    /**
+     * 构造 OpenAI 兼容 Provider（显式超时）。
+     *
+     * @param apiKey          API key（Bearer token）
+     * @param baseUrl         API base URL
+     * @param responseTimeout 整体请求-响应超时（{@code null} 则用默认 60s）
+     * @param connectTimeout  TCP 连接超时（{@code null} 则用默认 10s）
+     */
+    protected OpenAiCompatibleProvider(
+            String apiKey, String baseUrl, Duration responseTimeout, Duration connectTimeout) {
+        HttpClient httpClient =
+                HttpClient.create()
+                        .responseTimeout(
+                                responseTimeout != null
+                                        ? responseTimeout
+                                        : DEFAULT_RESPONSE_TIMEOUT)
+                        .option(
+                                ChannelOption.CONNECT_TIMEOUT_MILLIS,
+                                (int) (connectTimeout != null
+                                        ? connectTimeout.toMillis()
+                                        : DEFAULT_CONNECT_TIMEOUT.toMillis()));
         this.client =
                 WebClient.builder()
                         .baseUrl(baseUrl)
                         .defaultHeader("Authorization", "Bearer " + apiKey)
+                        .clientConnector(new ReactorClientHttpConnector(httpClient))
                         .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_BYTES))
                         .build();
         this.mapper = new OpenAiCompatibleMapper();

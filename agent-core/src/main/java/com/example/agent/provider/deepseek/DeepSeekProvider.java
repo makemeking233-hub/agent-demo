@@ -2,6 +2,8 @@ package com.example.agent.provider.deepseek;
 
 import com.example.agent.provider.openai.OpenAiCompatibleProvider;
 
+import java.time.Duration;
+
 /**
  * DeepSeek Provider 实现（OpenAI 兼容协议；详见 design.md §6.1）。
  *
@@ -43,6 +45,19 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
      */
     public DeepSeekProvider(String apiKey, String baseUrl) {
         super(apiKey, baseUrl);
+    }
+
+    /**
+     * 显式超时构造器（透传 response / connect timeout，覆盖默认 60s/10s）。
+     *
+     * @param apiKey          API key
+     * @param baseUrl         自定义 base URL
+     * @param responseTimeout 整体请求-响应超时（{@code null} 用默认 60s）
+     * @param connectTimeout  TCP 连接超时（{@code null} 用默认 10s）
+     */
+    public DeepSeekProvider(
+            String apiKey, String baseUrl, Duration responseTimeout, Duration connectTimeout) {
+        super(apiKey, baseUrl, responseTimeout, connectTimeout);
     }
 
     @Override
