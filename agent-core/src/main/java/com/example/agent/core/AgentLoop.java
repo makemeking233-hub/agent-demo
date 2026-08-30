@@ -343,10 +343,18 @@ public class AgentLoop {
                                 printer.onFinished();
                                 return Flux.just(chunks);
                             }
+                            // collectList 先收集全部工具调用结果，再一次性回流+递归，
+                            // 避免 flatMap 流式处理下某工具调用(c2)的 emit 在递归切换时被丢弃
+                            // → 曾导致失败工具结果未回流入 history → assistant.tool_calls 缺 tool 消息 → DeepSeek 400
                             return executeTools(assistant.toolCalls())
-                                    .flatMap(
-                                            results -> {
-                                                history.appendToolResults(toEnvelopes(results));
+                                    .collectList()
+                                    .flatMapMany(
+                                            allResults -> {
+                                                java.util.List<ToolResult<Object>> flat =
+                                                        allResults.stream()
+                                                                .flatMap(java.util.List::stream)
+                                                                .collect(java.util.stream.Collectors.toList());
+                                                history.appendToolResults(toEnvelopes(flat));
                                                 return streamUntilToolsSettled(iteration + 1);
                                             });
                         });
