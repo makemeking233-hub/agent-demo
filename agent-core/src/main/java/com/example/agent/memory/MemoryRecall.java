@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public class MemoryRecall {
 
     /**
-     * 按 token 重叠评分召回最相关的 memory entry。
+     * 按 token 重叠评分召回最相关的 memory entry（全 scope）。
      *
      * @param query 用户查询字符串
      * @param entries 候选 memory entry 列表
@@ -25,11 +25,27 @@ public class MemoryRecall {
      */
     public List<MemoryEntry> recall(
             String query, List<MemoryEntry> entries, int maxRecall, double minScore) {
+        return recall(query, entries, maxRecall, minScore, null);
+    }
+
+    /**
+     * 按 token 重叠评分召回最相关的 memory entry（限定 scope，跨 scope 不混合）。
+     *
+     * @param query 用户查询字符串
+     * @param entries 候选 memory entry 列表
+     * @param maxRecall 最多返回条数
+     * @param minScore 评分阈值（{@code 0~1}）
+     * @param scope 限定的作用域；{@code null} 表示不限（全 scope）
+     * @return 评分 >= minScore 的 entry，按评分降序，最多 maxRecall 条
+     */
+    public List<MemoryEntry> recall(
+            String query, List<MemoryEntry> entries, int maxRecall, double minScore, MemoryScope scope) {
         Set<String> queryTokens = tokenize(query);
         if (queryTokens.isEmpty()) return List.of();
 
         Map<MemoryEntry, Double> scored = new LinkedHashMap<>();
         for (MemoryEntry e : entries) {
+            if (scope != null && e.scope() != scope) continue;
             Set<String> entryTokens = tokenize(e.title() + " " + e.description());
             if (entryTokens.isEmpty()) continue;
             Set<String> intersection = new HashSet<>(queryTokens);

@@ -82,9 +82,9 @@ class AcceptanceTestSuite {
         var index = new MemoryIndex(dir.indexFile());
         index.write(
                 java.util.List.of(
-                        new com.example.agent.memory.MemoryEntry(
+                        com.example.agent.memory.MemoryEntry.of(
                                 "DeepSeek 配置", "API key 设置", "ds.md"),
-                        new com.example.agent.memory.MemoryEntry(
+                        com.example.agent.memory.MemoryEntry.of(
                                 "Rust 所有权", "borrow checker", "rust.md")));
         var entries = index.parse();
         var recalled = new MemoryRecall().recall("DeepSeek API 怎么配", entries, 5, 0.3);

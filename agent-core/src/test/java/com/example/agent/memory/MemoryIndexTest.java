@@ -32,7 +32,7 @@ class MemoryIndexTest {
     void writesEntries() throws Exception {
         Path file = tmp.resolve("MEMORY.md");
         var index = new MemoryIndex(file);
-        index.write(List.of(new MemoryEntry("Test", "测试", "test.md")));
+        index.write(List.of(MemoryEntry.of("Test", "测试", "test.md")));
         assertTrue(Files.exists(file));
         String content = Files.readString(file);
         assertTrue(content.contains("[Test](test.md)"));

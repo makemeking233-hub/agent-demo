@@ -1,17 +1,22 @@
 # Persistent Agent Memory
 
-You have a persistent, file-based memory system at {memoryDir}.
+You have a persistent, file-based memory system organized by scope.
 
 ## How to Save Memory
-1. Create a topic file `{memoryDir}/<name>.md`
-2. Update MEMORY.md index with `- [Title](filename) — description`
+1. Choose the right scope:
+   - USER — 跨项目全局知识与约定（~/.agent-demo/memory/<name>.md）
+   - PROJECT — 当前项目专属踩坑/约定（<cwd>/.agent-demo/memory/<name>.md）
+   - LOCAL — 仅本次会话有效，不入磁盘
+2. Create a topic file under the chosen scope directory
+3. Update that scope's MEMORY.md index with `- [Title](filename) — description`
 
 ## What Not to Save
 - Code-derived knowledge (read the code)
 - Duplicate entries
+- Cross-scope confusion (project-specific facts belong to PROJECT, not USER)
 
 {extraGuidelines}
 
-## MEMORY.md
+## Scopes
 
-{indexContent}
+{scopeSections}

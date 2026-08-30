@@ -8,6 +8,7 @@ import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.memory.MemoryDir;
 import com.example.agent.memory.MemoryPromptBuilder;
+import com.example.agent.memory.MemoryScope;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
@@ -94,9 +95,14 @@ public final class AgentLoopFactory {
                         && !System.getenv("AGENT_DEMO_HOME").isBlank()
                 ? System.getenv("AGENT_DEMO_HOME")
                 : System.getProperty("user.home");
-        MemoryDir memoryDir = new MemoryDir(Paths.get(userHome, ".agent-demo", "memory"));
-        String memorySection = new MemoryPromptBuilder(memoryDir)
-                .build(String.join("\n", cfg.memoryInject()));
+        // 三 scope 记忆：USER（跨项目）+ PROJECT（随项目仓库）+ LOCAL（本次会话）
+        String cwd = System.getProperty("user.dir");
+        java.util.List<MemoryDir> memoryDirs = java.util.List.of(
+                MemoryDir.forScope(MemoryScope.USER, userHome, cwd),
+                MemoryDir.forScope(MemoryScope.PROJECT, userHome, cwd),
+                MemoryDir.forScope(MemoryScope.LOCAL, userHome, cwd));
+        String memorySection = new MemoryPromptBuilder(memoryDirs.get(0))
+                .build(memoryDirs, String.join("\n", cfg.memoryInject()));
         String storageSection = buildStorageSection(cfg, userHome);
         return new SystemPromptBuilder()
                 .build(

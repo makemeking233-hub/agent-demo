@@ -9,9 +9,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * MEMORY.md 索引解析/序列化。
+ * MEMORY.md 索引解析/序列化（含作用域 scope）。
  *
- * <p>每行格式：{@code - [标题](文件名) — 一行描述}
+ * <p>每行格式：{@code - [标题](文件名) — 一行描述}。解析出的 {@link MemoryEntry} 携带该索引所属的
+ * scope；写入/添加时同样以该 scope 关联。
  */
 public class MemoryIndex {
     /**
@@ -20,21 +21,55 @@ public class MemoryIndex {
     private static final Pattern ENTRY = Pattern.compile("^- \\[([^\\]]+)\\]\\(([^)]+)\\) — (.+)$");
 
     /**
+     * 该索引所属的作用域
+     */
+    private final MemoryScope scope;
+
+    /**
      * MEMORY.md 文件路径
      */
     private final Path file;
 
     /**
-     * 构造索引解析器。
+     * 构造索引解析器（USER scope）。
      *
      * @param file MEMORY.md 文件路径
      */
     public MemoryIndex(Path file) {
-        this.file = file;
+        this(file, MemoryScope.USER);
     }
 
     /**
-     * 解析 MEMORY.md 为 entry 列表（不存在返回空列表）。
+     * 构造索引解析器（指定 scope）。
+     *
+     * @param file  MEMORY.md 文件路径
+     * @param scope 该索引所属作用域
+     */
+    public MemoryIndex(Path file, MemoryScope scope) {
+        this.file = file;
+        this.scope = scope;
+    }
+
+    /**
+     * 按 scope 构造索引解析器。
+     *
+     * @param scope 作用域
+     * @param file  MEMORY.md 文件路径
+     * @return 指定 scope 的 {@link MemoryIndex}
+     */
+    public static MemoryIndex forScope(MemoryScope scope, Path file) {
+        return new MemoryIndex(file, scope);
+    }
+
+    /**
+     * @return 索引所属作用域
+     */
+    public MemoryScope scope() {
+        return scope;
+    }
+
+    /**
+     * 解析 MEMORY.md 为 entry 列表（不存在返回空列表）。每条 entry 携带本索引的 scope。
      *
      * @return 解析出的 memory entry
      * @throws IOException 文件读取错误
@@ -45,7 +80,7 @@ public class MemoryIndex {
         for (String line : Files.readAllLines(file)) {
             Matcher m = ENTRY.matcher(line.trim());
             if (m.matches()) {
-                entries.add(new MemoryEntry(m.group(1), m.group(3), m.group(2)));
+                entries.add(new MemoryEntry(m.group(1), m.group(3), m.group(2), scope));
             }
         }
         return entries;
