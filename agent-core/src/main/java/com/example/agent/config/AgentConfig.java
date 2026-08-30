@@ -16,6 +16,7 @@ import java.util.List;
  * @param logging 会话结构化日志配置
  * @param memory Memory 相关配置（含 sideQuery 语义召回）
  * @param mcp MCP 客户端配置
+ * @param worktree Worktree 隔离工作区配置
  */
 public record AgentConfig(
         Provider provider,
@@ -26,7 +27,8 @@ public record AgentConfig(
         List<String> memoryInject,
         Logging logging,
         Memory memory,
-        Mcp mcp) {
+        Mcp mcp,
+        Worktree worktree) {
 
     /**
      * LLM provider 配置。
@@ -130,6 +132,14 @@ public record AgentConfig(
     public record McpServer(String name, String url) {}
 
     /**
+     * Worktree 隔离工作区配置（add-worktree-mode change）。
+     *
+     * @param enabled 是否启用 worktree 模式（会话启动自动创建独立 worktree 并作为工作目录）
+     * @param baseDir worktree 放置目录（默认 {@code <user.home>/.agent-demo/worktrees}）
+     */
+    public record Worktree(boolean enabled, String baseDir) {}
+
+    /**
      * v0.1 内置默认配置。
      *
      * @return 默认 {@link AgentConfig}
@@ -164,6 +174,9 @@ public record AgentConfig(
                         30,
                         50),
                 new Memory(new SideQuery(true, 8, 3)),
-                new Mcp(List.of()));
+                new Mcp(List.of()),
+                new Worktree(
+                        false,
+                        System.getProperty("user.home") + "/.agent-demo/worktrees"));
     }
 }

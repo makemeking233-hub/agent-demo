@@ -60,7 +60,8 @@ public class ConfigLoader {
                     base.memoryInject(),
                     mergeLogging(base.logging(), map),
                     mergeMemory(base.memory(), map),
-                    mergeMcp(base.mcp(), map));
+                    mergeMcp(base.mcp(), map),
+                    mergeWorktree(base.worktree(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -94,7 +95,8 @@ public class ConfigLoader {
                 base.memoryInject(),
                 base.logging(),
                 base.memory(),
-                base.mcp());
+                base.mcp(),
+                base.worktree());
     }
 
     /**
@@ -188,6 +190,24 @@ public class ConfigLoader {
             result.add(new AgentConfig.McpServer(name.trim(), url.trim()));
         }
         return new AgentConfig.Mcp(result);
+    }
+
+    /**
+     * 合并 user yaml 的 {@code worktree} 段到 base（缺失段保持 base 值）。
+     *
+     * @param base 当前 worktree 配置
+     * @param map user yaml 顶层字典
+     * @return 合并后的 {@link AgentConfig.Worktree}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Worktree mergeWorktree(AgentConfig.Worktree base, Map<String, Object> map) {
+        Object seg = map.get("worktree");
+        if (!(seg instanceof Map<?, ?> mm)) return base;
+        Map<String, Object> m = (Map<String, Object>) mm;
+        boolean enabled =
+                m.containsKey("enabled") ? BoolVal(m.get("enabled"), base.enabled()) : base.enabled();
+        String baseDir = str(m, "baseDir", base.baseDir());
+        return new AgentConfig.Worktree(enabled, baseDir);
     }
 
     /**

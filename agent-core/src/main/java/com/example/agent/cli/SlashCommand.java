@@ -5,6 +5,7 @@ import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
+import com.example.agent.worktree.WorktreeManager;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -28,6 +29,9 @@ public class SlashCommand {
     /** 成本配置（v0.2 从 AgentConfig.cost 注入；null 时用 DeepSeek-chat 默认 2/8） */
     private AgentConfig.Cost cost = new AgentConfig.Cost(2.0, 8.0, 4.0, 5.0);
 
+    /** Worktree 管理器（/worktree 用；null 时 /worktree 退化为提示信息） */
+    private WorktreeManager worktreeManager;
+
     /**
      * 注入成本配置（ChatCommand 启动时调；v0.3+ 可 per-model 覆盖）。
      *
@@ -35,6 +39,15 @@ public class SlashCommand {
      */
     public void setCost(AgentConfig.Cost cost) {
         if (cost != null) this.cost = cost;
+    }
+
+    /**
+     * 注入 Worktree 管理器（ChatCommand 启动时调）。
+     *
+     * @param manager Worktree 管理器（可 null）
+     */
+    public void setWorktreeManager(WorktreeManager manager) {
+        this.worktreeManager = manager;
     }
 
     /**
@@ -135,6 +148,8 @@ public class SlashCommand {
             default -> {
                 if (trimmed.startsWith("/model")) {
                     doModel(trimmed, model, onModel);
+                } else if (trimmed.startsWith("/worktree")) {
+                    doWorktree(trimmed);
                 } else {
                     System.out.println("[未知命令] 输入 /help 查看可用命令");
                 }
@@ -166,6 +181,51 @@ public class SlashCommand {
         }
         if (onModel != null) onModel.accept(target);
         System.out.println("[/model] 切换到 " + target);
+    }
+
+    /**
+     * /worktree 处理：create [branch] / list / remove [name]。
+     *
+     * @param trimmed 完整输入（已 trim）
+     */
+    private void doWorktree(String trimmed) {
+        if (worktreeManager == null) {
+            System.out.println("[/worktree] 未启用（ChatCommand 未注入 WorktreeManager）");
+            return;
+        }
+        String[] parts = trimmed.split("\\s+", 3);
+        String op = parts.length >= 2 ? parts[1] : "list";
+        switch (op) {
+            case "create" -> {
+                String branch = parts.length >= 3 ? parts[2].trim() : null;
+                String name = "wt-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+                java.nio.file.Path path = worktreeManager.create(name, branch);
+                if (path != null) {
+                    System.out.println("[/worktree] 已创建: " + path + "（分支 " + (branch != null ? branch : "默认") + "）");
+                } else {
+                    System.out.println("[/worktree] 创建失败（非 git 仓库？请用 /worktree list 检查）");
+                }
+            }
+            case "remove" -> {
+                String name = parts.length >= 3 ? parts[2].trim() : null;
+                if (name == null) {
+                    System.out.println("[/worktree remove] 用法: /worktree remove <name>");
+                } else if (worktreeManager.remove(name)) {
+                    System.out.println("[/worktree] 已移除: " + name);
+                } else {
+                    System.out.println("[/worktree] 移除失败: " + name);
+                }
+            }
+            default -> {
+                var list = worktreeManager.list();
+                if (list.isEmpty()) {
+                    System.out.println("[/worktree list] 无 worktree（或当前目录非 git 仓库）");
+                } else {
+                    System.out.println("[/worktree list]");
+                    for (var info : list) System.out.println("  " + info.path() + "  (" + info.branch() + ")");
+                }
+            }
+        }
     }
 
     /** 打印可用 slash 命令列表到 stdout */

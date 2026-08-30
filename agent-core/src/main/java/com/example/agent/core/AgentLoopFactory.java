@@ -197,6 +197,7 @@ public final class AgentLoopFactory {
             Path agentDataDir,
             PermissionConfirmer confirmer,
             AbortSignal abortSignal) {
+        Path workingDir = resolveWorkingDir(cfg);
         return new AgentLoop(
                 provider,
                 tools,
@@ -204,12 +205,32 @@ public final class AgentLoopFactory {
                 printer,
                 MAX_TOOL_ITERATIONS,
                 model,
-                Paths.get(System.getProperty("user.dir")),
+                workingDir,
                 buildSystemPrompt(cfg, model, null, provider),
                 sink,
                 agentDataDir,
                 confirmer,
                 abortSignal);
+    }
+
+    /**
+     * 解析 agent 工作目录：worktree 模式开启时创建独立 worktree 并返回其路径；否则返回项目根。
+     *
+     * @param cfg 已加载的配置
+     * @return workingDir（worktree 路径或项目根）
+     */
+    private static Path resolveWorkingDir(AgentConfig cfg) {
+        AgentConfig.Worktree wt = cfg.worktree();
+        if (wt != null && wt.enabled()) {
+            com.example.agent.worktree.WorktreeManager mgr =
+                    new com.example.agent.worktree.WorktreeManager(
+                            Paths.get(System.getProperty("user.dir")), Paths.get(wt.baseDir()));
+            String name = "sess-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+            Path path = mgr.create(name, null);
+            if (path != null) return path;
+            // worktree 创建失败 → 回退项目根
+        }
+        return Paths.get(System.getProperty("user.dir"));
     }
 
     /**
