@@ -35,7 +35,7 @@ node_modules/
 
 # frontend-maven-plugin 下载的 Node.js 二进制（~70MB，需 Git LFS 才能提交；本项目不要）
 agent-web/frontend/node/
-agent-web/frontend/package-lock.json
+# 注：package-lock.json 必须 commit (npm ci 要求 lockfile 存在) — 之前被错误忽略导致 CI 7s 失败
 
 # OpenSpec 生成的 Claude Code 工具文件（本项目用 DSH，工具已复制到 .dsh/）
 .claude/
