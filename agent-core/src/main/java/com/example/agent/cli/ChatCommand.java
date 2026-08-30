@@ -65,6 +65,11 @@ public class ChatCommand implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(ChatCommand.class);
 
     /**
+     * /resume 恢复消息的 token 上限（超过则 snip 裁切）。约 128K 上下文的 80%。
+     */
+    private static final int MAX_RESUME_TOKENS = 100_000;
+
+    /**
      * --model：覆盖默认模型名
      */
     @Option(
@@ -428,20 +433,22 @@ public class ChatCommand implements Runnable {
                             ctx.loop().setHistory(fresh);
                         },
                         ctx.sessionsDir(),
-                        messages -> {
-                            // /resume 回调：调 MessageHistory.replaceAll 整体替换
+                        result -> {
+                            // /resume 回调：用 SessionResumeLoader 恢复的完整消息（含 toolCalls/toolCallId/meta token）
                             MessageHistory fresh = new MessageHistory(ctx.estimator());
-                            fresh.replaceAll(messages);
+                            fresh.replaceAll(
+                                    com.example.agent.session.SessionResumeLoader.snip(
+                                            result.messages(), ctx.estimator(), MAX_RESUME_TOKENS));
                             ctx.history().set(fresh);
                             ctx.loop().setHistory(fresh);
                             if (ctx.recorder() != null) ctx.recorder().flush();
-                            // 累计 token 数组重置（/resume 前的累计不适用于新历史）
-                            ctx.totalPrompt()[0] = 0;
-                            ctx.totalCompletion()[0] = 0;
-                            if (messages.isEmpty()) {
+                            // 恢复累计 token（来自 meta 条目），供 /history 显示
+                            ctx.totalPrompt()[0] = result.promptTokens();
+                            ctx.totalCompletion()[0] = result.completionTokens();
+                            if (result.messages().isEmpty()) {
                                 System.out.println("[/resume] 当前无可恢复会话");
                             } else {
-                                System.out.println("[/resume] 已恢复 " + messages.size() + " 条消息");
+                                System.out.println("[/resume] 已恢复 " + result.messages().size() + " 条消息");
                             }
                         },
                         newModel -> {

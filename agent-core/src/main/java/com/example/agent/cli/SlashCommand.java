@@ -3,6 +3,7 @@ package com.example.agent.cli;
 import com.example.agent.config.AgentConfig;
 import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
+import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
 
 import java.nio.file.Path;
@@ -88,7 +89,8 @@ public class SlashCommand {
                 model,
                 onClear,
                 sessionsDir,
-                onResume,
+                // 兼容旧调用：把 ResumeResult 的 messages 传给 List<Message> 回调
+                rr -> onResume.accept(rr.messages()),
                 null);
     }
 
@@ -114,7 +116,7 @@ public class SlashCommand {
             String model,
             Runnable onClear,
             Path sessionsDir,
-            Consumer<List<Message>> onResume,
+            Consumer<SessionResumeLoader.ResumeResult> onResume,
             Consumer<String> onModel) {
         String trimmed = input.trim();
         if (!trimmed.startsWith("/")) return false;
@@ -197,42 +199,22 @@ public class SlashCommand {
     /**
      * 执行 /resume：从 {@code sessionsDir} 加载最近 session，调 {@code onResume} 回调。 始终调回调（无历史时传空 list），便于调用方统一处理 UI 提示。
      */
-    private void doResume(Path sessionsDir, Consumer<List<Message>> onResume) {
+    private void doResume(Path sessionsDir, Consumer<SessionResumeLoader.ResumeResult> onResume) {
         if (onResume == null) {
             System.out.println("[/resume] 未启用（ChatCommand 未注入 onResume 回调）");
             return;
         }
         if (sessionsDir == null) {
             System.out.println("[/resume] sessions 目录未配置");
-            onResume.accept(List.of());
+            onResume.accept(new SessionResumeLoader.ResumeResult(List.of(), 0, 0));
             return;
         }
-        List<com.example.agent.session.SessionEntry> entries = SessionStore.loadLatest(sessionsDir);
-        List<Message> messages =
-                entries.stream()
-                        .map(
-                                e -> {
-                                    return switch (e.type()) {
-                                        case "user" -> (Message) new Message.User(e.content());
-                                        case "assistant" ->
-                                                new Message.Assistant(
-                                                        e.content(),
-                                                        java.util.List.of());
-                                        case "tool_result" ->
-                                                new Message.ToolResult(
-                                                        "",
-                                                        e.content(),
-                                                        false);
-                                        case "system" -> new Message.System(e.content());
-                                        default -> new Message.User(e.content());
-                                    };
-                                })
-                        .toList();
-        onResume.accept(messages);
-        if (messages.isEmpty()) {
+        SessionResumeLoader.ResumeResult result = SessionResumeLoader.load(sessionsDir);
+        onResume.accept(result);
+        if (result.messages().isEmpty()) {
             System.out.println("[/resume] 无历史会话");
         } else {
-            System.out.println("[/resume] 已恢复 " + messages.size() + " 条消息");
+            System.out.println("[/resume] 已恢复 " + result.messages().size() + " 条消息");
         }
     }
 
