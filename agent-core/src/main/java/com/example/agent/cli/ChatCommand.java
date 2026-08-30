@@ -273,7 +273,7 @@ public class ChatCommand implements Runnable {
         String logsDir =
                 cfg.logging() != null && cfg.logging().dir() != null
                         ? cfg.logging().dir()
-                        : Paths.get(userHome, ".agent-demo", "logs").toString();
+                        : Paths.get(System.getProperty("user.dir"), "logs").toString();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")

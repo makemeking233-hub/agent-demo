@@ -57,3 +57,9 @@ secrets.yaml
 .agent-demo/
 # 测试/运行验证产生的本地日志（含 web/spring boot 启动 probe 日志）
 /test-logs/
+
+# agent-demo 运行时日志专门目录（项目内 logs/，不跟踪日志文件与会话日志）
+/logs/
+/logs/app.log*
+/logs/sessions/
+*.log
