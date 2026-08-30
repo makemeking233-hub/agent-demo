@@ -25,7 +25,7 @@
 - ✅ 工具调用：`ReadFile` / `WriteFile` / `EditFile` / `Ls` / `Shell`，自动执行并回流结果
 - ✅ 权限确认：写文件与命令执行需要用户交互确认（默认 allow-read, ask-write）
 - ✅ 会话持久化：JSONL append-only 格式保存到 `~/.agent-demo/sessions/`（v0.1 仅保存，v0.2 支持 resume）
-- ✅ Slash 命令：`/help` `/clear` `/quit` `/history` `/resume`（`/model` v0.2）
+- ✅ Slash 命令：`/help` `/clear` `/quit` `/history` `/resume` `/model`
 - ✅ Memory 记忆：长期记忆写入 `~/.agent-demo/memory/`，下次会话按相关度自动召回
 - ✅ 上下文压缩：128K 上限前自动触发 compact，失败熔断防止死循环
 - ✅ 错误重试：网络 / 5xx / 429 自动重试；401 立即停止，REPL 打印友好提示（key 未设 / 失效 / 网络 / 限流）后继续等待输入而非退出进程
@@ -123,11 +123,13 @@ agent chat --auto-approve-write          # E2E 测试：跳过写权限确认
 
 | 命令 | 行为 | 输出示例 |
 |------|------|----------|
-| `/help` | 列出可用命令 | `可用命令: /help /clear /quit /history /resume` |
+| `/help` | 列出可用命令 | `可用命令: /help /clear /quit /history /resume /model` |
 | `/clear` | 清空当前会话历史（保留 session 文件） | `[已清空会话历史]` |
 | `/quit` | 退出 REPL（exit code 0） | （无输出） |
 | `/history` | 显示累计 token + 估算费用 | `消息数: 12 \| 累计 token: 345 in / 678 out \| 估算费用: ¥0.0061` |
 | `/resume` | 从 `~/.agent-demo/sessions/` 加载最近 session（按 mtime），整体替换当前 history | `[/resume] 已恢复 N 条消息` / `[/resume] 当前无可恢复会话` |
+| `/model` | 列出当前 model + 支持的 model 列表（无参数） | `当前 model: deepseek-chat`<br/>`支持: deepseek-chat, deepseek-reasoner` |
+| `/model <name>` | 运行时切换 model（下一轮 LLM 调用生效）| `[/model] 切换到 deepseek-reasoner` |
 | 其他 `/xxx` | 未知命令 | `[未知命令] 输入 /help 查看可用命令` |
 
 > **/resume 注意**：
@@ -290,7 +292,7 @@ sequenceDiagram
 - ❌ 不做插件市场、远程协作
 - ❌ 不做 Team Memory / Memory Snapshot（v0.2+）
 - ❌ 不做 Session Memory Compaction hook（v0.2）
-- ❌ 不做 `/model` 切换（v0.2）
+- ❌ 不做动态 provider 切换（v0.2+）
 
 ---
 

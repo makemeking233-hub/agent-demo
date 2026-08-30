@@ -442,6 +442,10 @@ public class ChatCommand implements Runnable {
                             } else {
                                 System.out.println("[/resume] 已恢复 " + messages.size() + " 条消息");
                             }
+                        },
+                        newModel -> {
+                            // /model 回调：调 AgentLoop.setModel 切换 model，下一轮生效
+                            ctx.loop().setModel(newModel);
                         });
     }
 
