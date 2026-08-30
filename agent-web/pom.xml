@@ -79,6 +79,12 @@
                         <phase>verify</phase>
                         <goals><goal>check</goal></goals>
                         <configuration>
+                            <!-- 排除无法单元测试的 Bootstrap / 配置类（Spring Boot 入口 main + @Profile 配置 bean），
+                                避免"不可测类拖垮逐包 80%/70% 门禁" -->
+                            <excludes>
+                                <exclude>com/example/agent/web/WebApplication.*</exclude>
+                                <exclude>com/example/agent/web/StaticResourceConfig.*</exclude>
+                            </excludes>
                             <rules>
                                 <rule>
                                     <element>PACKAGE</element>

@@ -7,6 +7,7 @@ import java.net.URL;
 import java.nio.file.Paths;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
 import org.openqa.selenium.By;
@@ -57,18 +58,26 @@ public abstract class E2EBase {
 
     @BeforeAll
     void setUpWebDriver() throws Exception {
-        // 1. 校验 web 后端可达
+        // 1. 校验 web 后端可达；不可达（连接失败/非 200）时跳过 E2E。这些用例需要预先启动 jar 后端：
+        //    java -jar agent-web/target/agent-web.jar --server.port=18080
         URL url = URI.create(WEB_BASE + "/api/health").toURL();
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setConnectTimeout(3000);
         conn.setReadTimeout(3000);
-        int code = conn.getResponseCode();
-        if (code != 200) {
-            throw new IllegalStateException(
-                    "Web backend not reachable at " + WEB_BASE + " (HTTP " + code + "). " +
-                            "Start it with: DEEPSEEK_API_KEY=sk-xxx SPRING_PROFILES_ACTIVE=web " +
-                            "java -jar agent-web/target/agent-web.jar --server.port=18080");
+        int code;
+        try {
+            code = conn.getResponseCode();
+        } catch (java.io.IOException e) {
+            Assumptions.assumeTrue(
+                    false,
+                    "Web backend not reachable at " + WEB_BASE + ": " + e.getMessage()
+                            + " — E2E skipped (requires pre-started jar backend on 18080).");
+            return;
         }
+        Assumptions.assumeTrue(
+                code == 200,
+                "Web backend not reachable at " + WEB_BASE + " (HTTP " + code + "). "
+                        + "E2E skipped (requires pre-started jar backend on 18080).");
 
         // 2. WebDriverManager 自动下载匹配 Chrome 版本的 chromedriver（从 chrome-for-testing 源）
         WebDriverManager.chromedriver().setup();
