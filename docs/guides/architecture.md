@@ -74,12 +74,12 @@ flowchart TB
 
 | 维度 | 数值 |
 |------|------|
-| Java 源文件 | 56 个（main）+ 34 个（test）|
-| 累计代码行 | ~5500 行（含 JavaDoc）|
-| 测试 | 94 个，全绿 |
-| jacoco 覆盖率 | LINE ≥ 80%，BRANCH ≥ 70%（6 个核心包门禁通过）|
-| 已完成 milestone | M0-M10（共 50 个 Task）|
-| 后续路线 | v0.2 / v0.3（plan §15 列表）|
+| Java 模块 | 13 个（agent-core / agent-cli / agent-web / llm / file / shell / permission / memory / session / config / render / observability / testability） |
+| 测试 | **107 个**，全绿 |
+| jacoco 覆盖率 | LINE ≥ 80%，BRANCH ≥ 70% |
+| Git commits | **175 个**（v0.1 CLI → v0.2 /resume /model → v0.3 Web + observability + testability） |
+| 已完成版本 | v0.1 / v0.2 / v0.3 |
+| 进行中 | v0.4（OpenSpec 流程 + MCP 客户端） |
 
 ### 1.3 技术栈
 
