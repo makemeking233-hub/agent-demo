@@ -19,21 +19,34 @@ import java.util.Map;
 public class McpTool implements Tool<String, String> {
     private final McpClient client;
     private final McpClient.ToolDescriptor desc;
+    private final String name;
 
     /**
-     * 构造 MCP 工具。
+     * 构造 MCP 工具（工具名 = MCP 工具名）。
      *
      * @param client MCP server 客户端
      * @param desc   工具描述
      */
     public McpTool(McpClient client, McpClient.ToolDescriptor desc) {
+        this(client, desc, desc.name());
+    }
+
+    /**
+     * 构造 MCP 工具（指定工具名，供 Plugin 做 {@code serverName.toolName} 唯一化）。
+     *
+     * @param client MCP server 客户端
+     * @param desc   工具描述
+     * @param name   注册用工具名（{@code null} 时回落到 {@code desc.name()})
+     */
+    public McpTool(McpClient client, McpClient.ToolDescriptor desc, String name) {
         this.client = client;
         this.desc = desc;
+        this.name = name == null || name.isBlank() ? desc.name() : name;
     }
 
     @Override
     public String name() {
-        return desc.name();
+        return name;
     }
 
     @Override
