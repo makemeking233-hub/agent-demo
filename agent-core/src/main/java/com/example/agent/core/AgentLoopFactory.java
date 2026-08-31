@@ -18,10 +18,16 @@ import com.example.agent.tools.shell.BashAdapter;
 import com.example.agent.tools.shell.CmdAdapter;
 import com.example.agent.tools.shell.ShellAdapter;
 import com.example.agent.tools.shell.ShellTool;
+import com.example.agent.tools.Tool;
+import com.example.agent.plugin.Plugin;
+import com.example.agent.plugin.PluginManager;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * AgentLoop 组装工厂（add-web-ui-v0-1 / D2 复用同一组 bean）。
@@ -34,6 +40,8 @@ import java.util.List;
  * web 用 PermissionBridge），以及 recorder / agentDataDir。
  */
 public final class AgentLoopFactory {
+
+    private static final Logger log = LoggerFactory.getLogger(AgentLoopFactory.class);
 
     /** 单轮最大工具调用次数（与 CLI 对齐）。 */
     public static final int MAX_TOOL_ITERATIONS = 25;
@@ -198,6 +206,18 @@ public final class AgentLoopFactory {
             PermissionConfirmer confirmer,
             AbortSignal abortSignal) {
         Path workingDir = resolveWorkingDir(cfg);
+        // Plugin 框架集成（T5）：init 自定义 plugin, 注册工具, 拼接 fragment, shutdown hook close
+        PluginManager pluginManager = new PluginManager(instantiatePlugins(cfg), cfg, tools);
+        pluginManager.init();
+        for (Tool<?, ?> t : pluginManager.collectTools()) {
+            tools.register(t);
+        }
+        String basePrompt = buildSystemPrompt(cfg, model, null, provider);
+        String fragment = pluginManager.collectSystemPromptFragment();
+        String systemPrompt =
+                (fragment == null || fragment.isEmpty()) ? basePrompt : basePrompt + "\n\n" + fragment;
+        // shutdown 前关闭所有 Plugin（pm.close 幂等；每个 AgentLoop 注册一次自己的 hook）
+        Runtime.getRuntime().addShutdownHook(new Thread(pluginManager::close, "agent-plugin-close"));
         return new AgentLoop(
                 provider,
                 tools,
@@ -206,11 +226,31 @@ public final class AgentLoopFactory {
                 MAX_TOOL_ITERATIONS,
                 model,
                 workingDir,
-                buildSystemPrompt(cfg, model, null, provider),
+                systemPrompt,
                 sink,
                 agentDataDir,
                 confirmer,
                 abortSignal);
+    }
+
+    /** 反射实例化 {@code cfg.plugins} 中的 Plugin（class 加载失败跳过, 不影响主流程）。 */
+    private static List<Plugin> instantiatePlugins(AgentConfig cfg) {
+        List<Plugin> out = new ArrayList<>();
+        if (cfg.plugins() == null || cfg.plugins().isEmpty()) return out;
+        for (AgentConfig.PluginConfig pc : cfg.plugins()) {
+            try {
+                Class<?> cls = Class.forName(pc.className());
+                Object inst = cls.getDeclaredConstructor().newInstance();
+                if (inst instanceof Plugin p) {
+                    out.add(p);
+                } else {
+                    log.warn("Plugin 类 {} 未实现 Plugin 接口, 跳过", pc.className());
+                }
+            } catch (Exception e) {
+                log.warn("Plugin 类 {} 加载失败, 跳过: {}", pc.className(), e.toString());
+            }
+        }
+        return out;
     }
 
     /**
