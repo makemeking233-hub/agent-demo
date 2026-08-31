@@ -63,3 +63,6 @@ secrets.yaml
 /logs/app.log*
 /logs/sessions/
 *.log
+
+# 误提交的临时测试文件（agent-core main 下不应有 test 目录；Solution0831.java 误提交已 git rm 移除）
+agent-core/src/main/java/com/example/agent/test/
