@@ -44,7 +44,8 @@ class AgentLoopFactoryTest {
                         AgentConfig.defaults().logging(),
                         AgentConfig.defaults().memory(),
                         AgentConfig.defaults().mcp(),
-                        AgentConfig.defaults().worktree());
+                        AgentConfig.defaults().worktree(),
+                        AgentConfig.defaults().plugins());
         org.assertj.core.api.Assertions.assertThatThrownBy(
                         () -> AgentLoopFactory.buildProvider(cfg, "sk-test"))
                 .isInstanceOf(IllegalArgumentException.class)

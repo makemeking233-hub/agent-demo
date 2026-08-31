@@ -61,7 +61,8 @@ public class ConfigLoader {
                     mergeLogging(base.logging(), map),
                     mergeMemory(base.memory(), map),
                     mergeMcp(base.mcp(), map),
-                    mergeWorktree(base.worktree(), map));
+                    mergeWorktree(base.worktree(), map),
+                    mergePlugins(base.plugins(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -96,7 +97,8 @@ public class ConfigLoader {
                 base.logging(),
                 base.memory(),
                 base.mcp(),
-                base.worktree());
+                base.worktree(),
+                base.plugins());
     }
 
     /**
@@ -106,6 +108,27 @@ public class ConfigLoader {
      * @param b 候选 2
      * @return 第一个非 null 且非空白；都为空返回 {@code b}（可能为 {@code null}）
      */
+
+
+    @SuppressWarnings("unchecked")
+    private List<AgentConfig.PluginConfig> mergePlugins(List<AgentConfig.PluginConfig> base, Map<String, Object> map) {
+        if (!map.containsKey("plugins")) return base;
+        Object raw = map.get("plugins");
+        if (!(raw instanceof List)) return base;
+        List<Map<String, Object>> entries = (List<Map<String, Object>>) raw;
+        List<AgentConfig.PluginConfig> out = new java.util.ArrayList<>(base);
+        for (Map<String, Object> entry : entries) {
+            String className = (String) entry.get("className");
+            Object configObj = entry.get("config");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> configMap = configObj instanceof Map
+                    ? (Map<String, Object>) configObj
+                    : Map.of();
+            if (className == null || className.isBlank()) continue;
+            out.add(new AgentConfig.PluginConfig(className.trim(), configMap));
+        }
+        return out;
+    }
     private static String firstNonBlank(String a, String b) {
         return (a != null && !a.isBlank()) ? a : b;
     }
@@ -249,3 +272,6 @@ public class ConfigLoader {
         return v == null ? d : ((Number) v).intValue();
     }
 }
+
+
+
