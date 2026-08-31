@@ -50,7 +50,7 @@ public class ToolRegistry {
      *     {@code MemoryPlugin} + {@code PluginManager} 注册；本方法保留为向后兼容（v1.1 移除），
      *     内部逻辑不变（deprecated wrapper 无 PluginContext, 不能转发 Plugin.init）。
      */
-    @Deprecated(since = "v1.0", forRemoval = "v1.1")
+    @Deprecated(since = "v1.0", forRemoval = true)
     public static void registerMemoryTools(ToolRegistry registry) {
         registry.register(new ReadFileTool());
         registry.register(new WriteFileTool());
@@ -63,7 +63,7 @@ public class ToolRegistry {
      * @deprecated v1.0 起技能改由 {@code SkillsPlugin} + {@code PluginManager} 注册；本方法保留
      *     为向后兼容（v1.1 移除）。
      */
-    @Deprecated(since = "v1.0", forRemoval = "v1.1")
+    @Deprecated(since = "v1.0", forRemoval = true)
     public static void registerSkillTools(ToolRegistry registry, List<Skill> skills) {
         if (skills == null) return;
         for (Skill s : skills) {
@@ -77,7 +77,7 @@ public class ToolRegistry {
      * @deprecated v1.0 起 MCP 改由 {@code McpPlugin} + {@code PluginManager} 注册；本方法保留
      *     为向后兼容（v1.1 移除）。
      */
-    @Deprecated(since = "v1.0", forRemoval = "v1.1")
+    @Deprecated(since = "v1.0", forRemoval = true)
     public static void registerMcpTools(ToolRegistry registry, List<McpClient> clients) {
         if (clients == null) return;
         for (McpClient client : clients) {
