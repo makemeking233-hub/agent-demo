@@ -43,14 +43,27 @@ public class ToolRegistry {
         return List.copyOf(tools.values());
     }
 
-    /** M5 Memory 自动注入：Agent 默认拥有读写 memory 的工具。 */
+    /**
+     * M5 Memory 自动注入：Agent 默认拥有读写 memory 的工具。
+     *
+     * @deprecated v1.0 起 memory 工具改由 {@code AgentLoopFactory.buildLoop} 经
+     *     {@code MemoryPlugin} + {@code PluginManager} 注册；本方法保留为向后兼容（v1.1 移除），
+     *     内部逻辑不变（deprecated wrapper 无 PluginContext, 不能转发 Plugin.init）。
+     */
+    @Deprecated(since = "v1.0", forRemoval = "v1.1")
     public static void registerMemoryTools(ToolRegistry registry) {
         registry.register(new ReadFileTool());
         registry.register(new WriteFileTool());
         registry.register(new EditFileTool());
     }
 
-    /** Add-skills-system：把发现的技能注册为工具。 */
+    /**
+     * Add-skills-system：把发现的技能注册为工具。
+     *
+     * @deprecated v1.0 起技能改由 {@code SkillsPlugin} + {@code PluginManager} 注册；本方法保留
+     *     为向后兼容（v1.1 移除）。
+     */
+    @Deprecated(since = "v1.0", forRemoval = "v1.1")
     public static void registerSkillTools(ToolRegistry registry, List<Skill> skills) {
         if (skills == null) return;
         for (Skill s : skills) {
@@ -58,7 +71,13 @@ public class ToolRegistry {
         }
     }
 
-    /** Add-mcp-client：把每个已连接 MCP server 的工具融合注册为工具（server 连接失败跳过）。 */
+    /**
+     * Add-mcp-client：把每个已连接 MCP server 的工具融合注册为工具（server 连接失败跳过）。
+     *
+     * @deprecated v1.0 起 MCP 改由 {@code McpPlugin} + {@code PluginManager} 注册；本方法保留
+     *     为向后兼容（v1.1 移除）。
+     */
+    @Deprecated(since = "v1.0", forRemoval = "v1.1")
     public static void registerMcpTools(ToolRegistry registry, List<McpClient> clients) {
         if (clients == null) return;
         for (McpClient client : clients) {
