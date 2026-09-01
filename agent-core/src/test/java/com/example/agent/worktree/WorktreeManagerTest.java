@@ -33,7 +33,11 @@ class WorktreeManagerTest {
     }
 
     private void exec(String cmd) throws Exception {
-        Process p = new ProcessBuilder("cmd", "/c", cmd)
+        // 跨平台：Windows 用 cmd /c，Unix/Linux 用 sh -c（避免在 Linux CI 上找不到 "cmd"）
+        boolean windows = System.getProperty("os.name").toLowerCase().contains("win");
+        java.util.List<String> command =
+                windows ? java.util.List.of("cmd", "/c", cmd) : java.util.List.of("sh", "-c", cmd);
+        Process p = new ProcessBuilder(command)
                 .directory(repo.toFile()).redirectErrorStream(true).start();
         p.getInputStream().readAllBytes();
         p.waitFor();
