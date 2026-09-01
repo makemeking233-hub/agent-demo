@@ -175,6 +175,42 @@ class WebAgentRuntimeTest {
         SessionLogSink sse = mock(SessionLogSink.class);
         assertThat(rt.sinkFor("", sse)).isSameAs(sse);
     }
+
+    @Test
+    void archiveSessionMovesFileAndClearsCache() throws Exception {
+        WebAgentRuntime rt = runtime(tmp);
+        writeSession(tmp, "s-arch", SessionEntry.user("hi", null), SessionEntry.assistant("hello", List.of(), null));
+        rt.historyFor("s-arch"); // 触达内存缓存
+
+        boolean archived = rt.archiveSession("s-arch");
+
+        assertThat(archived).isTrue();
+        assertThat(rt.hasSession("s-arch")).isFalse();
+        assertThat(Files.exists(tmp.resolve("sessions").resolve(".archive").resolve("s-arch.jsonl"))).isTrue();
+        assertThat(rt.archivedIds()).contains("s-arch");
+        assertThat(rt.messagesFor("s-arch")).isEmpty();
+    }
+
+    @Test
+    void restoreSessionMovesBack() throws Exception {
+        WebAgentRuntime rt = runtime(tmp);
+        writeSession(tmp, "s-res", SessionEntry.user("hi", null));
+        rt.archiveSession("s-res");
+
+        boolean restored = rt.restoreSession("s-res");
+
+        assertThat(restored).isTrue();
+        assertThat(Files.exists(tmp.resolve("sessions").resolve("s-res.jsonl"))).isTrue();
+        assertThat(rt.archivedIds()).doesNotContain("s-res");
+        assertThat(rt.hasSession("s-res")).isTrue();
+    }
+
+    @Test
+    void archiveSessionMissingReturnsFalse() {
+        WebAgentRuntime rt = runtime(tmp);
+        assertThat(rt.archiveSession("no-such")).isFalse();
+        assertThat(rt.restoreSession("no-such")).isFalse();
+    }
 }
 
 

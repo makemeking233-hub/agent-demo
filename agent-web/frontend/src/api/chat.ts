@@ -54,6 +54,7 @@ export interface SessionSummary {
   title: string;
   preview: string;
   workspace: string;
+  time: number;
 }
 
 export class ChatApi {
@@ -128,6 +129,29 @@ export class ChatApi {
     const r = await fetch(this.base + '/api/sessions');
     if (!r.ok) throw new Error(`listSessions ${r.status}`);
     return (await r.json()) as SessionSummary[];
+  }
+
+  // 列出归档会话（add-session-management）
+  async listArchived(): Promise<SessionSummary[]> {
+    const r = await fetch(this.base + '/api/sessions?archived=true');
+    if (!r.ok) throw new Error(`listArchived ${r.status}`);
+    return (await r.json()) as SessionSummary[];
+  }
+
+  // 归档（软删除）会话（add-session-management）
+  async archiveSession(sessionId: string): Promise<boolean> {
+    const r = await fetch(this.base + `/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+    if (r.status === 404) return false;
+    if (!r.ok) throw new Error(`archiveSession ${r.status}`);
+    return true;
+  }
+
+  // 恢复归档会话（add-session-management）
+  async restoreSession(sessionId: string): Promise<boolean> {
+    const r = await fetch(this.base + `/api/sessions/${encodeURIComponent(sessionId)}/restore`, { method: 'POST' });
+    if (r.status === 404) return false;
+    if (!r.ok) throw new Error(`restoreSession ${r.status}`);
+    return true;
   }
 
   async health(): Promise<{ status: string; version: string; uptime_s: number }> {

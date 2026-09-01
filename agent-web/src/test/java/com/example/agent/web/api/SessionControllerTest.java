@@ -101,7 +101,7 @@ class SessionControllerTest {
         writeSession("s-2", SessionEntry.user("世界", null));
 
         ResponseEntity<java.util.List<com.example.agent.web.api.dto.SessionSummaryDto>> resp =
-                controller.list();
+                controller.list(false);
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(resp.getBody()).isNotNull();
@@ -115,7 +115,7 @@ class SessionControllerTest {
     @Test
     void listEmptyWhenNoSessions() {
         ResponseEntity<java.util.List<com.example.agent.web.api.dto.SessionSummaryDto>> resp =
-                controller.list();
+                controller.list(false);
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(resp.getBody()).isNotNull();
         assertThat(resp.getBody()).isEmpty();
@@ -126,5 +126,51 @@ class SessionControllerTest {
         assertThat(rt.hasSession("nope")).isFalse();
         writeSession("s-x", SessionEntry.user("hi", null));
         assertThat(rt.hasSession("s-x")).isTrue();
+    }
+
+    @Test
+    void archiveMovesFileAndExcludesFromList() throws Exception {
+        writeSession("s-arch", SessionEntry.user("要被删", null));
+
+        ResponseEntity<Map<String, Object>> resp = controller.archive("s-arch");
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(Files.exists(tmp.resolve("sessions").resolve(".archive").resolve("s-arch.jsonl"))).isTrue();
+        // 默认列表不再含它，归档列表含它
+        assertThat(controller.list(false).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+                .doesNotContain("s-arch");
+        assertThat(controller.list(true).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+                .contains("s-arch");
+    }
+
+    @Test
+    void archiveUnknownReturns404() {
+        assertThat(controller.archive("nope").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void restoreReturns200AndMovesBack() throws Exception {
+        writeSession("s-res", SessionEntry.user("恢复我", null));
+        controller.archive("s-res");
+
+        ResponseEntity<Map<String, Object>> resp = controller.restore("s-res");
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(Files.exists(tmp.resolve("sessions").resolve("s-res.jsonl"))).isTrue();
+        assertThat(controller.list(false).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+                .contains("s-res");
+    }
+
+    @Test
+    void restoreUnknownReturns404() {
+        assertThat(controller.restore("nope").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void summaryTimeIsNonNegativeLong() throws Exception {
+        writeSession("s-t", SessionEntry.user("时间", null));
+        var body = controller.list(false).getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.get(0).time()).isGreaterThanOrEqualTo(0);
     }
 }

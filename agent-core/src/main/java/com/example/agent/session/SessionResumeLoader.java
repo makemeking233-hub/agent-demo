@@ -53,6 +53,20 @@ public final class SessionResumeLoader {
         return toMessages(entries);
     }
 
+    /**
+     * 从归档目录加载指定会话 {@code .archive/<sessionId>.jsonl} 并恢复为消息列表 + token。
+     *
+     * <p>供「归档/回收站」视图展示已归档会话（add-session-management change）。无该归档时返回空。
+     *
+     * @param sessionsDir sessions 目录（{@code ~/.agent-demo/sessions/}）
+     * @param sessionId   会话 id
+     * @return {@link ResumeResult}；无归档或异常时返回空消息 + 0 token
+     */
+    public static ResumeResult loadArchivedById(Path sessionsDir, String sessionId) {
+        List<SessionEntry> entries = SessionStore.loadArchivedById(sessionsDir, sessionId);
+        return toMessages(entries);
+    }
+
     /** 把一组存档条目转换为消息列表 + 累计 token，并做孤儿 tool_result 骨架注入。 */
     private static ResumeResult toMessages(List<SessionEntry> entries) {
         if (entries.isEmpty()) return new ResumeResult(List.of(), 0, 0);

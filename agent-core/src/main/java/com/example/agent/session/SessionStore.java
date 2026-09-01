@@ -11,6 +11,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
@@ -264,7 +265,17 @@ public class SessionStore implements AutoCloseable {
      */
     public static List<String> listSessions(Path sessionsDir) {
         if (sessionsDir == null || !Files.isDirectory(sessionsDir)) return List.of();
-        try (var stream = Files.list(sessionsDir)) {
+        return listSessionIdsIn(sessionsDir);
+    }
+
+    /**
+     * 列出某会话目录下所有 {@code *.jsonl} 的会话 id（文件名去 {@code .jsonl}），按 mtime 降序。
+     *
+     * @param dir 待扫目录（{@code sessions/} 或 {@code sessions/.archive/}）
+     * @return 会话 id 列表（按 mtime 降序）；目录不存在/异常返回空
+     */
+    private static List<String> listSessionIdsIn(Path dir) {
+        try (var stream = Files.list(dir)) {
             var files =
                     stream.filter(Files::isRegularFile)
                             .filter(p -> p.getFileName().toString().endsWith(".jsonl"))
@@ -283,9 +294,88 @@ public class SessionStore implements AutoCloseable {
                     .map(p -> p.getFileName().toString().replace(".jsonl", ""))
                     .toList();
         } catch (IOException e) {
-            log.warn("listSessions 读取 sessions 目录失败: {}", sessionsDir, e);
+            log.warn("读取会话目录失败: {}", dir, e);
             return List.of();
         }
+    }
+
+    /**
+     * 列出归档会话 id（{@code sessions/.archive/*.jsonl}），按 mtime 降序（最近归档在前）。
+     *
+     * <p>供「归档/回收站」视图展示（add-session-management change）。目录不存在/异常返回空。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @return 归档会话 id 列表；无则空
+     */
+    public static List<String> listArchived(Path sessionsDir) {
+        if (sessionsDir == null) return List.of();
+        Path archiveDir = sessionsDir.resolve(".archive");
+        if (!Files.isDirectory(archiveDir)) return List.of();
+        return listSessionIdsIn(archiveDir);
+    }
+
+    /**
+     * 归档（软删除）一个会话：把 {@code sessions/<id>.jsonl} 移到 {@code sessions/.archive/<id>.jsonl}。
+     *
+     * <p>幂等（目标已存在则覆盖）；{@code id} 非法或源文件不存在返回 {@code false}。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @param id          会话 id
+     * @return 是否归档成功
+     */
+    public static boolean archive(Path sessionsDir, String id) {
+        if (sessionsDir == null || !isValidId(id)) return false;
+        Path source = sessionsDir.resolve(id + ".jsonl");
+        if (!Files.isRegularFile(source)) return false;
+        try {
+            Path archiveDir = sessionsDir.resolve(".archive");
+            Files.createDirectories(archiveDir);
+            Path target = archiveDir.resolve(id + ".jsonl");
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (IOException e) {
+            log.warn("归档会话失败: id={}", id, e);
+            return false;
+        }
+    }
+
+    /**
+     * 恢复一个归档会话：把 {@code sessions/.archive/<id>.jsonl} 移回 {@code sessions/<id>.jsonl}。
+     *
+     * <p>幂等（目标已存在则覆盖）；{@code id} 非法或源不存在返回 {@code false}。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @param id          会话 id
+     * @return 是否恢复成功
+     */
+    public static boolean restore(Path sessionsDir, String id) {
+        if (sessionsDir == null || !isValidId(id)) return false;
+        Path archiveDir = sessionsDir.resolve(".archive");
+        Path source = archiveDir.resolve(id + ".jsonl");
+        if (!Files.isRegularFile(source)) return false;
+        try {
+            Files.createDirectories(sessionsDir);
+            Path target = sessionsDir.resolve(id + ".jsonl");
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (IOException e) {
+            log.warn("恢复会话失败: id={}", id, e);
+            return false;
+        }
+    }
+
+    /** 会话 id 白名单（防路径穿越）：仅字母/数字/下划线/连字符。 */
+    private static boolean isValidId(String id) {
+        if (id == null || id.isBlank()) return false;
+        for (int i = 0; i < id.length(); i++) {
+            char c = id.charAt(i);
+            boolean allowed = (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '-' || c == '_';
+            if (!allowed) return false;
+        }
+        return true;
     }
 
     public static List<SessionEntry> loadLatest(Path sessionsDir) {
@@ -339,6 +429,20 @@ public class SessionStore implements AutoCloseable {
         if (!Files.isRegularFile(file)) {
             return List.of();
         }
+        return readEntries(file);
+    }
+
+    /**
+     * 读取指定归档会话（{@code sessions/.archive/<id>.jsonl}）的条目（add-session-management 用）。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @param sessionId   会话 id
+     * @return entry 列表；不存在/非法 id 返回空 list
+     */
+    public static List<SessionEntry> loadArchivedById(Path sessionsDir, String sessionId) {
+        if (sessionsDir == null || !isValidId(sessionId)) return List.of();
+        Path file = sessionsDir.resolve(".archive").resolve(sessionId + ".jsonl");
+        if (!Files.isRegularFile(file)) return List.of();
         return readEntries(file);
     }
 

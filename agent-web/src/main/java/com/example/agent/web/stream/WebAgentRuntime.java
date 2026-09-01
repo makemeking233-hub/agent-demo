@@ -237,6 +237,39 @@ public class WebAgentRuntime {
                 agentDataDir.resolve("sessions").resolve(sessionId + ".jsonl"));
     }
 
+    /** 归档（软删除）某会话：移动文件到 .archive/，并清理该会话的内存缓存与落盘录制器。 */
+    public boolean archiveSession(String sessionId) {
+        boolean ok = SessionStore.archive(sessionsDir(), sessionId);
+        if (ok) {
+            sessionHistories.remove(sessionId);
+            SessionRecorder recorder = sessionRecorders.remove(sessionId);
+            if (recorder != null) {
+                try {
+                    recorder.close();
+                } catch (IOException e) {
+                    log.warn("关闭归档会话录制器失败: {}", e.getMessage());
+                }
+            }
+            sessionStores.remove(sessionId);
+        }
+        return ok;
+    }
+
+    /** 恢复某归档会话：把文件从 .archive/ 移回 sessions/。 */
+    public boolean restoreSession(String sessionId) {
+        return SessionStore.restore(sessionsDir(), sessionId);
+    }
+
+    /** 归档会话 id 列表（供「归档/回收站」视图）。 */
+    public List<String> archivedIds() {
+        return SessionStore.listArchived(sessionsDir());
+    }
+
+    /** 会话存档目录（{@code <agentDataDir>/sessions}）。 */
+    public Path sessionsDir() {
+        return agentDataDir.resolve("sessions");
+    }
+
     /** 首次触达某会话时的历史回填（只读磁盘，不改写存档）。 */
     private MessageHistory restoreHistory(String sessionId) {
         MessageHistory history = new MessageHistory(estimator);

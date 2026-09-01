@@ -1,6 +1,7 @@
 package com.example.agent.session;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -125,5 +126,53 @@ class SessionStoreTest {
 
         assertTrue(SessionStore.loadById(sessionsDir, null).isEmpty());
         assertTrue(SessionStore.loadById(sessionsDir, "  ").isEmpty());
+    }
+
+    @Test
+    void archiveMovesToDotArchiveAndRemovesFromList() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        writeEntries(sessionsDir.resolve("s-1.jsonl"), SessionEntry.user("u1", null));
+
+        boolean archived = SessionStore.archive(sessionsDir, "s-1");
+
+        assertTrue(archived);
+        assertFalse(Files.exists(sessionsDir.resolve("s-1.jsonl")));
+        assertTrue(Files.exists(sessionsDir.resolve(".archive").resolve("s-1.jsonl")));
+        assertTrue(SessionStore.listSessions(sessionsDir).isEmpty());
+        assertEquals(List.of("s-1"), SessionStore.listArchived(sessionsDir));
+    }
+
+    @Test
+    void restoreMovesBackToSessions() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        writeEntries(sessionsDir.resolve("s-2.jsonl"), SessionEntry.user("u2", null));
+        SessionStore.archive(sessionsDir, "s-2");
+
+        boolean restored = SessionStore.restore(sessionsDir, "s-2");
+
+        assertTrue(restored);
+        assertTrue(Files.exists(sessionsDir.resolve("s-2.jsonl")));
+        assertFalse(Files.exists(sessionsDir.resolve(".archive").resolve("s-2.jsonl")));
+        assertEquals(List.of("s-2"), SessionStore.listSessions(sessionsDir));
+        assertTrue(SessionStore.listArchived(sessionsDir).isEmpty());
+    }
+
+    @Test
+    void archiveMissingOrInvalidIdReturnsFalse() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+
+        assertFalse(SessionStore.archive(sessionsDir, "no-such"));
+        assertFalse(SessionStore.archive(sessionsDir, "../evil"));
+        assertFalse(SessionStore.archive(sessionsDir, ""));
+        assertFalse(SessionStore.restore(sessionsDir, "../evil"));
+    }
+
+    @Test
+    void listArchivedEmptyWhenNoArchiveDir() {
+        Path sessionsDir = tmp.resolve("sessions");
+        assertTrue(SessionStore.listArchived(sessionsDir).isEmpty());
     }
 }
