@@ -211,4 +211,80 @@ class WebIntegrationTest {
                 .expectStatus()
                 .isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    // ---- add-permission-mode-dropdown：send 初始模式 + 实时切换端点契约 ----
+
+    @Test
+    void sendInvalidPermissionModeReturns400() {
+        client.post()
+                .uri("/api/chat/send")
+                .bodyValue(Map.of("content", "hi", "permission_mode", "bogus"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.BAD_REQUEST)
+                .expectBody()
+                .jsonPath("$.error")
+                .isEqualTo("invalid_mode");
+    }
+
+    @Test
+    void permissionInvalidModeReturns400() {
+        client.post()
+                .uri("/api/chat/{id}/permission", "some-stream")
+                .bodyValue(Map.of("mode", "bogus"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.BAD_REQUEST)
+                .expectBody()
+                .jsonPath("$.error")
+                .isEqualTo("invalid_mode");
+    }
+
+    @Test
+    void permissionUnknownStreamReturns404() {
+        client.post()
+                .uri("/api/chat/{id}/permission", "unknown-id")
+                .bodyValue(Map.of("mode", "full_access"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.NOT_FOUND)
+                .expectBody()
+                .jsonPath("$.error")
+                .isEqualTo("stream_not_found");
+    }
+
+    @Test
+    void permissionSwitchesActiveStream() throws Exception {
+        stubSlowChunks("slow");
+
+        String body =
+                client.post()
+                        .uri("/api/chat/send")
+                        .bodyValue(Map.of("content", "go"))
+                        .exchange()
+                        .expectStatus()
+                        .isOk()
+                        .expectBody(String.class)
+                        .returnResult()
+                        .getResponseBody();
+
+        String streamId =
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readTree(body)
+                        .path("stream_id")
+                        .asText();
+        assertThat(streamId).as("stream_id from send").isNotEmpty();
+
+        client.post()
+                .uri("/api/chat/{id}/permission", streamId)
+                .bodyValue(Map.of("mode", "full_access"))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.ok")
+                .isEqualTo(true)
+                .jsonPath("$.mode")
+                .isEqualTo("full_access");
+    }
 }

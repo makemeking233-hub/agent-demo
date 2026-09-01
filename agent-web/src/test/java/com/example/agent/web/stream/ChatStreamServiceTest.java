@@ -57,6 +57,24 @@ class ChatStreamServiceTest {
                             SessionLogSink sink = inv.getArgument(2);
                             return loopWithMockProvider(sink);
                         });
+        // 6 参版本（含权限模式）：mock 装配 loop，并把传入的初始 mode 应用上去（保证默认非空）。
+        when(runtime.createLoop(
+                        any(String.class),
+                        any(String.class),
+                        any(SessionLogSink.class),
+                        any(),
+                        any(),
+                        any()))
+                .thenAnswer(
+                        inv -> {
+                            SessionLogSink sink = inv.getArgument(2);
+                            AgentLoop loop = loopWithMockProvider(sink);
+                            com.example.agent.permission.PermissionMode mode = inv.getArgument(5);
+                            if (mode != null) {
+                                loop.setPermissionMode(mode);
+                            }
+                            return loop;
+                        });
         return runtime;
     }
 
@@ -139,5 +157,39 @@ class ChatStreamServiceTest {
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
         svc.create("session-1", "deepseek-chat");
         svc.shutdown();
+    }
+
+    // ---- add-permission-mode-dropdown：创建带初始模式 + setPermission 实时切换 ----
+
+    @Test
+    void createWithInitialModeSetsLoopMode() {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat", com.example.agent.permission.PermissionMode.WORKSPACE_WRITE);
+        assertThat(meta.loop().permissionMode()).isEqualTo(com.example.agent.permission.PermissionMode.WORKSPACE_WRITE);
+    }
+
+    @Test
+    void createDefaultModeIsReadOnly() {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat");
+        assertThat(meta.loop().permissionMode()).isEqualTo(com.example.agent.permission.PermissionMode.DEFAULT);
+    }
+
+    @Test
+    void setPermissionSwitchesActiveStream() {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat");
+        assertThat(svc.setPermission(meta.streamId(), com.example.agent.permission.PermissionMode.FULL_ACCESS)).isTrue();
+        assertThat(meta.loop().permissionMode()).isEqualTo(com.example.agent.permission.PermissionMode.FULL_ACCESS);
+    }
+
+    @Test
+    void setPermissionUnknownStreamReturnsFalse() {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        assertThat(svc.setPermission("unknown", com.example.agent.permission.PermissionMode.FULL_ACCESS)).isFalse();
     }
 }

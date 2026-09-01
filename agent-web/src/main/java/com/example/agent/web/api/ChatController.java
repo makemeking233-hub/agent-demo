@@ -1,6 +1,8 @@
 package com.example.agent.web.api;
 
+import com.example.agent.permission.PermissionMode;
 import com.example.agent.web.api.dto.AbortResponse;
+import com.example.agent.web.api.dto.PermissionModeRequest;
 import com.example.agent.web.api.dto.SendRequest;
 import com.example.agent.web.api.dto.SendResponse;
 import com.example.agent.web.stream.ChatStreamService;
@@ -40,7 +42,14 @@ public class ChatController {
             return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of("error", "provider_not_configured", "hint", "set DEEPSEEK_API_KEY 或 application-local.yml 的 agent.provider.api-key")));
         }
         String sessionId = req.sessionId() != null ? req.sessionId() : UUID.randomUUID().toString();
-        ChatStreamService.ActiveStream meta = streams.create(sessionId, "deepseek-chat");
+        PermissionMode mode;
+        try {
+            // 缺省 read_only；非法值 → 400（不创建流）。
+            mode = req.permissionMode() != null ? PermissionMode.from(req.permissionMode()) : PermissionMode.DEFAULT;
+        } catch (IllegalArgumentException e) {
+            return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "invalid_mode")));
+        }
+        ChatStreamService.ActiveStream meta = streams.create(sessionId, "deepseek-chat", mode);
         streams.start(meta.streamId(), req.content());
         return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, "deepseek-chat")));
     }
@@ -75,5 +84,26 @@ public class ChatController {
             return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "permission_not_found")));
         }
         return Mono.just(ResponseEntity.ok(Map.of("ok", true, "permission_id", req.permissionId(), "decision", req.decision())));
+    }
+
+    /**
+     * 实时切换权限模式 (spec §Requirement: 权限模式实时切换 → `{"mode":"..."}`)。
+     *
+     * @param streamId 流 id
+     * @param req 载荷 (mode: read_only / workspace_write / full_access)
+     */
+    @PostMapping("/{streamId}/permission")
+    public Mono<ResponseEntity<Map<String, Object>>> permission(
+            @PathVariable String streamId, @RequestBody PermissionModeRequest req) {
+        PermissionMode mode;
+        try {
+            mode = PermissionMode.from(req.mode());
+        } catch (IllegalArgumentException e) {
+            return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "invalid_mode")));
+        }
+        if (!streams.setPermission(streamId, mode)) {
+            return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "stream_not_found")));
+        }
+        return Mono.just(ResponseEntity.ok(Map.of("ok", true, "mode", mode.wireValue())));
     }
 }

@@ -5,6 +5,7 @@ import com.example.agent.core.Message;
 import com.example.agent.core.TurnResult;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
+import com.example.agent.permission.PermissionMode;
 import com.example.agent.web.api.dto.SseEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
@@ -66,6 +67,18 @@ public class ChatStreamService {
             java.util.concurrent.atomic.AtomicBoolean aborted) {}
 
     public ActiveStream create(String sessionId, String model) {
+        return create(sessionId, model, null);
+    }
+
+    /**
+     * 创建一条活动流（带初始权限模式，add-permission-mode-dropdown）。
+     *
+     * @param sessionId 会话 id
+     * @param model 模型名
+     * @param mode 初始权限模式（{@code null} 用缺省 {@link PermissionMode#READ_ONLY}）
+     * @return 活动流元数据
+     */
+    public ActiveStream create(String sessionId, String model, PermissionMode mode) {
         String streamId = UUID.randomUUID().toString();
         // replay().all(): 延迟订阅者(客户端 turn 完成后再连)能收到全部事件 + complete,
         // 支撑 spec §resume/Last-Event-ID 与测试中 send→stream 的先后时序。
@@ -90,7 +103,7 @@ public class ChatStreamService {
         // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
         // v0.3 会话重进恢复：用复合 sink (SSE + 落盘)，使该会话持续写入 sessions/<id>.jsonl。
         SessionLogSink sessionSink = runtime.sinkFor(sessionId, adapter);
-        AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get);
+        AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get, mode);
         ActiveStream meta =
                 new ActiveStream(
                         streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted);
@@ -204,6 +217,20 @@ public class ChatStreamService {
         }
         emit(meta, new SseEvent.Error("aborted", "turn aborted by user"));
         stop(streamId, "aborted");
+    }
+
+    /**
+     * 实时切换某流的权限模式（add-permission-mode-dropdown）。
+     *
+     * @param streamId 流 id
+     * @param mode 新模式（不可空）
+     * @return 是否找到该流并已切换
+     */
+    public boolean setPermission(String streamId, PermissionMode mode) {
+        ActiveStream meta = actives.get(streamId);
+        if (meta == null || meta.loop() == null) return false;
+        meta.loop().setPermissionMode(mode);
+        return true;
     }
 
     public ActiveStream get(String streamId) {
