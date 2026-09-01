@@ -26,16 +26,17 @@ public class SseSessionLogSink implements SessionLogSink {
 
     @Override
     public void onAssistant(Message.Assistant assistant, List<String> thinking) {
+        // 工具调用先于文本推送（因果顺序：先调工具，再基于结果说话）
+        if (assistant.toolCalls() != null) {
+            for (ToolCall call : assistant.toolCalls()) {
+                stream.emit(streamId, new SseEvent.ToolCallStart(call.id(), call.name(), call.argumentsJson()));
+            }
+        }
         if (assistant.content() != null && !assistant.content().isEmpty()) {
             stream.emit(streamId, new SseEvent.MessageDelta("text", assistant.content()));
         }
         if (thinking != null && !thinking.isEmpty()) {
             stream.emit(streamId, new SseEvent.MessageDelta("thinking", String.join("", thinking)));
-        }
-        if (assistant.toolCalls() != null) {
-            for (ToolCall call : assistant.toolCalls()) {
-                stream.emit(streamId, new SseEvent.ToolCallStart(call.id(), call.name(), call.argumentsJson()));
-            }
         }
     }
 
