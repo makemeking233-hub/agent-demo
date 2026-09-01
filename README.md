@@ -66,7 +66,7 @@
 | 日志 | SLF4J + Logback + 自研 Redactor | — | 敏感字段脱敏（T3） |
 | JSON | Jackson + jackson-dataformat-yaml | — | |
 | 前端 | React 18 + Vite 6 | — | agent-web/frontend |
-| 状态（已实现） | ✅ v0.1 CLI 全交付；v0.2+ /model /resume；v0.3 web + observability + testability | — | 175 commits |
+| 状态（已实现） | ✅ v0.1 CLI 全交付；v0.2+ /model /resume；v0.3 web + observability + testability；v1.0 Plugin 框架 + MCP/Skills/Memory + Worktree | — | 190+ commits |
 
 > **不引入 Lombok、spring-boot-starter-web（agent-web 用 webflux）、数据库**——CLI 端用 JSON 文件存会话足够，agent-web 端用文件 + 内存。
 
@@ -99,7 +99,8 @@ agent-demo/
 │   │   ├── prompt/             # SystemPromptBuilder
 │   │   ├── signal/             # AbortSignal
 │   │   ├── util/               # PromptLoader
-│   │   └── log/                # 可观测性：Redactor / SessionRetentionCleaner / SessionLogger / SessionReplay ...
+│   │   ├── log/                # 可观测性：Redactor / SessionRetentionCleaner / SessionLogger / SessionReplay ...
+│   │   └── plugin/             # Plugin 框架：Plugin / PluginContext / PluginManager / ExtensionPoints + {mcp,skill,memory}
 ├── agent-web/                  # Web UI（独立 Spring Boot 应用，端口 18080）
 │   ├── pom.xml                 # finalName=agent-web；frontend-maven-plugin 打包
 │   ├── src/main/java/          # WebApplication + WebController + SSE + LogController
@@ -111,7 +112,7 @@ agent-demo/
 └── AGENTS.md                   # 项目级规则（含 OpenSpec 流程 §2.5）
 ```
 
-> 多 module 拆分：`agent-core`（核心域 + CLI）/ `agent-web`（Web 入口）。`agent-core` 内部分为 `core / cli / llm / provider / tools / permission / memory / session / config / render / prompt / signal / util / log` 等包。
+> 多 module 拆分：`agent-core`（核心域 + CLI）/ `agent-web`（Web 入口）。`agent-core` 内部分为 `core / cli / llm / provider / tools / permission / memory / session / config / render / prompt / signal / util / log / plugin` 等包。
 
 ---
 
@@ -264,8 +265,8 @@ mvn -pl agent-web verify # agent-web 模块独立验证
 | **v0.1** | ✅ 已完成 | CLI REPL + 5 工具 + Memory + JSONL + Slash 命令 + 50 个 Task（M0-M10） |
 | **v0.2** | ✅ 已完成 | `/resume` 加载最近 session / `/model` 运行时切换 / Session Memory Compaction |
 | **v0.3** | ✅ 已完成 | agent-web Web UI + 可观测性（T1-T8 组：日志事件链路 / 脱敏 / 日志保留 / LogController）+ 可测试性（session 回放）+ MiniMax provider |
-| **v0.4** | 进行中 | OpenSpec 迭代流程落地（已用 add-web-ui-v0-1 / add-observability-testability / polish-web-ui-frontend / add-model-switch-command 验证）；MCP 客户端（plan §15）；Skills 系统；Subagent |
-| **v0.5+** | 计划中 | Memory 三 scope 完整 + 语义召回（sideQuery）+ Resume 链路修复 + Memory Snapshot + Team Memory |
+| **v0.4** | ✅ 已完成 | OpenSpec 迭代流程 + MCP 客户端（add-mcp-client）+ Skills 系统（add-skills-system）+ Worktree 模式（add-worktree-mode）+ Memory 三 scope + 语义召回（sideQuery，add-memory-sidequery） |
+| **v1.0** | ✅ 部分 | Plugin 插件框架（add-plugin-system：可插拔 MCP / Skills / Memory）；剩余 Team Memory / 远程同步 / Prompt Cache 复用 计划中 |
 
 详见 `openspec/` 目录的 active changes。
 
@@ -325,6 +326,7 @@ AGENTS.md §2.5 默认所有功能改动走 OpenSpec 四阶段：
 | `docs/test-agent-demo/test-design.md` | 537 行测试设计 |
 | `docs/test-agent-demo/test-report.md` | 测试报告（验证清单 + 覆盖率） |
 | `docs/guides/architecture.md` | 11 张 Mermaid 图架构详解 |
+| `docs/guides/plugins.md` | Plugin 插件系统指南（hello-world + 多扩展点范例 + ChatRequestMapper） |
 | `docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md` | v0.1 实施计划（M0-M10） |
 | `openspec/` | 当前进行中的 OpenSpec changes |
 | `AGENTS.md` | 项目级规则（本文件 §2.5 含 OpenSpec 流程） |
@@ -332,4 +334,4 @@ AGENTS.md §2.5 默认所有功能改动走 OpenSpec 四阶段：
 ---
 
 > **License**：MIT
-> **状态**：v0.3 已完成（CLI + Web + OpenSpec 流程 + 可观测性），v0.4 进行中
+> **状态**：v0.1→v0.4 已完成（CLI + Web + OpenSpec + 可观测性 + MCP/Skills/Worktree + Memory 三 scope），v1.0 Plugin 插件框架已落地，Team Memory / 远程同步 / Prompt Cache 复用计划中
