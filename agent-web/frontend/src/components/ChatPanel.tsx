@@ -9,9 +9,24 @@ import { PermissionCard } from "./PermissionCard";
 import { ToolCallCard } from "./ToolCallCard";
 
 type Item =
-  | { kind: "text"; id: string; role: "user" | "assistant"; text: string }
+  | {
+      kind: "text";
+      id: string;
+      role: "user" | "assistant";
+      text: string;
+      // assistant 消息项可携带内联工具调用（按到达顺序与文本交错展示）
+      tools?: InlineTool[];
+    }
   | { kind: "tool"; id: string; name: string; toolCallId: string; status: "running" | "ok" | "fail"; text?: string; durationMs?: number }
   | { kind: "perm"; id: string; toolName: string; reason: string; permissionId: string; choices: ("yes" | "no" | "always")[]; toolCallId: string };
+
+type InlineTool = {
+  id: string;
+  name: string;
+  status: "running" | "ok" | "fail";
+  text?: string;
+  durationMs?: number;
+};
 
 export function ChatPanel() {
   const [busy, setBusy] = useState(false);
@@ -106,13 +121,59 @@ export function ChatPanel() {
       setStreamId(null);
       streamIdRef.current = null;
     } else if (ev.type === "tool_call_start") {
-      appendItem({ kind: "tool", id: ev.tool_call_id, name: ev.name, toolCallId: ev.tool_call_id, status: "running" });
+      // 内联到最近一条 assistant 消息项，保持工具调用与生成的文本同一消息块
+      addToolToLastAssistant({
+        id: ev.tool_call_id,
+        name: ev.name,
+        status: "running",
+      });
     } else if (ev.type === "tool_call_end") {
       const text = typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result);
-      updateItem(ev.tool_call_id, { status: ev.ok ? "ok" : "fail", text, durationMs: ev.duration_ms });
+      updateToolInLastAssistant(ev.tool_call_id, {
+        status: ev.ok ? "ok" : "fail",
+        text,
+        durationMs: ev.duration_ms,
+      });
     } else if (ev.type === "permission_request") {
       appendItem({ kind: "perm", id: ev.permission_id, toolName: ev.tool_name, reason: ev.reason, permissionId: ev.permission_id, choices: ev.choices, toolCallId: ev.tool_call_id });
     }
+  }
+
+  // 把工具调用内联到最近一条 assistant 消息项（无则创建一条空 assistant 承载）
+  function addToolToLastAssistant(tool: InlineTool) {
+    setItems((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const it = prev[i];
+        if (it.kind === "text" && it.role === "assistant") {
+          const updated = [...prev];
+          const tools = [...(it.tools ?? []), tool];
+          updated[i] = { ...it, tools } as Item;
+          return updated;
+        }
+      }
+      // 无 assistant 文本项 → 新建一条空的 assistant 承载工具
+      return [...prev, { kind: "text", id: "a-tool-" + Date.now(), role: "assistant", text: "", tools: [tool] }];
+    });
+  }
+
+  // 在最近的 assistant 内联工具里按 toolCallId 更新（找不到则 fallback 到独立 tool item）
+  function updateToolInLastAssistant(toolCallId: string, patch: Partial<InlineTool>) {
+    setItems((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const it = prev[i];
+        if (it.kind === "text" && it.role === "assistant" && it.tools) {
+          const idx = it.tools.findIndex((t) => t.id === toolCallId);
+          if (idx >= 0) {
+            const updated = [...prev];
+            const tools = it.tools.map((t, j) => (j === idx ? ({ ...t, ...patch } as InlineTool) : t));
+            updated[i] = { ...it, tools } as Item;
+            return updated;
+          }
+        }
+      }
+      // fallback：独立 tool item（如旧数据/未内联）
+      return prev.map((it) => (it.kind === "tool" && it.toolCallId === toolCallId ? ({ ...it, ...patch } as Item) : it));
+    });
   }
 
   async function submitPermission(permissionId: string, decision: "yes" | "no" | "always", itemId: string) {
@@ -136,7 +197,7 @@ export function ChatPanel() {
           </div>
         )}
         {items.map((it) => {
-          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} />;
+          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} />;
           if (it.kind === "tool") return <ToolCallCard key={it.id} name={it.name} status={it.status} text={it.text} durationMs={it.durationMs} />;
           if (it.kind === "perm") return <PermissionCard key={it.id} toolName={it.toolName} reason={it.reason} choices={it.choices} onChoose={(d) => submitPermission(it.permissionId, d, it.id)} />;
           return null;

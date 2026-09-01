@@ -1,9 +1,23 @@
 import { User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import styles from "./MessageBubble.module.css";
+import { ToolCallCard } from "./ToolCallCard";
 
-export function MessageBubble(props: { role: "user" | "assistant"; text: string }) {
+export type InlineTool = {
+  id: string;
+  name: string;
+  status: "running" | "ok" | "fail";
+  text?: string;
+  durationMs?: number;
+};
+
+export function MessageBubble(props: {
+  role: "user" | "assistant";
+  text: string;
+  tools?: InlineTool[];
+}) {
   const isUser = props.role === "user";
+  const tools = props.tools ?? [];
   return (
     <div className={`${styles.row} ${isUser ? styles.rowUser : styles.rowAssistant}`}>
       <div className={styles.avatar}>
@@ -15,8 +29,11 @@ export function MessageBubble(props: { role: "user" | "assistant"; text: string 
             <ReactMarkdown>{props.text}</ReactMarkdown>
           </div>
         ) : (
-          <span className={styles.cursor}>…</span>
+          !isUser && tools.length === 0 && <span className={styles.cursor}>…</span>
         )}
+        {tools.map((t) => (
+          <ToolCallCard key={t.id} name={t.name} status={t.status} text={t.text} durationMs={t.durationMs} />
+        ))}
       </div>
     </div>
   );

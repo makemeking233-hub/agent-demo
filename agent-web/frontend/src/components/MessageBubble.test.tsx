@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MessageBubble } from "./MessageBubble";
 
 describe("MessageBubble", () => {
@@ -26,5 +26,21 @@ describe("MessageBubble", () => {
     expect(row).not.toBeNull();
     // user 用 rowUser CSS Module 类, 跟 rowAssistant 区分
     expect(row!.className).toMatch(/rowUser/);
+  });
+
+  it("renders inline tool cards within assistant message", () => {
+    render(
+      <MessageBubble
+        role="assistant"
+        text="我检查一下"
+        tools={[{ id: "t1", name: "ReadFile", status: "ok", text: "file content", durationMs: 5 }]}
+      />,
+    );
+    expect(screen.getByText(/我检查一下/)).toBeInTheDocument();
+    expect(screen.getByText(/ReadFile/)).toBeInTheDocument();
+    // 工具卡片默认折叠：点击后显示输出
+    const card = screen.getByText(/ReadFile/);
+    fireEvent.click(card);
+    expect(screen.getByText("file content")).toBeInTheDocument();
   });
 });
