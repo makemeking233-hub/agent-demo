@@ -230,11 +230,10 @@
   background: transparent;
   color: var(--dsw-alias-text-muted);
   cursor: pointer;
-  opacity: 0;
+  opacity: 1;
   flex-shrink: 0;
 }
 
-.item:hover .itemAction { opacity: 1; }
 .itemAction:hover { background: var(--dsw-static-surface-sunken); color: var(--dsw-alias-danger, #d9480f); }
 
 .expandButton {
