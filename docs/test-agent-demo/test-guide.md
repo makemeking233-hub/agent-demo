@@ -14,6 +14,7 @@
 | `2026-08-30-web-ui-e2e/` | Web 前端 UI 端到端测试（三栏布局 / 主题切换 / 会话列表 / 输入 / slash 命令 / SPA 路由回落） | 2026-08-30 | 17（E2E） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-08-30-plugin-system/` | add-plugin-system Plugin 插件框架测试（Plugin / PluginContext / ExtensionPoints / PluginManager + Mcp / Skills / Memory 三插件） | 2026-08-30 | 12（6 新增 + 6 既有） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-02-web-search/` | add-web-search-tool 内置 WebSearch 工具测试（WebSearchProvider 契约 / DeepSeek 原生搜索 / Tavily 检索 / 工厂选择 / Tool 协议） | 2026-09-02 | 27（新增，另 250 既有回归） | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-02-session-switch-selenium/` | web 会话切换功能 Selenium 自动化验证（真实会话列表 / 点击加载历史 / 切换更新） | 2026-09-02 | 5 | ✅ 全绿 | ✅ | 已归档 |
 
 ---
 
@@ -48,6 +49,14 @@
 - **测试目标**：对 add-web-search-tool（内置 WebSearch 工具）做单元测试收尾，验证 `WebSearchProvider` 契约 + `WebSearchResult`/`Source` record、DeepSeek 原生搜索（Anthropic 兼容 `/messages` + `web_search_20250305` 严格模式 + 去重）与 Tavily 检索端点（`results[]` 解析 + 截断）、`WebSearchProviderFactory` 自动选择/显式优先、`WebSearchTool` 协议与 Fail-Closed、`search` 配置解析。
 - **执行要点**：`mvn -pl agent-core test` + `mvn -pl agent-core clean verify`；新增 `WebSearchProviderTest`(4) + `DeepSeekWebSearchProviderTest`(4) + `TavilyWebSearchProviderTest`(4) + `WebSearchProviderFactoryTest`(5) + `WebSearchToolTest`(8) 共 25 条 + 扩展 `ConfigLoaderTest`(+2) = 27 条；另扩展 `AgentLoopFactoryTest` 断言注册 `web_search`；全量 277 用例全绿（`Tests run: 277, Failures: 0, Errors: 0, Skipped: 0`）。
 - **关键发现**：jacoco 覆盖率门禁达标（`All coverage checks have been met`，LINE≥80% / BRANCH≥70%）；缺陷 0；既有 250 条用例无回归。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.5 `2026-09-02-session-switch-selenium/` — web 会话切换 Selenium 自动化验证
+
+- **测试目标**：端到端验证 `add-session-switch`（web 侧边栏真实会话列表 + 点击切换加载历史）——确认修复后点会话能真正切换（此前占位列表 + currentSessionId 未传 ChatPanel 导致"切换不了"）。
+- **执行要点**：python 3.12 + selenium 4.48 + webdriver-manager（清华镜像安装）+ Chrome 151（chromedriver 自动匹配）；打开 `http://127.0.0.1:18080/`；用例 S1 会话列表非空（60 个）、S2 点击[hi]加载历史、S3 切换[go]更新、S4 对话区随会话更新；共 5 条 PASS（0 FAIL）。
+- **关键发现**：python 无 selenium，官方 pip 源 SSL 失败 → 清华镜像成功；本机 chromedriver(142) 与 Chrome(151) 不匹配 → webdriver-manager 自动下载 151.0.7922.138；会话列表为真实 `/api/sessions` 数据。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
