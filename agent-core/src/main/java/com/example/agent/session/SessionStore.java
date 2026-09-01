@@ -253,6 +253,41 @@ public class SessionStore implements AutoCloseable {
      * @param sessionsDir sessions 目录路径（如 {@code ~/.agent-demo/sessions/}）
      * @return entry 列表（按文件中出现顺序）；无文件或异常时返回空 list
      */
+    /**
+     * 列出 sessions 目录下的所有会话 id（文件名去 {@code .jsonl}），按 mtime 降序（最近会话在前）。
+     *
+     * <p>列出现实会话，供前端侧边栏展示（add-session-switch change）。目录不存在 / 无 .jsonl /
+     * 异常时返回空列表。
+     *
+     * @param sessionsDir sessions 目录路径（如 {@code ~/.agent-demo/sessions/}）
+     * @return 会话 id 列表（按 mtime 降序）；无则空
+     */
+    public static List<String> listSessions(Path sessionsDir) {
+        if (sessionsDir == null || !Files.isDirectory(sessionsDir)) return List.of();
+        try (var stream = Files.list(sessionsDir)) {
+            var files =
+                    stream.filter(Files::isRegularFile)
+                            .filter(p -> p.getFileName().toString().endsWith(".jsonl"))
+                            .toList();
+            return files.stream()
+                    .sorted(
+                            java.util.Comparator.comparing(
+                                            (Path p) -> {
+                                                try {
+                                                    return Files.getLastModifiedTime(p);
+                                                } catch (IOException e) {
+                                                    return java.nio.file.attribute.FileTime.fromMillis(0);
+                                                }
+                                            })
+                                    .reversed())
+                    .map(p -> p.getFileName().toString().replace(".jsonl", ""))
+                    .toList();
+        } catch (IOException e) {
+            log.warn("listSessions 读取 sessions 目录失败: {}", sessionsDir, e);
+            return List.of();
+        }
+    }
+
     public static List<SessionEntry> loadLatest(Path sessionsDir) {
         if (sessionsDir == null || !Files.isDirectory(sessionsDir)) {
             return List.of();

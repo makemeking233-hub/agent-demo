@@ -96,6 +96,32 @@ class SessionControllerTest {
     }
 
     @Test
+    void listReturnsSessions() throws Exception {
+        writeSession("s-1", SessionEntry.user("你好", null));
+        writeSession("s-2", SessionEntry.user("世界", null));
+
+        ResponseEntity<java.util.List<com.example.agent.web.api.dto.SessionSummaryDto>> resp =
+                controller.list();
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+                .contains("s-1", "s-2");
+        // title 取首条 user 消息首行
+        assertThat(resp.getBody().stream().filter(s -> s.id().equals("s-1")).findFirst().get().title())
+                .isEqualTo("你好");
+    }
+
+    @Test
+    void listEmptyWhenNoSessions() {
+        ResponseEntity<java.util.List<com.example.agent.web.api.dto.SessionSummaryDto>> resp =
+                controller.list();
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody()).isEmpty();
+    }
+
+    @Test
     void runtimeHasSessionReflectsDisk() throws Exception {
         assertThat(rt.hasSession("nope")).isFalse();
         writeSession("s-x", SessionEntry.user("hi", null));

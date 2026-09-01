@@ -1,10 +1,14 @@
 package com.example.agent.web.api;
 
 import com.example.agent.core.Message;
+import com.example.agent.session.SessionStore;
 import com.example.agent.web.api.dto.SessionMessageDto;
 import com.example.agent.web.api.dto.SessionMessagesResponse;
+import com.example.agent.web.api.dto.SessionSummaryDto;
 import com.example.agent.web.api.dto.ToolCallDto;
 import com.example.agent.web.stream.WebAgentRuntime;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.context.annotation.Profile;
@@ -45,6 +49,31 @@ public class SessionController {
         Map<String, Object> body = new java.util.HashMap<>();
         body.put("session_id", null);
         return ResponseEntity.ok(body);
+    }
+
+    /**
+     * 列出现实会话（add-session-switch change）。
+     *
+     * @return {@code 200} 含会话摘要列表（id/title/preview/workspace，按 mtime 降序）
+     */
+    @GetMapping
+    public ResponseEntity<List<SessionSummaryDto>> list() {
+        Path sessionsDir = runtime.agentDataDir().resolve("sessions");
+        List<SessionSummaryDto> result = new ArrayList<>();
+        for (String id : SessionStore.listSessions(sessionsDir)) {
+            String title = id;
+            String preview = "";
+            List<Message> msgs = runtime.messagesFor(id);
+            if (!msgs.isEmpty()) {
+                Message first = msgs.get(0);
+                title = first.content().lines().findFirst().orElse(id);
+                if (title.trim().isEmpty()) title = id;
+                preview = first.content().lines().skip(1).findFirst().orElse("");
+                if (title.equals(preview)) preview = "";
+            }
+            result.add(new SessionSummaryDto(id, title, preview, "agent-demo"));
+        }
+        return ResponseEntity.ok(result);
     }
 
     /**

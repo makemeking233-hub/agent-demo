@@ -1,32 +1,30 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ChatApi } from "./api/chat";
 import { ChatPanel } from "./components/ChatPanel";
 import { Sidebar, type SidebarSession } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import styles from "./App.module.css";
 
-const PLACEHOLDER_SESSIONS: SidebarSession[] = [
-  { id: "1", title: "在 agent-demo 加前端", preview: "类似 DSH 的三栏布局…", workspace: "agent-demo" },
-  { id: "2", title: "实现 SSE 流", preview: "message_start / delta / stop", workspace: "agent-demo" },
-  { id: "3", title: "权限 in-chat UX", preview: "yes / no / always", workspace: "agent-demo" },
-  { id: "4", title: "会话历史查询", preview: "SessionStore.loadLatest", workspace: "agent-demo" },
-  { id: "5", title: "OpenSpec 提案", preview: "spec-driven workflow", workspace: "open-source" },
-];
-
 export function App() {
+  const [sessions, setSessions] = useState<SidebarSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>("1");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // 拉取真实会话列表（add-session-switch）
+  useEffect(() => {
+    const api = new ChatApi();
+    api
+      .listSessions()
+      .then((list) => setSessions(list.map((s) => ({ id: s.id, title: s.title, preview: s.preview, workspace: s.workspace }))))
+      .catch(() => setSessions([]));
+  }, []);
 
   return (
     <div className={styles.app}>
       <TopBar
         onNewSession={() => {
           const newId = String(Date.now());
-          PLACEHOLDER_SESSIONS.unshift({
-            id: newId,
-            title: "新会话",
-            preview: "",
-            workspace: "agent-demo",
-          });
+          setSessions((prev) => [{ id: newId, title: "新会话", preview: "", workspace: "agent-demo" }, ...prev]);
           setCurrentSessionId(newId);
         }}
         onOpenSettings={() => alert("设置 v0.2 接入")}
@@ -39,13 +37,13 @@ export function App() {
         }
       >
         <Sidebar
-          sessions={PLACEHOLDER_SESSIONS}
+          sessions={sessions}
           currentSessionId={currentSessionId}
           onSelect={setCurrentSessionId}
           onCollapseToggle={setSidebarCollapsed}
         />
         <main className={styles.main}>
-          <ChatPanel />
+          <ChatPanel currentSessionId={currentSessionId} />
         </main>
       </div>
     </div>

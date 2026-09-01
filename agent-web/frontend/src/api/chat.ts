@@ -49,6 +49,13 @@ export interface HistoryResponse {
   messages: HistoryMessage[];
 }
 
+export interface SessionSummary {
+  id: string;
+  title: string;
+  preview: string;
+  workspace: string;
+}
+
 export class ChatApi {
   constructor(private base: string = '') {}
 
@@ -114,6 +121,13 @@ export class ChatApi {
     if (r.status === 404) return { session_id: sessionId, messages: [] };
     if (!r.ok) throw new Error(`history ${r.status}`);
     return (await r.json()) as HistoryResponse;
+  }
+
+  // 列出现实会话（add-session-switch）
+  async listSessions(): Promise<SessionSummary[]> {
+    const r = await fetch(this.base + '/api/sessions');
+    if (!r.ok) throw new Error(`listSessions ${r.status}`);
+    return (await r.json()) as SessionSummary[];
   }
 
   async health(): Promise<{ status: string; version: string; uptime_s: number }> {

@@ -99,7 +99,7 @@ function mapHistoryToItems(messages: HistoryMessage[]): Item[] {
   return items;
 }
 
-export function ChatPanel() {
+export function ChatPanel(props: { currentSessionId?: string | null }) {
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [streamId, setStreamId] = useState<string | null>(null);
@@ -136,6 +136,29 @@ export function ChatPanel() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 侧边栏切换会话（add-session-switch）：currentSessionId 变化时清空并加载该会话历史。
+  // lastSessionIdRef 记录上次值，避免首次挂载时误清零（首次由上面 localStorage 恢复 effect 处理）。
+  const lastSessionIdRef = useRef<string | null>(props.currentSessionId ?? null);
+  useEffect(() => {
+    const next = props.currentSessionId ?? null;
+    if (next === lastSessionIdRef.current) return;
+    lastSessionIdRef.current = next;
+    // 中止当前流（如有）
+    if (clientRef.current) clientRef.current.stop();
+    setBusy(false);
+    setItems([]);
+    setStreamId(null);
+    streamIdRef.current = null;
+    sessionIdRef.current = next;
+    if (!next) return;
+    new ChatApi()
+      .history(next)
+      .then((h) => {
+        setItems((prev) => (prev.length === 0 ? mapHistoryToItems(h.messages) : prev));
+      })
+      .catch(() => {});
+  }, [props.currentSessionId]);
 
   // 会话重进恢复：消息/会话变化时（防抖）写回 localStorage，供下次重进恢复。
   useEffect(() => {
