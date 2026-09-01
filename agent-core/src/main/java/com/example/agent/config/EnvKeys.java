@@ -24,5 +24,11 @@ public final class EnvKeys {
     /** 覆盖 max output tokens */
     public static final String AGENT_MAX_OUTPUT_TOKENS = "AGENT_MAX_OUTPUT_TOKENS";
 
+    /** Tavily 检索端点 API key（web_search 工具的 tavily provider 用） */
+    public static final String TAVILY_API_KEY = "TAVILY_API_KEY";
+
+    /** DeepSeek 搜索端点基址（Anthropic 兼容 Messages API，独立于 DEEPSEEK_BASE_URL） */
+    public static final String DEEPSEEK_SEARCH_BASE_URL = "DEEPSEEK_SEARCH_BASE_URL";
+
     private EnvKeys() {}
 }

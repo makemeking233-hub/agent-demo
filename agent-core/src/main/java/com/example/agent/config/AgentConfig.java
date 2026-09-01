@@ -19,6 +19,7 @@ import java.util.Map;
  * @param mcp MCP 客户端配置
  * @param worktree Worktree 隔离工作区配置
  * @param plugins 插件列表（add-plugin-system v1.0）。每个 Plugin 启动时由 PluginManager.init() 串行 init, 关闭时反序 close.
+ * @param search 网络搜索配置（add-web-search-tool）：provider 选择 + 结果数 + 超时
  */
 public record AgentConfig(
         Provider provider,
@@ -31,7 +32,8 @@ public record AgentConfig(
         Memory memory,
         Mcp mcp,
         Worktree worktree,
-        List<PluginConfig> plugins) {
+        List<PluginConfig> plugins,
+        Search search) {
 
     public record PluginConfig(String className, Map<String, Object> config) {
         public PluginConfig {
@@ -79,6 +81,15 @@ public record AgentConfig(
 
     public record Worktree(boolean enabled, String baseDir) {}
 
+    /**
+     * 网络搜索配置（add-web-search-tool）。
+     *
+     * @param provider   provider 名（{@code deepseek} / {@code tavily}）；空字符串表示按模型自动推断
+     * @param maxResults 默认最大结果数
+     * @param timeoutMs  搜索超时（毫秒）
+     */
+    public record Search(String provider, int maxResults, int timeoutMs) {}
+
     public static AgentConfig defaults() {
         return new AgentConfig(
                 new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 8192),
@@ -113,6 +124,7 @@ public record AgentConfig(
                 new Worktree(
                         false,
                         System.getProperty("user.home") + "/.agent-demo/worktrees"),
-                List.of());
+                List.of(),
+                new Search("", 5, 60_000));
     }
 }

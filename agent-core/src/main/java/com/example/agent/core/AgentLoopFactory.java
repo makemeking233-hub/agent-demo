@@ -13,6 +13,8 @@ import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.ToolRegistry;
+import com.example.agent.tools.WebSearchTool;
+import com.example.agent.tools.websearch.WebSearchProviderFactory;
 import com.example.agent.tools.file.LsTool;
 import com.example.agent.tools.shell.BashAdapter;
 import com.example.agent.tools.shell.CmdAdapter;
@@ -103,6 +105,13 @@ public final class AgentLoopFactory {
             }
             ToolRegistry.registerMcpTools(tools, clients);
         }
+        // WebSearch：内置联网搜索（provider 实例化 + config 注入；CLI/web 共用同一装配）
+        AgentConfig.Search search = cfg.search();
+        int searchMax = search != null ? search.maxResults() : 5;
+        int searchTimeout = search != null ? search.timeoutMs() : 60_000;
+        tools.register(
+                new WebSearchTool(
+                        WebSearchProviderFactory.create(cfg), searchMax, searchTimeout));
         return tools;
     }
 

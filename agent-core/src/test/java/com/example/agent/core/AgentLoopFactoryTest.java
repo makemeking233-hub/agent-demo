@@ -45,7 +45,8 @@ class AgentLoopFactoryTest {
                         AgentConfig.defaults().memory(),
                         AgentConfig.defaults().mcp(),
                         AgentConfig.defaults().worktree(),
-                        AgentConfig.defaults().plugins());
+                        AgentConfig.defaults().plugins(),
+                        AgentConfig.defaults().search());
         org.assertj.core.api.Assertions.assertThatThrownBy(
                         () -> AgentLoopFactory.buildProvider(cfg, "sk-test"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -57,7 +58,8 @@ class AgentLoopFactoryTest {
         ToolRegistry tools = AgentLoopFactory.buildTools(AgentConfig.defaults());
         assertThat(tools.getRaw("Shell")).isNotNull();
         assertThat(tools.getRaw("Ls")).isNotNull();
-        assertThat(tools.list().size()).isGreaterThanOrEqualTo(5);
+        assertThat(tools.getRaw("web_search")).isNotNull();
+        assertThat(tools.list().size()).isGreaterThanOrEqualTo(6);
     }
 
     @Test

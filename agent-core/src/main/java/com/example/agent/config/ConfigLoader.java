@@ -62,7 +62,8 @@ public class ConfigLoader {
                     mergeMemory(base.memory(), map),
                     mergeMcp(base.mcp(), map),
                     mergeWorktree(base.worktree(), map),
-                    mergePlugins(base.plugins(), map));
+                    mergePlugins(base.plugins(), map),
+                    mergeSearch(base.search(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -98,7 +99,8 @@ public class ConfigLoader {
                 base.memory(),
                 base.mcp(),
                 base.worktree(),
-                base.plugins());
+                base.plugins(),
+                base.search());
     }
 
     /**
@@ -231,6 +233,24 @@ public class ConfigLoader {
                 m.containsKey("enabled") ? BoolVal(m.get("enabled"), base.enabled()) : base.enabled();
         String baseDir = str(m, "baseDir", base.baseDir());
         return new AgentConfig.Worktree(enabled, baseDir);
+    }
+
+    /**
+     * 合并 user yaml 的 {@code search:} 段到 base（缺失段保持 base 值）。
+     *
+     * @param base 当前 search 配置
+     * @param map  user yaml 顶层字典
+     * @return 合并后的 {@link AgentConfig.Search}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Search mergeSearch(AgentConfig.Search base, Map<String, Object> map) {
+        Object seg = map.get("search");
+        if (!(seg instanceof Map<?, ?> sm)) return base;
+        Map<String, Object> m = (Map<String, Object>) sm;
+        return new AgentConfig.Search(
+                str(m, "provider", base.provider()),
+                intVal(m, "maxResults", base.maxResults()),
+                intVal(m, "timeoutMs", base.timeoutMs()));
     }
 
     /**
