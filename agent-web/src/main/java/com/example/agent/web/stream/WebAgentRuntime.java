@@ -13,6 +13,7 @@ import com.example.agent.log.SessionLogSink;
 import com.example.agent.log.SessionLogger;
 import com.example.agent.log.SessionRecorder;
 import com.example.agent.permission.PermissionConfirmer;
+import com.example.agent.permission.PermissionMode;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
@@ -139,6 +140,22 @@ public class WebAgentRuntime {
      */
     public AgentLoop createLoop(
             String streamId, String sessionId, SessionLogSink sink, PermissionConfirmer confirmer, AbortSignal abortSignal) {
+        return createLoop(streamId, sessionId, sink, confirmer, abortSignal, null);
+    }
+
+    /**
+     * 为单个 web 会话生成 {@link AgentLoop}（带初始权限模式，add-permission-mode-dropdown）。
+     *
+     * <p>{@code mode} 为该会话初始权限基准（{@code null} 用缺省 {@link PermissionMode#READ_ONLY}；
+     * 运行期可经 {@code POST /api/chat/{stream_id}/permission} 切换）。
+     */
+    public AgentLoop createLoop(
+            String streamId,
+            String sessionId,
+            SessionLogSink sink,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal,
+            PermissionMode mode) {
         return AgentLoopFactory.buildLoop(
                 cfg,
                 provider,
@@ -149,7 +166,8 @@ public class WebAgentRuntime {
                 sink,
                 agentDataDir,
                 confirmer,
-                abortSignal);
+                abortSignal,
+                mode);
     }
 
     /**

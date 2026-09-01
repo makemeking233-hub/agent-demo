@@ -10,6 +10,7 @@ import com.example.agent.memory.MemoryDir;
 import com.example.agent.memory.MemoryPromptBuilder;
 import com.example.agent.memory.MemoryScope;
 import com.example.agent.permission.PermissionConfirmer;
+import com.example.agent.permission.PermissionMode;
 import com.example.agent.prompt.SystemPromptBuilder;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.ToolRegistry;
@@ -240,6 +241,41 @@ public final class AgentLoopFactory {
                 agentDataDir,
                 confirmer,
                 abortSignal);
+    }
+
+    /**
+     * 装配 {@link AgentLoop}（带权限模式，add-permission-mode-dropdown）。
+     *
+     * <p>{@code mode == null} 时沿用缺省 {@link PermissionMode#READ_ONLY}（与 v0.1 现状一致）。
+     */
+    public static AgentLoop buildLoop(
+            AgentConfig cfg,
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            String model,
+            SessionLogSink sink,
+            Path agentDataDir,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal,
+            PermissionMode mode) {
+        AgentLoop loop =
+                buildLoop(
+                        cfg,
+                        provider,
+                        tools,
+                        history,
+                        printer,
+                        model,
+                        sink,
+                        agentDataDir,
+                        confirmer,
+                        abortSignal);
+        if (mode != null) {
+            loop.setPermissionMode(mode);
+        }
+        return loop;
     }
 
     /** 反射实例化 {@code cfg.plugins} 中的 Plugin（class 加载失败跳过, 不影响主流程）。 */

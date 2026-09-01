@@ -10,6 +10,7 @@ import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionDecision;
 import com.example.agent.permission.PermissionManager;
+import com.example.agent.permission.PermissionMode;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.tools.Tool;
@@ -107,6 +108,11 @@ public class AgentLoop {
      * 权限交互确认器（ASK 时调用；{@code null} = fail-closed 拒绝）
      */
     private final PermissionConfirmer confirmer;
+
+    /**
+     * 当前权限模式（add-permission-mode-dropdown）。{@code volatile}：运行时 {@link #setPermissionMode} 可切换。
+     */
+    private volatile PermissionMode mode = PermissionMode.DEFAULT;
 
     /**
      * 当前轮次序号（context/snapshot 与 turn 事件用；每轮成功后自增）
@@ -258,6 +264,10 @@ public class AgentLoop {
         AbortSignal signal = abortSignal != null ? abortSignal : () -> false;
         PermissionManager perms = new PermissionManager();
         perms.setSink(sink != null ? sink : SessionLogSink.NOOP);
+        // 权限模式 + 工作区边界（add-permission-mode-dropdown）：构造时按当前 mode 装配，
+        // 运行期经 setPermissionMode 切换。
+        perms.setMode(mode);
+        perms.setWorkingDirectory(workingDir);
         this.toolContext =
                 new Tool.ToolContext(workingDir, perms, signal, agentDataDir);
     }
@@ -278,6 +288,33 @@ public class AgentLoop {
      */
     public void setModel(String newModel) {
         this.model = newModel;
+    }
+
+    /**
+     * 运行时切换权限模式（add-permission-mode-dropdown；对齐 {@link #setModel} 的 volatile 范式）。
+     *
+     * <p>仅影响切换之后的新 {@link PermissionManager#decide}，正在执行的工具不受影响。
+     *
+     * @param mode 新模式（{@code null} 视为 {@link PermissionMode#DEFAULT}）
+     */
+    public void setPermissionMode(PermissionMode mode) {
+        this.mode = mode != null ? mode : PermissionMode.DEFAULT;
+        this.toolContext.permissions().setMode(this.mode);
+    }
+
+    /** 当前权限模式（供 UI / 测试读取）。 */
+    public PermissionMode permissionMode() {
+        return mode;
+    }
+
+    /** 包内可见：工具执行上下文（测试/装配用）。 */
+    Tool.ToolContext toolContext() {
+        return toolContext;
+    }
+
+    /** 包内可见：权限管理器（测试/装配用）。 */
+    PermissionManager permissions() {
+        return toolContext.permissions();
     }
 
     /**

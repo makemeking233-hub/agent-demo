@@ -13,8 +13,12 @@ import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
+import com.example.agent.permission.PermissionMode;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.ToolRegistry;
+import com.example.agent.tools.file.WriteFileTool;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -101,5 +105,56 @@ class AgentLoopFactoryTest {
                 .verifyComplete();
 
         assertThat(captured.get()).isEqualTo("你好，世界");
+    }
+
+    // ---- add-permission-mode-dropdown：buildLoop 透传模式 ----
+
+    private AgentLoop buildLoopWithMode(PermissionMode mode) {
+        return AgentLoopFactory.buildLoop(
+                AgentConfig.defaults(),
+                mock(LlmProvider.class),
+                AgentLoopFactory.buildTools(AgentConfig.defaults()),
+                new MessageHistory(new TokenEstimator()),
+                new StreamingPrinter(),
+                "deepseek-chat",
+                SessionLogSink.NOOP,
+                null,
+                PermissionConfirmer.allowAll(),
+                null,
+                mode);
+    }
+
+    @Test
+    void buildLoopPropagatesPermissionMode() {
+        assertThat(buildLoopWithMode(PermissionMode.WORKSPACE_WRITE).permissionMode())
+                .isEqualTo(PermissionMode.WORKSPACE_WRITE);
+    }
+
+    @Test
+    void buildLoopDefaultsToReadOnly() {
+        AgentLoop loop =
+                AgentLoopFactory.buildLoop(
+                        AgentConfig.defaults(),
+                        mock(LlmProvider.class),
+                        AgentLoopFactory.buildTools(AgentConfig.defaults()),
+                        new MessageHistory(new TokenEstimator()),
+                        new StreamingPrinter(),
+                        "deepseek-chat",
+                        SessionLogSink.NOOP,
+                        null,
+                        PermissionConfirmer.allowAll());
+        assertThat(loop.permissionMode()).isEqualTo(PermissionMode.DEFAULT);
+    }
+
+    @Test
+    void buildLoopWithWorkspaceModeReconfiguresPermissionManager() {
+        AgentLoop loop = buildLoopWithMode(PermissionMode.WORKSPACE_WRITE);
+        Path ws = loop.toolContext().workingDirectory();
+        String inside = ws.resolve("sub/a.txt").toString();
+        String outside = Paths.get("C:").resolve("outside").resolve("b.txt").toString();
+        assertThat(loop.permissions().decide("WriteFile", new WriteFileTool.Input(inside, "x"), loop.toolContext()).behavior())
+                .isEqualTo(com.example.agent.permission.PermissionDecision.Behavior.ALLOW);
+        assertThat(loop.permissions().decide("WriteFile", new WriteFileTool.Input(outside, "x"), loop.toolContext()).behavior())
+                .isEqualTo(com.example.agent.permission.PermissionDecision.Behavior.ASK);
     }
 }
