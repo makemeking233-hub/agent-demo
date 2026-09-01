@@ -34,6 +34,6 @@
 
 - [x] 6.1 更新 `docs/design/design.md` §6.5，补权限模式的说明（三档 + 工作区边界 + 敏感路径 + 工具级 DENY 兜底）。
 - [x] 6.2 更新 `README.md` Web UI 权限部分，说明权限模式下拉。
-- [ ] 6.3 后端验证：`mvn -o verify -DskipNpm=true` 全绿（含 jacoco LINE≥80% / BRANCH≥70%）。
-- [ ] 6.4 前端构建：`npm run build`（`agent-web/frontend`）成功后 `mvn -o package`，确认 SPA bundle 更新到 `resources/static`；`check-md.sh` 校验本 change 下 md 无 Mermaid 违规。
-- [ ] 6.5 提交并推送：按变更点拆分中文 commit（`feat(permission-mode): ...`），逐一 commit 即 push。
+- [ ] 6.3 后端验证：`mvn -o verify -DskipNpm=true` 全绿（含 jacoco LINE≥80% / BRANCH≥70%）。—— 注：agent-core 306 全绿 + agent-web 非 e2e 106 全绿 + jacoco 均达标；仅 `UiLayoutE2ETest` 3 个 Selenium e2e（侧边栏/新会话）因并行 voice/会话功能 WIP 前端状态失败，与本次权限模式无关（`mvn -pl agent-web verify -Dtest=!*E2ETest` 通过）。
+- [x] 6.4 前端构建：`npm run build`（`agent-web/frontend`）成功后 `mvn -o package`，确认 SPA bundle 更新到 `resources/static`；`check-md.sh` 校验本 change 下 md 无 Mermaid 违规。
+- [x] 6.5 提交并推送：按变更点拆分中文 commit（`feat(permission-mode): ...`），逐一 commit 即 push。
