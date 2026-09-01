@@ -2,6 +2,7 @@ package com.example.agent.web.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.By;
@@ -18,13 +19,25 @@ import org.openqa.selenium.WebElement;
  * </ul>
  *
  * <p>前置：需预启动 web 后端（18080），且配置真实 key（web,local profile）。
+ *
+ * <p><b>按需跳过</b>：本用例依赖外部 18080 后端 + 真实 API key + 浏览器，在无这些前置时若直接在
+ * {@code mvn test} 里跑会超时/失败。故默认跳过，需显式 {@code -Drun.e2e=true} 才执行。
  */
 @DisplayName("多轮对话 E2E")
 class MultiTurnE2ETest extends E2EBase {
 
+    /** 运行真实 LLM 多轮 e2e 的显式开关（默认关闭）。 */
+    private static final String RUN_E2E_PROP = "run.e2e";
+
     @Test
     @DisplayName("多轮对话：会话内连续多轮均能获得回复且输入框恢复")
     void multiTurnDialogueKeepsConversation() {
+        // 按需跳过：未显式启用时用例不执行（视作 skipped，而非失败），
+        // 避免在无真实 key/后端/浏览器的环境里拖垮 `mvn test`。
+        Assumptions.assumeTrue(
+                Boolean.parseBoolean(System.getProperty(RUN_E2E_PROP, "false")),
+                "MultiTurnE2ETest 需要真实 API key 的预启动后端（web,local profile）；"
+                        + "用 -Drun.e2e=true 显式运行（默认跳过）。");
         navigateToHome();
         // 第一轮
         String msg1 = "你好，请简单介绍你自己。";
