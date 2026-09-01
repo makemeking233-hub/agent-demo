@@ -41,11 +41,11 @@
 - [x] 6.1 docs/guides/plugins.md hello-world
 - [x] 6.2 plugins.md 多扩展点范例
 - [x] 6.3 design.md §5.2 指向 plugins.md
-- [ ] 6.4 openspec/specs/plugin-system/spec.md + delta 同步到 memory/skills/mcp
+- [x] 6.4 openspec/specs/plugin-system/spec.md + delta 同步到 memory/skills/mcp
 
 ## 7. 验证+提交+归档
 
-- [ ] 7.1 mvn verify 全绿
-- [ ] 7.2 4 件套测试文档
-- [ ] 7.3 分 commit+push
+- [x] 7.1 mvn verify 全绿
+- [x] 7.2 4 件套测试文档
+- [x] 7.3 分 commit+push
 - [ ] 7.4 openspec archive add-plugin-system
