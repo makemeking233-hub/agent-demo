@@ -1,5 +1,6 @@
 import { Loader2, Send, Square } from "lucide-react";
 import { KeyboardEvent, useState } from "react";
+import { type PermissionMode } from "../api/chat";
 import styles from "./Composer.module.css";
 
 interface ComposerProps {
@@ -7,11 +8,25 @@ interface ComposerProps {
   onSend: (text: string) => void;
   onAbort?: () => void;
   placeholder?: string;
+  permissionMode?: PermissionMode;
+  onPermissionModeChange?: (mode: PermissionMode) => void;
 }
 
 const SLASH_COMMANDS = ["/help", "/clear", "/resume", "/history", "/quit"];
+const PERMISSION_LABELS: Record<PermissionMode, string> = {
+  read_only: "Read Only",
+  workspace_write: "Workspace Write",
+  full_access: "Full access",
+};
 
-export function Composer({ busy, onSend, onAbort, placeholder = "输入消息或 /help..." }: ComposerProps) {
+export function Composer({
+  busy,
+  onSend,
+  onAbort,
+  placeholder = "输入消息或 /help...",
+  permissionMode = "read_only",
+  onPermissionModeChange,
+}: ComposerProps) {
   const [value, setValue] = useState("");
   const [showSlashHint, setShowSlashHint] = useState(false);
 
@@ -75,6 +90,20 @@ export function Composer({ busy, onSend, onAbort, placeholder = "输入消息或
         )}
       </div>
       <div className={styles.statusBar}>
+        <span className={styles.permission}>
+          <select
+            className={styles.permissionSelect}
+            value={permissionMode}
+            onChange={(e) => onPermissionModeChange?.(e.target.value as PermissionMode)}
+            aria-label="权限模式"
+          >
+            {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((m) => (
+              <option key={m} value={m}>
+                {PERMISSION_LABELS[m]}
+              </option>
+            ))}
+          </select>
+        </span>
         <span>{trimmed.length} 字符</span>
         <span>Ctrl+Enter 发送 / Shift+Enter 换行</span>
       </div>

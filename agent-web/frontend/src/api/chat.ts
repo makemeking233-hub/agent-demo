@@ -3,9 +3,12 @@
  * 配合 lib/sse-client.ts 跑流.
  */
 
+export type PermissionMode = "read_only" | "workspace_write" | "full_access";
+
 export interface SendRequest {
   content: string;
   session_id?: string;
+  permission_mode?: PermissionMode;
 }
 
 export interface SendResponse {
@@ -91,6 +94,16 @@ export class ChatApi {
     if (!r.ok) throw new Error(`submitDecision ${r.status}`);
     const body = (await r.json()) as { ok: boolean };
     return body.ok;
+  }
+
+  // 实时切换权限模式（add-permission-mode-dropdown）
+  async setPermission(streamId: string, mode: PermissionMode): Promise<void> {
+    const r = await fetch(this.base + `/api/chat/${encodeURIComponent(streamId)}/permission`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    if (!r.ok) throw new Error(`setPermission ${r.status}`);
   }
 
   async slash(streamId: string, content: string): Promise<SlashResult> {

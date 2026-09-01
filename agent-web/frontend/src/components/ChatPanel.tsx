@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChatApi, type HistoryMessage } from "../api/chat";
+import { ChatApi, type HistoryMessage, type PermissionMode } from "../api/chat";
 import { SseClient } from "../lib/sse-client";
 import { SseEvent } from "../lib/event-types";
 import styles from "./ChatPanel.module.css";
@@ -103,6 +103,8 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [streamId, setStreamId] = useState<string | null>(null);
+  // 权限模式（add-permission-mode-dropdown）：缺省 read_only；切换即调后端 setPermission；随 send 透传初始模式。
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("read_only");
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
   // （React 闭包捕获的是函数创建时的值；SSE 异步到达时闭包里的 streamId 可能仍是 null → 权限提交被跳过）。
   const streamIdRef = useRef<string | null>(null);
@@ -213,7 +215,7 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     }
 
     try {
-      const resp = await api.send({ content, session_id: sessionIdRef.current ?? undefined });
+      const resp = await api.send({ content, session_id: sessionIdRef.current ?? undefined, permission_mode: permissionMode });
       setStreamId(resp.stream_id);
       streamIdRef.current = resp.stream_id;
       sessionIdRef.current = resp.session_id; // 记住会话，下轮复用 → 后端按 session_id 复用 history
@@ -309,6 +311,13 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     if (sid) await api.abort(sid);
   }
 
+  // 切换权限模式：本地状态 + 若有活动流则立即下发后端（add-permission-mode-dropdown）
+  function handlePermissionModeChange(mode: PermissionMode) {
+    setPermissionMode(mode);
+    const sid = streamIdRef.current;
+    if (sid) api.setPermission(sid, mode).catch(() => {});
+  }
+
   return (
     <div className={styles.panel}>
       <div ref={listRef} className={styles.list}>
@@ -324,7 +333,13 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
           return null;
         })}
       </div>
-      <Composer busy={busy} onSend={startStream} onAbort={abortStream} />
+      <Composer
+        busy={busy}
+        onSend={startStream}
+        onAbort={abortStream}
+        permissionMode={permissionMode}
+        onPermissionModeChange={handlePermissionModeChange}
+      />
     </div>
   );
 }

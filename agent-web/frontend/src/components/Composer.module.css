@@ -90,3 +90,23 @@
   font-size: 11px;
   color: var(--dsw-alias-text-muted);
 }
+
+.permission {
+  display: inline-flex;
+  align-items: center;
+}
+
+.permissionSelect {
+  font-size: 11px;
+  color: var(--dsw-alias-text);
+  background: var(--dsw-alias-bg);
+  border: 1px solid var(--dsw-alias-border);
+  border-radius: var(--dsw-alias-radius-sm);
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.permissionSelect:focus {
+  outline: none;
+  border-color: var(--dsw-alias-accent);
+}
