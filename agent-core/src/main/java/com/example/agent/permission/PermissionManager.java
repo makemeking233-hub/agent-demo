@@ -4,6 +4,8 @@ import com.example.agent.log.SessionLogSink;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolCategory;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -40,6 +42,16 @@ public class PermissionManager {
      * 工具名 → 语义分类注册表（消 switch(String)）
      */
     private final Map<String, ToolCategory> categoryRegistry = new HashMap<>();
+
+    /**
+     * 当前权限模式（add-permission-mode-dropdown；缺省 {@link PermissionMode#READ_ONLY}，运行期可重设）。
+     */
+    private PermissionMode mode = PermissionMode.DEFAULT;
+
+    /**
+     * 会话工作目录（{@code workspace_write} 边界判定用；由 AgentLoop 装配时注入）。
+     */
+    private Path workingDir;
 
     /**
      * 会话日志观察者（permission/decision 事件广播；默认 no-op）
@@ -96,23 +108,77 @@ public class PermissionManager {
     }
 
     /**
-     * 主裁决方法。
+     * 主裁决方法（模式感知 + 工作区边界，add-permission-mode-dropdown）。
+     *
+     * <p>裁决顺序：
+     *
+     * <ol>
+     *   <li>{@code mode == FULL_ACCESS} → allow（含敏感路径；仅工具级 DENY 兜底）
+     *   <li>命中敏感路径 pattern → ask（即使 read/workspace 模式默认放行）
+     *   <li>否则按 {@code mode × category} 裁决；{@code WORKSPACE_WRITE} 下 WRITE 再按工作区边界
+     * </ol>
      *
      * @param toolName 工具名
      * @param input    工具输入（用于抽取路径）
-     * @param ctx      工具上下文（可空，v0.1 暂未使用）
+     * @param ctx      工具上下文（含工作目录，可空）
      * @return 裁决结果
      */
     public PermissionDecision decide(String toolName, Object input, Tool.ToolContext ctx) {
         String path = extractPath(input);
+        ToolCategory category = categoryRegistry.getOrDefault(toolName, ToolCategory.OTHER);
         PermissionDecision d;
-        if (path != null && pathMatcher.matches(path)) {
+        if (mode == PermissionMode.FULL_ACCESS) {
+            // 全权限：放行一切（含敏感路径）。工具级 DENY（checkPermissions 终态）在 AgentLoop 另行兜底。
+            d = PermissionDecision.allow();
+        } else if (path != null && pathMatcher.matches(path)) {
+            // 敏感路径：非 full_access 下强制 ask（Fail-Closed 兜底）。
             d = PermissionDecision.ask();
         } else {
-            d = decideByCategory(categoryRegistry.getOrDefault(toolName, ToolCategory.OTHER));
+            boolean withinWorkspace = isWithinWorkspace(path, ctx);
+            d = mode.defaultDecision(category, withinWorkspace);
         }
         broadcast(toolName, path, d);
         return d;
+    }
+
+    /**
+     * 目标路径是否位于会话工作目录内（仅 WRITE 类别有意义；非 WRITE 类别由模式默认裁决决定）。
+     *
+     * @param path 抽取出的路径（无路径语义时为 {@code null}）
+     * @param ctx  工具上下文（取其工作目录；为空时回退到注入的 {@link #workingDir}）
+     * @return 是否在工作区边界内
+     */
+    private boolean isWithinWorkspace(String path, Tool.ToolContext ctx) {
+        if (path == null) return false;
+        Path base = workingDirFor(ctx);
+        if (base == null) return false;
+        Path p = Paths.get(path).normalize().toAbsolutePath();
+        Path b = base.normalize().toAbsolutePath();
+        return p.startsWith(b);
+    }
+
+    /** 优先级：上下文工作目录 > 注入字段。 */
+    private Path workingDirFor(Tool.ToolContext ctx) {
+        if (ctx != null && ctx.workingDirectory() != null) return ctx.workingDirectory();
+        return workingDir;
+    }
+
+    /**
+     * 设置当前权限模式（会话内实时切换）。
+     *
+     * @param mode 新模式（不可空）
+     */
+    public void setMode(PermissionMode mode) {
+        this.mode = mode != null ? mode : PermissionMode.DEFAULT;
+    }
+
+    /**
+     * 设置会话工作目录（{@code workspace_write} 边界判定用）。
+     *
+     * @param workingDir 工作目录（可空 = 无边界的严格 fallback）
+     */
+    public void setWorkingDirectory(Path workingDir) {
+        this.workingDir = workingDir;
     }
 
     /**
@@ -145,27 +211,6 @@ public class PermissionManager {
      */
     public PermissionDecision decide(String toolName, Object input) {
         return decide(toolName, input, null);
-    }
-
-    /**
-     * 按 {@link ToolCategory} 应用默认策略（策略注册表核心）。
-     *
-     * @param category 工具语义分类
-     * @return 裁决结果
-     */
-    private PermissionDecision decideByCategory(ToolCategory category) {
-        return switch (category) {
-            case READ -> policy.defaultRead()
-                    ? PermissionDecision.allow()
-                    : PermissionDecision.ask();
-            case WRITE -> policy.defaultWrite()
-                    ? PermissionDecision.allow()
-                    : PermissionDecision.ask();
-            case SHELL -> policy.defaultShell()
-                    ? PermissionDecision.allow()
-                    : PermissionDecision.ask();
-            case OTHER -> PermissionDecision.ask();
-        };
     }
 
     /**

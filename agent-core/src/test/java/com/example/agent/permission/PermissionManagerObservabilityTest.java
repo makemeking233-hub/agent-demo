@@ -71,4 +71,32 @@ class PermissionManagerObservabilityTest {
         // 未 setSink 时默认 no-op，decide 不抛异常
         mgr.decide("UnknownTool", null);
     }
+
+    @Test
+    void fullAccessAllowIsNotBroadcast() {
+        CapturingSink sink = new CapturingSink();
+        PermissionManager mgr = new PermissionManager();
+        mgr.setSink(sink);
+        mgr.setMode(PermissionMode.FULL_ACCESS);
+
+        // FULL_ACCESS 下 WriteFile 应为 allow，不广播
+        mgr.decide("WriteFile", new com.example.agent.tools.file.WriteFileTool.Input("a.txt", "x"));
+
+        assertEquals(0, sink.decisions.size(), "full_access allow 不应产生 permission/decision 事件");
+    }
+
+    @Test
+    void workspaceWriteOutsideAsksAndBroadcasts() {
+        CapturingSink sink = new CapturingSink();
+        PermissionManager mgr = new PermissionManager();
+        mgr.setSink(sink);
+        mgr.setMode(PermissionMode.WORKSPACE_WRITE);
+        mgr.setWorkingDirectory(java.nio.file.Paths.get("/ws"));
+
+        // 工作区外写 → ask 且广播
+        mgr.decide("WriteFile", new com.example.agent.tools.file.WriteFileTool.Input("/outside/b.txt", "x"));
+
+        assertEquals(1, sink.decisions.size());
+        assertTrue(sink.decisions.get(0).contains("decision=ask"));
+    }
 }
