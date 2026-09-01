@@ -13,6 +13,7 @@
 | `2026-08-29-agent-v01-full-test/` | agent-demo v0.1 全面测试（REPL / Provider / AgentLoop / 工具 / 权限 / 会话 / 记忆 / 压缩 / CLI / 冒烟） | 2026-08-29 | 137（34 类） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-08-30-web-ui-e2e/` | Web 前端 UI 端到端测试（三栏布局 / 主题切换 / 会话列表 / 输入 / slash 命令 / SPA 路由回落） | 2026-08-30 | 17（E2E） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-08-30-plugin-system/` | add-plugin-system Plugin 插件框架测试（Plugin / PluginContext / ExtensionPoints / PluginManager + Mcp / Skills / Memory 三插件） | 2026-08-30 | 12（6 新增 + 6 既有） | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-02-web-search/` | add-web-search-tool 内置 WebSearch 工具测试（WebSearchProvider 契约 / DeepSeek 原生搜索 / Tavily 检索 / 工厂选择 / Tool 协议） | 2026-09-02 | 27（新增，另 250 既有回归） | ✅ 全绿 | ✅ | 已归档 |
 
 ---
 
@@ -39,6 +40,14 @@
 - **测试目标**：对 add-plugin-system（Plugin 插件框架）做单元测试收尾，验证框架核心（Plugin / PluginContext / ExtensionPoints / PluginManager）生命周期、失败隔离、去重与上下文注入，以及 Mcp / Skills / Memory 三个插件的核心行为。
 - **执行要点**：`mvn -pl agent-core clean verify`；新增 `McpPluginTest`(2) + `SkillsPluginTest`(2) + `MemoryPluginTest`(2) 共 6 条 + 既有 `PluginManagerTest`(6) 复核；全量 250 用例全绿（`Tests run: 250, Failures: 0, Errors: 0, Skipped: 0`）。
 - **关键发现**：jacoco 覆盖率门禁达标（`All coverage checks have been met`，LINE≥80% / BRANCH≥70%）；缺陷 0；既有 244 条（含 v0.4 `McpClientTest`/`SkillCatalogTest`/`MemoryRecallTest` 等 deprecated wrapper 兼容路径）全部通过。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.4 `2026-09-02-web-search/` — add-web-search-tool 内置 WebSearch 工具测试
+
+- **测试目标**：对 add-web-search-tool（内置 WebSearch 工具）做单元测试收尾，验证 `WebSearchProvider` 契约 + `WebSearchResult`/`Source` record、DeepSeek 原生搜索（Anthropic 兼容 `/messages` + `web_search_20250305` 严格模式 + 去重）与 Tavily 检索端点（`results[]` 解析 + 截断）、`WebSearchProviderFactory` 自动选择/显式优先、`WebSearchTool` 协议与 Fail-Closed、`search` 配置解析。
+- **执行要点**：`mvn -pl agent-core test` + `mvn -pl agent-core clean verify`；新增 `WebSearchProviderTest`(4) + `DeepSeekWebSearchProviderTest`(4) + `TavilyWebSearchProviderTest`(4) + `WebSearchProviderFactoryTest`(5) + `WebSearchToolTest`(8) 共 25 条 + 扩展 `ConfigLoaderTest`(+2) = 27 条；另扩展 `AgentLoopFactoryTest` 断言注册 `web_search`；全量 277 用例全绿（`Tests run: 277, Failures: 0, Errors: 0, Skipped: 0`）。
+- **关键发现**：jacoco 覆盖率门禁达标（`All coverage checks have been met`，LINE≥80% / BRANCH≥70%）；缺陷 0；既有 250 条用例无回归。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 

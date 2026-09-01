@@ -32,8 +32,8 @@
 
 ## 7. 文档 + 验证 + 提交 + 归档
 
-- [ ] 7.1 `docs/design/design.md` 补 WebSearch 简介；README 提及
-- [ ] 7.2 `mvn -pl agent-core clean verify` 全绿（含 jacoco LINE≥80% / BRANCH≥70%）
-- [ ] 7.3 写 4 件套测试文档 `docs/test-agent-demo/<date>-web-search/`（test-design/cases/report/review）+ `test-guide.md` 登记
-- [ ] 7.4 中文 Conventional Commits 分 commit + push（按 §2.2 commit 即 push）
+- [x] 7.1 `docs/design/design.md` 补 WebSearch 简介；README 提及
+- [x] 7.2 `mvn -pl agent-core clean verify` 全绿（含 jacoco LINE≥80% / BRANCH≥70%）
+- [x] 7.3 写 4 件套测试文档 `docs/test-agent-demo/2026-09-02-web-search/`（test-design/cases/report/review）+ `test-guide.md` 登记
+- [x] 7.4 中文 Conventional Commits 分 commit + push（按 §2.2 commit 即 push）
 - [ ] 7.5 `openspec archive add-web-search-tool`（delta spec 合并到 `openspec/specs/search/spec.md`）
