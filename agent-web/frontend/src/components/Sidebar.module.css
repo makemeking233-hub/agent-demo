@@ -223,18 +223,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--dsw-alias-border);
   border-radius: var(--dsw-alias-radius-sm);
-  background: transparent;
+  background: var(--dsw-static-surface-sunken);
   color: var(--dsw-alias-text-muted);
   cursor: pointer;
   opacity: 1;
   flex-shrink: 0;
+  margin-left: 4px;
 }
 
-.itemAction:hover { background: var(--dsw-static-surface-sunken); color: var(--dsw-alias-danger, #d9480f); }
+.itemAction:hover { background: var(--dsw-static-accent-subtle); color: var(--dsw-alias-danger, #d9480f); border-color: var(--dsw-alias-danger, #d9480f); }
 
 .expandButton {
   display: block;
