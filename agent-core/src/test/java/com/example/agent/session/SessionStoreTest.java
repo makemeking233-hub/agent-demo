@@ -90,4 +90,40 @@ class SessionStoreTest {
         store.syncFlush();
         store.close();
     }
+
+    @Test
+    void loadById_readsNamedSession() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        writeEntries(
+                sessionsDir.resolve("s-1.jsonl"),
+                SessionEntry.user("u1", null),
+                SessionEntry.assistant("a1", List.of(), null));
+
+        List<SessionEntry> entries = SessionStore.loadById(sessionsDir, "s-1");
+
+        assertEquals(2, entries.size());
+        assertEquals("u1", entries.get(0).content());
+        assertEquals("a1", entries.get(1).content());
+    }
+
+    @Test
+    void loadById_missingSession_returnsEmpty() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        writeEntries(sessionsDir.resolve("s-1.jsonl"), SessionEntry.user("u1", null));
+
+        List<SessionEntry> entries = SessionStore.loadById(sessionsDir, "does-not-exist");
+
+        assertTrue(entries.isEmpty());
+    }
+
+    @Test
+    void loadById_nullOrBlankId_returnsEmpty() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+
+        assertTrue(SessionStore.loadById(sessionsDir, null).isEmpty());
+        assertTrue(SessionStore.loadById(sessionsDir, "  ").isEmpty());
+    }
 }

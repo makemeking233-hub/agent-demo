@@ -30,6 +30,25 @@ export interface CurrentSession {
   model?: string;
 }
 
+export interface HistoryToolCall {
+  id: string;
+  name: string;
+  argumentsJson?: string;
+}
+
+export interface HistoryMessage {
+  role: string;
+  content: string;
+  toolCalls?: HistoryToolCall[];
+  toolCallId?: string;
+  isError?: boolean;
+}
+
+export interface HistoryResponse {
+  session_id: string;
+  messages: HistoryMessage[];
+}
+
 export class ChatApi {
   constructor(private base: string = '') {}
 
@@ -83,6 +102,18 @@ export class ChatApi {
     const r = await fetch(this.base + '/api/sessions/current');
     if (!r.ok) throw new Error(`currentSession ${r.status}`);
     return (await r.json()) as CurrentSession;
+  }
+
+  /**
+   * 拉取某会话的消息历史（v0.3 会话重进恢复）。
+   * @param sessionId 会话 id
+   * @returns 会话消息；未知会话 / 无存档时 messages 为空或抛错
+   */
+  async history(sessionId: string): Promise<HistoryResponse> {
+    const r = await fetch(this.base + `/api/sessions/${encodeURIComponent(sessionId)}/messages`);
+    if (r.status === 404) return { session_id: sessionId, messages: [] };
+    if (!r.ok) throw new Error(`history ${r.status}`);
+    return (await r.json()) as HistoryResponse;
   }
 
   async health(): Promise<{ status: string; version: string; uptime_s: number }> {

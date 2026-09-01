@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChatApi } from "../api/chat";
+import { ChatApi, type HistoryMessage } from "../api/chat";
 import { SseClient } from "../lib/sse-client";
 import { SseEvent } from "../lib/event-types";
 import styles from "./ChatPanel.module.css";
@@ -28,6 +28,77 @@ type InlineTool = {
   durationMs?: number;
 };
 
+// ---------- 会话重进恢复：localStorage 持久化 + 服务端历史回填 ----------
+
+const CHAT_STATE_KEY = "agent-demo.chat.v1";
+
+interface PersistedChatState {
+  v: 1;
+  sessionId: string | null;
+  items: Item[];
+}
+
+function readPersisted(): PersistedChatState | null {
+  try {
+    const raw = localStorage.getItem(CHAT_STATE_KEY);
+    if (!raw) return null;
+    const state = JSON.parse(raw) as PersistedChatState;
+    if (state && state.v === 1) return state;
+  } catch {
+    /* 解析失败当作无状态，不阻断启动 */
+  }
+  return null;
+}
+
+function writePersisted(sessionId: string | null, items: Item[]) {
+  try {
+    localStorage.setItem(CHAT_STATE_KEY, JSON.stringify({ v: 1, sessionId, items }));
+  } catch {
+    /* 写入失败（配额/隐私模式）仅禁用持久化，不阻断对话 */
+  }
+}
+
+function clearPersisted() {
+  try {
+    localStorage.removeItem(CHAT_STATE_KEY);
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/** 把服务端返回的消息历史重建为渲染 items（仅保留用户/助手文本与内联工具，处于稳定态）。 */
+function mapHistoryToItems(messages: HistoryMessage[]): Item[] {
+  const items: Item[] = [];
+  for (const m of messages) {
+    if (m.role === "user") {
+      items.push({ kind: "text", id: "h-u-" + items.length, role: "user", text: m.content });
+    } else if (m.role === "assistant") {
+      const tools: InlineTool[] = (m.toolCalls ?? []).map((tc) => ({
+        id: tc.id,
+        name: tc.name,
+        status: "ok" as const,
+      }));
+      items.push({
+        kind: "text",
+        id: "h-a-" + items.length,
+        role: "assistant",
+        text: m.content,
+        tools: tools.length ? tools : undefined,
+      });
+    } else if (m.role === "tool") {
+      items.push({
+        kind: "tool",
+        id: "h-t-" + items.length,
+        name: "tool",
+        toolCallId: m.toolCallId ?? "",
+        status: m.isError ? "fail" : "ok",
+        text: m.content,
+      });
+    }
+  }
+  return items;
+}
+
 export function ChatPanel() {
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
@@ -45,6 +116,32 @@ export function ChatPanel() {
   }, [items]);
 
   const api = new ChatApi();
+
+  // 会话重进恢复：挂载时从 localStorage 恢复 session_id + 消息快照；无快照但服务端有历史时回填。
+  useEffect(() => {
+    const saved = readPersisted();
+    if (saved && saved.sessionId) {
+      sessionIdRef.current = saved.sessionId;
+      setItems(saved.items ?? []);
+      if ((saved.items ?? []).length === 0) {
+        api
+          .history(saved.sessionId)
+          .then((h) => {
+            if (h.messages.length > 0) {
+              setItems((prev) => (prev.length === 0 ? mapHistoryToItems(h.messages) : prev));
+            }
+          })
+          .catch(() => {});
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 会话重进恢复：消息/会话变化时（防抖）写回 localStorage，供下次重进恢复。
+  useEffect(() => {
+    const t = setTimeout(() => writePersisted(sessionIdRef.current, items), 250);
+    return () => clearTimeout(t);
+  }, [items]);
 
   function appendItem(it: Item) {
     setItems((prev) => [...prev, it]);
@@ -80,6 +177,7 @@ export function ChatPanel() {
       setItems([]);
       setBusy(false);
       sessionIdRef.current = null; // /clear 开新会话，重置 session_id（下轮从新会话开始）
+      clearPersisted(); // 清掉本地持久化，避免重进恢复回旧会话
       return;
     }
     if (content.trim() === "/help") {

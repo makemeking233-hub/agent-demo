@@ -4,34 +4,56 @@ import com.example.agent.config.AgentConfig;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
 import com.example.agent.core.AgentLoopFactory;
+import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
+import com.example.agent.log.CompositeSessionLogSink;
 import com.example.agent.log.SessionLogSink;
+import com.example.agent.log.SessionLogger;
+import com.example.agent.log.SessionRecorder;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.render.StreamingPrinter;
+import com.example.agent.session.SessionResumeLoader;
+import com.example.agent.session.SessionStore;
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.tools.ToolRegistry;
+import jakarta.annotation.PreDestroy;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 /**
- * Web 运行时装配（add-web-ui-v0-1 / D2）。
+ * Web 运行时装配（add-web-ui-v0-1 / D2，v0.3 加会话重进恢复）。
  *
  * <p>注入共享的 {@link LlmProvider} / {@link ToolRegistry} / {@link TokenEstimator}（由
  * {@link com.example.agent.web.config.WebRuntimeConfig} 提供，与 CLI 的装配一致）。每个 web 会话
- * 调用 {@link #createLoop(String, SessionLogSink, PermissionConfirmer)} 生成独立
+ * 调用 {@link #createLoop(String, String, SessionLogSink, PermissionConfirmer, AbortSignal)} 生成独立
  * {@link AgentLoop}（各会话独立 history）。
+ *
+ * <p>会话重进恢复（add-web-session-restore）：web 会话按 {@code sessionId} 落盘到
+ * {@code ~/.agent-demo/sessions/<id>.jsonl}（复用 CLI 的 SessionStore/SessionRecorder 格式）；首次
+ * 触达该 {@code sessionId} 时从磁盘回填历史，浏览器刷新 / 服务端重启后模型仍能看到重启前的对话。
  *
  * <p>集成测试可用 {@code @MockBean LlmProvider} 替换 provider，注入固定 chunk 序列。
  */
 @Service
 @Profile("web")
 public class WebAgentRuntime {
+
+    private static final Logger log = LoggerFactory.getLogger(WebAgentRuntime.class);
+
+    /** 回填历史的 token 上限（与 CLI /resume 的 MAX_RESUME_TOKENS 对齐）。 */
+    private static final int MAX_RESUME_TOKENS = 100_000;
 
     /** agent 数据目录（{@code ~/.agent-demo}）。 */
     private final Path agentDataDir;
@@ -51,27 +73,55 @@ public class WebAgentRuntime {
     /** 已加载的配置。 */
     private final AgentConfig cfg;
 
-    /** session 级对话历史缓存（按 sessionId 复用，支撑多轮对话记忆；v0.1 内存缓存，不落盘）。 */
+    /** session 级对话历史缓存（按 sessionId 复用，支撑多轮对话记忆；首次触达从磁盘回填）。 */
     private final Map<String, MessageHistory> sessionHistories = new ConcurrentHashMap<>();
 
+    /** 每会话的落盘录制器（懒创建；写盘失败时该会话降级为不落盘）。 */
+    private final Map<String, SessionRecorder> sessionRecorders = new ConcurrentHashMap<>();
+
+    /** 每会话的 {@link SessionStore}（用于关闭时 flush；与 SessionRecorder 一一对应）。 */
+    private final Map<String, SessionStore> sessionStores = new ConcurrentHashMap<>();
+
+    @Autowired
     public WebAgentRuntime(LlmProvider provider, ToolRegistry tools, TokenEstimator estimator) {
+        this(
+                provider,
+                tools,
+                estimator,
+                defaultAgentDataDir(),
+                loadConfig());
+    }
+
+    /**
+     * 可注入构造：允许指定 agentDataDir 与配置（测试/高级装配用，避免依赖真实 {@code ~/.agent-demo}）。
+     *
+     * @param agentDataDir agent 数据目录
+     * @param cfg          已加载配置
+     */
+    public WebAgentRuntime(
+            LlmProvider provider, ToolRegistry tools, TokenEstimator estimator, Path agentDataDir, AgentConfig cfg) {
         this.provider = provider;
         this.tools = tools;
         this.estimator = estimator;
         this.model = "deepseek-chat";
-        this.cfg =
-                new ConfigLoader()
-                        .load(
-                                Paths.get(
-                                        System.getProperty("user.home"),
-                                        ".agent-demo",
-                                        "config.yaml"));
+        this.cfg = cfg;
+        this.agentDataDir = agentDataDir;
+    }
+
+    /** 解析默认 agent 数据目录（{@code <user.home>/.agent-demo}，尊重 {@code AGENT_DEMO_HOME}）。 */
+    private static Path defaultAgentDataDir() {
         String userHome =
                 System.getenv("AGENT_DEMO_HOME") != null
                                 && !System.getenv("AGENT_DEMO_HOME").isBlank()
                         ? System.getenv("AGENT_DEMO_HOME")
                         : System.getProperty("user.home");
-        this.agentDataDir = Paths.get(userHome, ".agent-demo");
+        return Paths.get(userHome, ".agent-demo");
+    }
+
+    /** 加载默认配置（{@code <user.home>/.agent-demo/config.yaml}）。 */
+    private static AgentConfig loadConfig() {
+        return new ConfigLoader()
+                .load(Paths.get(System.getProperty("user.home"), ".agent-demo", "config.yaml"));
     }
 
     /**
@@ -82,7 +132,7 @@ public class WebAgentRuntime {
      * SessionLogSink 下发粗粒度事件）。
      *
      * @param streamId 当前流 id（留作扩展）
-     * @param sessionId 会话 id（用于复用该会话的 history；同一 sessionId 连续对话共享上下文）
+     * @param sessionId 会话 id（用于复用/回填该会话的 history；同一 sessionId 连续对话共享上下文）
      * @param sink 会话日志观察者（web 转 SSE）
      * @param confirmer 权限确认器（可 null = fail-closed 拒绝）
      * @return 装配好的 {@link AgentLoop}
@@ -103,19 +153,100 @@ public class WebAgentRuntime {
     }
 
     /**
-     * 按 sessionId 获取（或新建）该会话的 {@link MessageHistory}。
+     * 按 sessionId 获取（或回填）该会话的 {@link MessageHistory}。
      *
-     * <p>同一 sessionId 复用同一 history 实例 → 多轮对话时模型能看到之前轮次的上下文
-     * （修复 web 会话无记忆/无状态缺陷）。v0.1 为内存缓存（不落盘）；v0.2 可接 SessionStore。
+     * <p>首次触达某个已知 {@code sessionId} 时，若磁盘存在 {@code sessions/<id>.jsonl}，则用
+     * {@link SessionResumeLoader#loadById} 回填历史（超限走 {@link SessionResumeLoader#snip}），使模型
+     * 在服务端重启后仍能看到重启前的对话。同一 {@code sessionId} 复用同一 history 实例。
      *
-     * @param sessionId 会话 id（{@code null} 时也用独立 history，但不缓存）
+     * @param sessionId 会话 id（{@code null} 时用独立 history，不缓存）
      * @return 该会话的 history
      */
     public MessageHistory historyFor(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return new MessageHistory(estimator);
         }
-        return sessionHistories.computeIfAbsent(sessionId, k -> new MessageHistory(estimator));
+        return sessionHistories.computeIfAbsent(sessionId, this::restoreHistory);
+    }
+
+    /**
+     * 返回某会话当前可见的消息列表（供历史端点用）。
+     *
+     * <p>若会话当前在内存中活动（有进行中的对话或刚回填的 live history），返回内存历史（最新）；
+     * 否则返回从磁盘回填的历史。不会改写内存缓存。
+     *
+     * @param sessionId 会话 id（{@code null} 时返回空）
+     * @return 该会话的消息列表；无存档时为空
+     */
+    public List<Message> messagesFor(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return List.of();
+        MessageHistory live = sessionHistories.get(sessionId);
+        if (live != null) return live.all();
+        return restoreHistory(sessionId).all();
+    }
+
+    /**
+     * 组装某会话的复合 {@link SessionLogSink}：SSE 通知 + 落盘录制。
+     *
+     * <p>该 sink 既把事件转发给 {@code sseSink}（web 前端），又经 {@link SessionRecorder} 追加到
+     * {@code sessions/<id>.jsonl}（重进恢复用）。落盘失败时降级为仅 SSE。
+     *
+     * @param sessionId 会话 id（{@code null} 时不落盘）
+     * @param sseSink   SSE 通知 sink（可 null）
+     * @return 复合 sink
+     */
+    public SessionLogSink sinkFor(String sessionId, SessionLogSink sseSink) {
+        SessionRecorder recorder = recorderFor(sessionId);
+        if (recorder == null) return sseSink == null ? SessionLogSink.NOOP : sseSink;
+        return new CompositeSessionLogSink(sseSink, recorder);
+    }
+
+    /** 按会话懒创建（并缓存）落盘录制器；失败时该会话降级为不落盘并返回 null。 */
+    public SessionRecorder recorderFor(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return null;
+        return sessionRecorders.computeIfAbsent(
+                sessionId,
+                sid -> {
+                    try {
+                        Path sessionsDir = agentDataDir.resolve("sessions");
+                        Files.createDirectories(sessionsDir);
+                        SessionStore store = new SessionStore(sessionsDir.resolve(sid + ".jsonl"), 50, 200L);
+                        sessionStores.put(sid, store);
+                        SessionLogger logger = null;
+                        if (cfg.logging() != null && cfg.logging().enabled()) {
+                            try {
+                                logger = new SessionLogger(cfg.logging(), sid);
+                            } catch (Exception e) {
+                                log.warn("初始化 web 会话日志失败，降级为仅存档: {}", e.getMessage());
+                            }
+                        }
+                        return new SessionRecorder(logger, store);
+                    } catch (Exception e) {
+                        log.warn("初始化 web 会话存档失败，降级为不落盘: {}", e.getMessage());
+                        sessionStores.remove(sid);
+                        return null;
+                    }
+                });
+    }
+
+    /** 判断某会话是否可恢复（内存活动或有存档文件）。 */
+    public boolean hasSession(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return false;
+        if (sessionHistories.containsKey(sessionId)) return true;
+        return Files.isRegularFile(
+                agentDataDir.resolve("sessions").resolve(sessionId + ".jsonl"));
+    }
+
+    /** 首次触达某会话时的历史回填（只读磁盘，不改写存档）。 */
+    private MessageHistory restoreHistory(String sessionId) {
+        MessageHistory history = new MessageHistory(estimator);
+        SessionResumeLoader.ResumeResult result =
+                SessionResumeLoader.loadById(agentDataDir.resolve("sessions"), sessionId);
+        if (!result.messages().isEmpty()) {
+            history.replaceAll(
+                    SessionResumeLoader.snip(result.messages(), estimator, MAX_RESUME_TOKENS));
+        }
+        return history;
     }
 
     public ToolRegistry tools() {
@@ -124,5 +255,19 @@ public class WebAgentRuntime {
 
     public Path agentDataDir() {
         return agentDataDir;
+    }
+
+    /** 关闭时 flush 并关闭所有落盘录制器（保证最后一批事件写入存档）。 */
+    @PreDestroy
+    public void close() {
+        for (SessionRecorder recorder : sessionRecorders.values()) {
+            try {
+                recorder.close();
+            } catch (IOException e) {
+                log.warn("关闭 web 会话录制器失败: {}", e.getMessage());
+            }
+        }
+        sessionRecorders.clear();
+        sessionStores.clear();
     }
 }

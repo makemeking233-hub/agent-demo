@@ -96,4 +96,31 @@ class SessionResumeLoaderTest {
         assertTrue(result.messages().isEmpty());
         assertEquals(0, result.promptTokens());
     }
+
+    @Test
+    void loadById_restoresNamedSession() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions-" + System.nanoTime());
+        Files.createDirectories(sessionsDir);
+        Path file = sessionsDir.resolve("s-9.jsonl");
+        SessionStore store = new SessionStore(file, 50, 60_000);
+        store.append(SessionEntry.user("你好", null));
+        store.append(SessionEntry.assistant("你好！", List.of(), null));
+        store.syncFlush();
+        store.close();
+
+        SessionResumeLoader.ResumeResult result = SessionResumeLoader.loadById(sessionsDir, "s-9");
+        assertEquals(2, result.messages().size());
+        assertEquals("你好", result.messages().get(0).content());
+        assertEquals("assistant", result.messages().get(1).role());
+    }
+
+    @Test
+    void loadById_missingSession_returnsEmpty() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions-" + System.nanoTime());
+        Files.createDirectories(sessionsDir);
+
+        SessionResumeLoader.ResumeResult result = SessionResumeLoader.loadById(sessionsDir, "nope");
+        assertTrue(result.messages().isEmpty());
+        assertEquals(0, result.promptTokens());
+    }
 }

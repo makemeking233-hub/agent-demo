@@ -279,10 +279,45 @@ public class SessionStore implements AutoCloseable {
             if (latest == null) {
                 return List.of();
             }
-            // 读所有行 + 反序列化
-            ObjectMapper mapper = new ObjectMapper();
-            List<SessionEntry> result = new ArrayList<>();
-            for (String line : Files.readAllLines(latest)) {
+            return readEntries(latest);
+        } catch (IOException e) {
+            log.warn("loadLatest 读取 sessions 目录失败: {}", sessionsDir, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * 读取指定 sessions 目录下的单个会话存档（v0.3 web 会话重进恢复用）。
+     *
+     * <p>与 {@link #loadLatest} 不同，这里按会话 id 精确定位 {@code <sessionId>.jsonl}，而非取最新文件。
+     * 文件不存在 / 目录不存在 / sessionId 为空时返回空 list。
+     *
+     * @param sessionsDir sessions 目录路径（如 {@code ~/.agent-demo/sessions/}）
+     * @param sessionId   会话 id（对应 {@code <sessionId>.jsonl}）
+     * @return entry 列表（按文件中出现顺序）；无文件或异常时返回空 list
+     */
+    public static List<SessionEntry> loadById(Path sessionsDir, String sessionId) {
+        if (sessionsDir == null || sessionId == null || sessionId.isBlank()) {
+            return List.of();
+        }
+        Path file = sessionsDir.resolve(sessionId + ".jsonl");
+        if (!Files.isRegularFile(file)) {
+            return List.of();
+        }
+        return readEntries(file);
+    }
+
+    /**
+     * 反序列化单个 JSONL 会话文件的所有条目（跳过无法解析的空白/非法行）。
+     *
+     * @param file 会话 JSONL 文件
+     * @return entry 列表（按文件行序）；文件不可读时返回空 list
+     */
+    private static List<SessionEntry> readEntries(Path file) {
+        ObjectMapper mapper = new ObjectMapper();
+        List<SessionEntry> result = new ArrayList<>();
+        try {
+            for (String line : Files.readAllLines(file)) {
                 if (line == null || line.isBlank()) continue;
                 try {
                     result.add(mapper.readValue(line, SessionEntry.class));
@@ -290,11 +325,10 @@ public class SessionStore implements AutoCloseable {
                     log.warn("跳过无法解析的 session 行: {}", line, parseEx);
                 }
             }
-            return result;
         } catch (IOException e) {
-            log.warn("loadLatest 读取 sessions 目录失败: {}", sessionsDir, e);
-            return List.of();
+            log.warn("读取 session 文件失败: {}", file, e);
         }
+        return result;
     }
 
     /**

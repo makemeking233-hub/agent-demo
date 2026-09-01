@@ -88,7 +88,9 @@ public class ChatStreamService {
                     return !"no".equals(decision);
                 };
         // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
-        AgentLoop loop = runtime.createLoop(streamId, sessionId, adapter, confirmer, aborted::get);
+        // v0.3 会话重进恢复：用复合 sink (SSE + 落盘)，使该会话持续写入 sessions/<id>.jsonl。
+        SessionLogSink sessionSink = runtime.sinkFor(sessionId, adapter);
+        AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get);
         ActiveStream meta =
                 new ActiveStream(
                         streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted);
