@@ -48,4 +48,4 @@
 - [x] 7.1 mvn verify 全绿
 - [x] 7.2 4 件套测试文档
 - [x] 7.3 分 commit+push
-- [ ] 7.4 openspec archive add-plugin-system
+- [x] 7.4 openspec archive add-plugin-system
