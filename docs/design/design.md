@@ -1128,7 +1128,8 @@ java -jar "%~dp0..\target\agent-cli.jar" %*
 
 - Team Memory / 远程同步
 - Worktree 模式
-- Plugin 系统
+- Plugin 系统（已实现，add-plugin-system）
+- `web_search` 网络搜索工具（已实现；DeepSeek 原生检索 / Tavily 双 provider 自动选择，设计见 add-web-search-tool change）
 - Prompt Cache 复用
 
 迭代流程：所有 v0.2+ 变更通过 `/opsx:propose` 启动（OpenSpec），写 delta spec → `apply-change` 实现 → `archive-change` 合并进 `openspec/specs/`。详见 `AGENTS.md` §2.5。

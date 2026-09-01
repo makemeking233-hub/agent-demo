@@ -20,7 +20,7 @@
 | 集成方式 | 独立调 LLM API（不依赖 dsh / Claude Code 进程） |
 | 目标用户 | 习惯终端 + Web 的开发者；要求可控、可观测、可测试 |
 | 模型支持 | 多 Provider：DeepSeek（默认）/ OpenAI 兼容 / MiniMax（中国版 OpenAI 兼容） |
-| 能力范围 | 流式对话 / 工具调用 / 权限确认 / 会话持久化 / Memory / Web UI / 可观测性 / 日志脱敏 |
+| 能力范围 | 流式对话 / 工具调用 / 权限确认 / 会话持久化 / Memory / 网络搜索 / Web UI / 可观测性 / 日志脱敏 |
 | 迭代 | OpenSpec 四阶段，默认所有功能改动走 explore → propose → apply → archive |
 
 > 与 Claude Code 的关系：本项目独立实现，借鉴其成熟的工程模式（Tool 协议对象、append-only JSONL 会话、compact 熔断、`MEMORY.md` 索引）。**不依赖 Claude Code 运行时**，不调用其 API。
@@ -32,7 +32,7 @@
 ### 2.1 CLI REPL
 
 - ✅ REPL 交互：连续多轮对话、流式输出（边生成边打印）
-- ✅ 工具调用：`ReadFile` / `WriteFile` / `EditFile` / `Ls` / `Shell`，自动执行并回流结果
+- ✅ 工具调用：`ReadFile` / `WriteFile` / `EditFile` / `Ls` / `Shell` / `web_search`（DeepSeek 原生检索 / Tavily，双 provider 自动选择），自动执行并回流结果
 - ✅ 权限确认：写文件与命令执行需要用户交互确认（默认 allow-read, ask-write）
 - ✅ 会话持久化：JSONL append-only 格式保存到 `~/.agent-demo/sessions/`（`/resume` 可加载最近会话）
 - ✅ Slash 命令：`/help` `/clear` `/quit` `/history` `/resume` `/model`
@@ -90,7 +90,8 @@ agent-demo/
 │   │   ├── provider/           # deepseek / openai / minimax
 │   │   ├── tools/              # Tool + ToolRegistry + AbstractFileTool
 │   │   │   ├── file/           # ReadFile / WriteFile / EditFile / Ls / ToolInput
-│   │   │   └── shell/          # ShellTool + Adapters + DenylistMatcher
+│   │   │   ├── shell/          # ShellTool + Adapters + DenylistMatcher
+│   │   │   └── websearch/      # WebSearchTool + DeepSeek/Tavily provider + Factory
 │   │   ├── permission/         # PermissionManager + PermissionPathMatcher + PermissionDecision
 │   │   ├── memory/             # MemoryDir + MemoryIndex + MemoryRecall + MemoryPromptBuilder
 │   │   ├── session/            # SessionStore + Session + SessionEntry
