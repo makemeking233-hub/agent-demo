@@ -1,57 +1,162 @@
 # agent-demo
 
-> Java 编写的 Claude Code 风格 Agent CLI + Web UI，第一阶段 v0.1（CLI REPL），已扩展到 v0.3+（CLI + Web + OpenSpec 迭代 + 可观测性）。
+> Java 编写的 Claude Code 风格 Agent CLI + Web UI。阶段迭代：v0.1（CLI REPL）→ v0.2/v0.3（CLI + Web + OpenSpec 迭代 + 可观测性）→ v0.4（MCP / Skills / Worktree / Memory 三 scope / 语义召回）→ v1.0（Plugin 插件框架 + 多工具扩展）。
 
-- 设计：`docs/design/design.md`（技术设计 1288 行）
+- 设计：`docs/design/design.md`（技术设计）
 - 测试设计：`docs/test-agent-demo/test-design.md`
 - 测试报告：`docs/test-agent-demo/test-report.md`
-- 架构详解：`docs/guides/architecture.md`（11 张 Mermaid 图）
+- 架构详解：`docs/guides/architecture.md`（Mermaid 图）
 - 实施计划：`docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md`
-- 迭代流程：**OpenSpec**（`openspec/`，见 AGENTS.md §2.5）—— 默认四阶段（explore → propose → apply → archive）
+- 迭代流程：**OpenSpec**（`openspec/`，见 `AGENTS.md` §2.5）—— 默认所有功能改动走四阶段（explore → propose → apply → archive）
 
 ---
 
 ## 1. 项目定位
 
-在终端里与 LLM 协作：流式对话、调用本地工具（读文件、执行命令）、多步自主完成任务、会话持久化到本地。也可通过 Web UI（agent-web 模块）获得 DeepSeek Harness 风格的三栏交互界面。
+在终端或 Web 里与 LLM 协作：流式对话、调用本地工具（读文件、执行命令、网络搜索、记忆、MCP 工具、技能、插件扩展）、多步自主完成任务、会话持久化到本地。也可通过 Web UI（`agent-web` 模块）获得 DeepSeek Harness 风格的三栏交互界面。
 
 | 维度 | 设计取向 |
 |------|----------|
 | 集成方式 | 独立调 LLM API（不依赖 dsh / Claude Code 进程） |
 | 目标用户 | 习惯终端 + Web 的开发者；要求可控、可观测、可测试 |
 | 模型支持 | 多 Provider：DeepSeek（默认）/ OpenAI 兼容 / MiniMax（中国版 OpenAI 兼容） |
-| 能力范围 | 流式对话 / 工具调用 / 权限确认 / 会话持久化 / Memory / 网络搜索 / Web UI / 可观测性 / 日志脱敏 |
+| 能力范围 | 流式对话 / 工具调用 / 权限确认 / 会话持久化 / Memory / 网络搜索 / MCP / Skills / Plugin / Web UI / 可观测性 / 日志脱敏 |
 | 迭代 | OpenSpec 四阶段，默认所有功能改动走 explore → propose → apply → archive |
 
 > 与 Claude Code 的关系：本项目独立实现，借鉴其成熟的工程模式（Tool 协议对象、append-only JSONL 会话、compact 熔断、`MEMORY.md` 索引）。**不依赖 Claude Code 运行时**，不调用其 API。
 
 ---
 
-## 2. 核心特性
+## 2. 总体架构
 
-### 2.1 CLI REPL
+多模块 Maven：`agent-core`（核心域 + CLI）+ `agent-web`（Web UI）。
 
-- ✅ REPL 交互：连续多轮对话、流式输出（边生成边打印）
-- ✅ 工具调用：`ReadFile` / `WriteFile` / `EditFile` / `Ls` / `Shell` / `web_search`（DeepSeek 原生检索 / Tavily，双 provider 自动选择），自动执行并回流结果
-- ✅ 权限确认：写文件与命令执行需要用户交互确认（默认 allow-read, ask-write）
-- ✅ 会话持久化：JSONL append-only 格式保存到 `~/.agent-demo/sessions/`（`/resume` 可加载最近会话）
-- ✅ Slash 命令：`/help` `/clear` `/quit` `/history` `/resume` `/model`
-- ✅ Memory 记忆：长期记忆写入 `~/.agent-demo/memory/`，下次会话按相关度自动召回
-- ✅ 上下文压缩：128K 上限前自动触发 compact，失败熔断防止死循环
-- ✅ 错误重试：网络 / 5xx / 429 自动重试；401 / 404 / 限流 / 网络错显示友好提示并继续 REPL（不退出进程）
-- ✅ Ctrl+C 中断：第一次优雅取消当前生成、第二次（500ms 内）强制退出
-- ✅ 跨平台：Windows / Linux / macOS；中文编码三重防御（GBK↔UTF-8 回退）
-- ✅ 成本可见：每轮 token 累计，`/history` 显示估算费用，达到阈值告警 / 停止
+```mermaid
+flowchart TB
+    subgraph core["agent-core（核心域 + CLI）"]
+        CLI["AgentCli / ChatCommand<br/>REPL + picocli"]
+        AG["AgentLoop<br/>对话-工具主循环"]
+        PROV["LlmProvider 适配层<br/>DeepSeek / OpenAI / MiniMax"]
+        TOOLS["工具层<br/>File / Shell / WebSearch / Memory / MCP / Skills / Plugin"]
+        MEM["Memory（三 scope + sideQuery）"]
+        SESS["SessionStore + SessionResumeLoader"]
+        LOG["可观测性（SessionLogger / Redactor）"]
+        PLUG["Plugin 框架（PluginManager）"]
+    end
+    subgraph web["agent-web（Web UI）"]
+        WSINK["SseSessionLogSink<br/>SSE 事件下发"]
+        WUI["React 18 + Vite 6<br/>三栏布局"]
+        CHAT["ChatStreamService<br/>SSE 流"]
+    end
+    subgraph ops["OpenSpec 迭代"]
+        OPS["openspec/<br/>explore-propose-apply-archive"]
+    end
 
-### 2.2 Web UI（v0.1 增量，agent-web 模块）
+    CLI --> AG
+    AG --> PROV
+    AG --> TOOLS
+    AG --> MEM
+    AG --> SESS
+    AG --> LOG
+    PLUG --> TOOLS
+    CHAT --> AG
+    WSINK --> CHAT
+    WUI --> WSINK
+```
 
-- ✅ React 18 + Vite 6 前端（DeepSeek Harness 风格三栏布局）
-- ✅ Server-Sent Events 流式输出（7 种事件：`message_start` / `message_delta` / `tool_call_start` / `tool_call_end` / `permission_request` / `message_stop` / `error`）
-- ✅ 后端 `agent-web` 独立 Spring Boot 应用（端口 18080）
+### 2.1 一次对话的数据流
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant R as ChatCommand/Web
+    participant L as AgentLoop
+    participant M as MessageHistory
+    participant P as LlmProvider
+    participant T as Tool
+    participant D as StreamingPrinter/SSE
+
+    U->>R: 输入 prompt
+    R->>L: processTurn(user)
+    L->>M: append(user)
+    L->>P: streamChat(messages, tools)
+    P-->>L: 流式 chunks
+    L-->>D: 打印/推送 delta
+    alt 模型决定调用工具
+        L->>T: execute(toolCall)
+        T-->>L: toolResult
+        L->>M: appendToolResult
+        L->>P: 续推（循环）
+    else 模型输出完毕
+        L->>M: append(assistant)
+        L-->>R: TurnResult
+    end
+```
 
 ---
 
-## 3. 技术栈
+## 3. 核心特性
+
+### 3.1 CLI REPL
+
+- ✅ REPL 交互：连续多轮对话、流式输出（边生成边打印）
+- ✅ 工具调用：`ReadFile` / `WriteFile` / `EditFile` / `Ls` / `Shell` / `web_search`（DeepSeek 原生 / Tavily，双 Provider 自动选择），自动执行并回流结果
+- ✅ 工具扩展：MCP 客户端工具（`add-mcp-client`）、Skills（`add-skills-system`）、Plugin 插件（`add-plugin-system`）
+- ✅ 权限确认：写文件与命令执行需要用户交互确认（默认 allow-read, ask-write）；敏感路径 / 危险命令强制 ask / 二次确认
+- ✅ 会话持久化：JSONL append-only 保存到 `~/.agent-demo/sessions/`；`/resume` 加载最近会话（含 snip 裁剪 + 并行孤儿修复）
+- ✅ Slash 命令：`/help` `/clear` `/quit` `/history` `/resume` `/model`
+- ✅ Memory：三 scope（USER / PROJECT / LOCAL）+ sideQuery 语义召回补充字面重叠
+- ✅ 上下文压缩：128K 上限前自动 compact，失败熔断防死循环
+- ✅ 错误重试：网络 / 5xx / 429 自动重试；401 / 404 / 限流 / 网络错友好提示并继续 REPL
+- ✅ Ctrl+C 中断：第一次优雅取消、第二次（500ms 内）强制退出
+- ✅ 跨平台：Windows / Linux / macOS；中文编码三重防御（GBK↔UTF-8 回退）
+- ✅ 成本可见：每轮 token 累计，`/history` 显示估算费用，阈值告警 / 停止
+
+### 3.2 Web UI（agent-web 模块）
+
+- ✅ React 18 + Vite 6 前端（DeepSeek Harness 风格三栏布局）
+- ✅ Server-Sent Events 流式输出（7 种事件类型）
+- ✅ 侧边栏**真实会话列表 + 点击切换加载历史**（`add-session-switch`）
+- ✅ 会话重进恢复（刷新 / 重启后回填历史，`add-web-session-restore`）
+- ✅ 工具调用卡片折叠 + 内联（`polish-tool-call-display` / `fix-tool-call-timing`）
+
+---
+
+## 4. 工具扩展体系
+
+工具统一走 `Tool` 协议（Fail-Closed 默认）。三类扩展点：MCP 客户端、Skills、Plugin 插件。
+
+```mermaid
+classDiagram
+    class Tool {
+        <<interface>>
+        +name() String
+        +description() String
+        +inputSchema() Map
+        +isReadOnly() boolean
+        +isDestructive() boolean
+        +checkPermissions() PermissionDecision
+        +execute() Mono
+    }
+    class FileTool
+    class ShellTool
+    class WebSearchTool
+    class McpTool
+    class SkillTool
+    class PluginTool
+    Tool <|.. FileTool
+    Tool <|.. ShellTool
+    Tool <|.. WebSearchTool
+    Tool <|.. McpTool
+    Tool <|.. SkillTool
+    Tool <|.. PluginTool
+```
+
+> Mermaid 8.x classDiagram 泛型支持有限，`Tool` 泛型参数此处省略；完整契约见源码 `Tool.java`。
+
+---
+
+## 5. 技术栈
 
 | 类别 | 选型 | 版本 | 理由 |
 |------|------|------|------|
@@ -60,255 +165,213 @@
 | HTTP | Spring WebFlux `WebClient` | 6.1.x | 原生支持 SSE |
 | CLI | picocli | 4.7.6 | |
 | 终端 | JLine3 | 3.25.1 | raw mode + 历史 |
-| Token | JTokkit CL100K_BASE | 0.6.1 | |
-| 构建 | Maven | 3.9 | |
+| Token | JTokkit | 0.6.1 | |
+| 构建 | Maven | 3.9 | 多模块 |
 | 测试 | JUnit 5 + Mockito + WireMock + Reactor Test | — | |
-| 日志 | SLF4J + Logback + 自研 Redactor | — | 敏感字段脱敏（T3） |
-| JSON | Jackson + jackson-dataformat-yaml | — | |
 | 前端 | React 18 + Vite 6 | — | agent-web/frontend |
-| 状态（已实现） | ✅ v0.1 CLI 全交付；v0.2+ /model /resume；v0.3 web + observability + testability；v1.0 Plugin 框架 + MCP/Skills/Memory + Worktree | — | 190+ commits |
+| 日志 | SLF4J + Logback + 自研 Redactor | — | 敏感字段脱敏 |
 
-> **不引入 Lombok、spring-boot-starter-web（agent-web 用 webflux）、数据库**——CLI 端用 JSON 文件存会话足够，agent-web 端用文件 + 内存。
+> **不引入 Lombok、spring-boot-starter-web、数据库**——CLI 端 JSON 文件存会话；agent-web 端 WebFlux + 文件/内存。
 
 ---
 
-## 4. 项目结构（多 module）
+## 6. 项目结构（多 module）
 
 ```text
 agent-demo/
 ├── pom.xml                     # 多 module 聚合（agent-core + agent-web）
-├── agent-core/                 # 核心域 + CLI 入口
+├── agent-core/                 # 核心域 + CLI
 │   ├── pom.xml                 # finalName=agent-cli；exec classifier 打可执行 fat jar
-│   ├── src/main/java/com/example/agent/
-│   │   ├── AgentCli.java       # picocli 路由 + Spring Boot 启动
-│   │   ├── AgentLoop.java      # 主循环（maxToolIterations / setModel / setHistory / abort）
-│   │   ├── MessageHistory.java # 消息列表 + token 估算 + 压缩熔断 + Post-Compact
-│   │   ├── ContextCompressor.java # summary + 坍缩 + PTL fallback
-│   │   ├── core/exception/     # MaxIterationsExceeded / CompactCircuitBroken
-│   │   ├── cli/                # ChatCommand + SlashCommand + InitCommand + Completion
-│   │   ├── llm/                # LlmProvider / StreamChunk / ChatRequest / LlmRetry / TokenEstimator
-│   │   ├── provider/           # deepseek / openai / minimax
-│   │   ├── tools/              # Tool + ToolRegistry + AbstractFileTool
-│   │   │   ├── file/           # ReadFile / WriteFile / EditFile / Ls / ToolInput
-│   │   │   ├── shell/          # ShellTool + Adapters + DenylistMatcher
-│   │   │   └── websearch/      # WebSearchTool + DeepSeek/Tavily provider + Factory
-│   │   ├── permission/         # PermissionManager + PermissionPathMatcher + PermissionDecision
-│   │   ├── memory/             # MemoryDir + MemoryIndex + MemoryRecall + MemoryPromptBuilder
-│   │   ├── session/            # SessionStore + Session + SessionEntry
-│   │   ├── config/             # ConfigLoader + AgentConfig + EnvKeys
-│   │   ├── render/             # StreamingPrinter
-│   │   ├── prompt/             # SystemPromptBuilder
-│   │   ├── signal/             # AbortSignal
-│   │   ├── util/               # PromptLoader
-│   │   ├── log/                # 可观测性：Redactor / SessionRetentionCleaner / SessionLogger / SessionReplay ...
-│   │   └── plugin/             # Plugin 框架：Plugin / PluginContext / PluginManager / ExtensionPoints + {mcp,skill,memory}
-├── agent-web/                  # Web UI（独立 Spring Boot 应用，端口 18080）
-│   ├── pom.xml                 # finalName=agent-web；frontend-maven-plugin 打包
-│   ├── src/main/java/          # WebApplication + WebController + SSE + LogController
-│   ├── src/main/resources/     # application-web.yml（web profile）
-│   └── frontend/               # React 18 + Vite 6（三栏 UI + SSE）
+│   └── src/main/java/com/example/agent/
+│       ├── AgentCli.java       # picocli 路由 + Spring Boot 启动
+│       ├── core/               # AgentLoop / MessageHistory / ContextCompressor / TurnResult / exception
+│       ├── cli/                # ChatCommand + SlashCommand + InitCommand + Completion
+│       ├── llm/                # LlmProvider / StreamChunk / ChatRequest / LlmRetry / TokenEstimator
+│       ├── provider/           # deepseek / openai / minimax
+│       ├── tools/              # Tool + ToolRegistry + AbstractFileTool
+│       │   ├── file/           # ReadFile / WriteFile / EditFile / Ls
+│       │   ├── shell/          # ShellTool + Adapters + DenylistMatcher
+│       │   └── websearch/      # WebSearchTool + DeepSeek/Tavily
+│       ├── mcp/                # McpClient / McpTool（MCP 客户端集成）
+│       ├── skill/              # Skill / SkillCatalog / SkillTool（Skills 系统）
+│       ├── plugin/             # Plugin 框架：PluginManager / PluginContext / ExtensionPoints + {mcp,skill,memory}
+│       ├── worktree/           # WorktreeManager（git worktree 隔离）
+│       ├── permission/         # PermissionManager + PermissionPathMatcher + PermissionPolicy
+│       ├── memory/             # MemoryDir / MemoryIndex / MemoryRecall / MemoryPromptBuilder / MemoryRetriever
+│       ├── session/            # SessionStore + SessionEntry + SessionResumeLoader
+│       ├── config/             # ConfigLoader + AgentConfig（含 mcp/worktree/plugins/search 等）+ EnvKeys
+│       ├── render/ prompt/ signal/ util/ log/
+├── agent-web/                  # Web UI（独立 Spring Boot，端口 18080）
+│   ├── pom.xml                 # finalName=agent-web；frontend-maven-plugin 打前端
+│   ├── src/main/java/          # WebApplication + SessionController + ChatStreamService + SSELogSink + LogController
+│   └── frontend/               # React 18 + Vite 6（三栏 + SSE + 会话切换）
 ├── docs/                       # 设计 / 测试 / 架构文档
 ├── openspec/                   # 迭代流程（change / specs / config.yaml）
-├── bin/                        # launcher 脚本（agent.sh / agent.bat）
+├── bin/                        # launcher 脚本
 └── AGENTS.md                   # 项目级规则（含 OpenSpec 流程 §2.5）
 ```
 
-> 多 module 拆分：`agent-core`（核心域 + CLI）/ `agent-web`（Web 入口）。`agent-core` 内部分为 `core / cli / llm / provider / tools / permission / memory / session / config / render / prompt / signal / util / log / plugin` 等包。
-
 ---
 
-## 5. 快速开始
+## 7. 快速开始
 
-### 5.1 构建
+### 7.1 构建
 
 ```bash
 mvn clean install
-# 产物：
-#   agent-core/target/agent-cli-exec.jar  （CLI 可执行 fat jar，~15 MB）
-#   agent-web/target/agent-web.jar        （Web fat jar，含前端 dist）
+# agent-core/target/agent-cli.jar            （普通 jar）
+# agent-core/target/agent-cli-exec.jar       （可执行 fat jar，含 Spring Boot）
+# agent-web/target/agent-web.jar             （Web fat jar，含前端 dist）
 ```
 
-### 5.2 配置 API key
+### 7.2 配置 API key
 
 三层优先级（详见 `docs/design/design.md` §9）：
 
 1. CLI flag：`--api-key sk-...`
-2. 环境变量：`DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `MINIMAX_API_KEY`
+2. 环境变量：`DEEPSEEK_API_KEY` / `MINIMAX_API_KEY`
 3. `~/.agent-demo/config.yaml`（`agent-demo init` 生成）
 4. `application-local.yml`（gitignored，本地密钥）
 
-LLM Provider 通过 `--provider deepseek|openai|minimax` 选择，默认 `deepseek`。
-
-#### 5.2.1 快速配置（PowerShell）
-
 ```powershell
 $env:DEEPSEEK_API_KEY = "sk-your-key-here"
-java -jar agent-cli/target/agent-cli.jar chat
-```
-
-#### 5.2.2 错误处理
-
-401 / 429 / 网络错误 → 打印友好提示 + 继续 REPL 等待输入（不退出进程）。`/clear` 清空历史后可重试。
-
-### 5.3 启动 CLI REPL
-
-```bash
-# 类 Unix
 java -jar agent-core/target/agent-cli-exec.jar chat
-# 或 launcher（自动设置 UTF-8）
-./bin/agent chat
-# Windows CMD
-bin\agent.bat chat
 ```
 
-### 5.4 启动 Web UI
+### 7.3 启动 CLI REPL
 
 ```bash
-# 终端 A：后端（默认绑 127.0.0.1:18080）
-mvn -pl agent-web spring-boot:run -Dspring-boot.run.profiles=web
-# 或独立 jar
+java -jar agent-core/target/agent-cli-exec.jar chat
+# 或 launcher（自动 UTF-8）
+./bin/agent chat        # Windows: bin\agent.bat chat
+```
+
+### 7.4 启动 Web UI
+
+```bash
+# 后端（web profile，默认 127.0.0.1:18080）
 mvn -pl agent-web clean package
 java -jar agent-web/target/agent-web.jar
 
-# 终端 B：前端（开发模式）
-cd agent-web/frontend
-npm run dev    # http://localhost:5173
+# 前端（开发模式）
+cd agent-web/frontend && npm run dev   # http://localhost:5173
 ```
 
-生产一体化构建（前端 dist 嵌入 jar）：`mvn -pl agent-web clean package` 后直接 `java -jar agent-web/target/agent-web.jar`。
+> 生产一体化：`mvn -pl agent-web clean package` 后 `java -jar agent-web/target/agent-web.jar`（前端 dist 已嵌入）。
 
 ---
 
-## 6. REPL 命令
+## 8. REPL 命令
 
 | 命令 | 行为 | 输出示例 |
 |------|------|----------|
 | `/help` | 列出可用命令 | `可用命令: /help /clear /quit /history /resume /model` |
-| `/clear` | 清空当前会话历史（保留 session 文件） | `[已清空会话历史]` |
-| `/quit` | 退出 REPL（exit code 0） | （无输出） |
+| `/clear` | 清空当前会话历史 | `[已清空会话历史]` |
+| `/quit` | 退出 REPL | （无输出） |
 | `/history` | 显示累计 token + 估算费用 | `消息数: 12 \| 累计 token: 345 in / 678 out \| 估算费用: ¥0.0061` |
-| `/resume` | 从 `~/.agent-demo/sessions/` 加载最近 session（按 mtime），整体替换当前 history | `[/resume] 已恢复 N 条消息` / `[/resume] 当前无可恢复会话` |
-| `/model` | 列出当前 model + 支持的 model 列表（无参数） | `当前 model: deepseek-chat`<br/>`支持: deepseek-chat, deepseek-reasoner` |
-| `/model <name>` | 运行时切换 model（下一轮 LLM 调用生效） | `[/model] 切换到 deepseek-reasoner` |
-| 其他 `/xxx` | 未知命令 | `[未知命令] 输入 /help 查看可用命令` |
-
-> **/resume 注意**：按文件 mtime 排序选最新（不是文件名），更鲁棒。找不到任何 session 文件 → 静默提示"无历史会话"，不报错。替换（不是合并）history，避免双 session 数据混淆。
->
-> **/model 注意**：运行时切换（`AgentLoop.setModel()` 改 volatile 字段），下一轮 LLM 调用生效。
+| `/resume` | 加载最近 session（按 mtime，含 snip 裁剪） | `[/resume] 已恢复 N 条消息` |
+| `/model` | 列出当前 + 支持 model | `当前 model: deepseek-chat` |
+| `/model <名>` | 运行时切换 model | `[/model] 切换到 deepseek-reasoner` |
+| 其他 `/xxx` | 未知命令 | `[未知命令]` |
 
 ---
 
-## 7. 权限与危险操作
-
-默认策略：
+## 9. 权限与危险操作
 
 | 操作 | 默认决策 | 提示样式 |
 |------|---------|----------|
 | 读文件 / 列目录 | allow | 不提示 |
-| 写文件 / 编辑文件 | ask | 显示路径与变更预览，`y/n/a`（a = 始终允许本次会话） |
-| 执行命令 | ask | 显示完整命令 + 危险等级评估 |
+| 写 / 编辑文件 | ask | 路径 + 变更预览，`y/n/a` |
+| 执行命令 | ask | 完整命令 + 危险等级评估 |
 
-跨平台危险命令黑名单（无论权限策略都会二次确认）：
-
-- 类 Unix：`rm -rf /`、`mkfs`、`dd if=...of=/dev/...`、`chmod -R 777 /`、`shutdown`、`reboot`
-- Windows：`format`、`rd /s /q C:\`、`del /f /s /q C:\*`、`diskpart`、`bcdedit`、`reg delete HKLM`
-
-实际匹配语义与完整黑名单见 `docs/design/design.md` §6.6（含归一化 basename + 短参数簇展开 + `PermissionPolicy` 默认）。
+跨平台危险命令黑名单（强制二次确认）：类 Unix（`rm -rf /`、`mkfs`、`dd`、`shutdown` 等）；Windows（`format`、`diskpart`、`bcdedit` 等）。匹配语义（归一化 basename + 短参数簇展开）见 `docs/design/design.md` §6.6。
 
 ---
 
-## 8. Web UI（v0.1+ 增量）
+## 10. Web UI
 
-agent-demo 含 React 18 + Vite 6 Web UI，与 CLI 并存。详见 `docs/design/web-ui-design.md`。
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant UI as React 前端
+    participant SVC as ChatStreamService
+    participant SINK as SseSessionLogSink
+    participant AG as AgentLoop
+    participant API as DeepSeek API
 
-启动：
-
-```bash
-# 终端 A：后端（web profile）
-mvn -pl agent-web spring-boot:run -Dspring-boot.run.profiles=web
-
-# 终端 B：前端
-cd agent-web/frontend
-npm run dev   # http://localhost:5173
+    U->>UI: 输入消息
+    UI->>SVC: POST /api/chat/send
+    SVC->>SINK: 创建流
+    SVC->>AG: processTurn(user)
+    AG->>API: streamChat
+    API-->>SINK: SSE chunks
+    SINK-->>UI: message_delta / tool_call_* (SSE)
+    UI-->>U: 流式渲染（含工具卡片折叠/内联）
 ```
 
-打开 http://localhost:5173/。`vite.config.ts` 把 `/api/*` proxy 到 `:18080`。
-
-生产一体化构建（前端 dist 嵌入 jar）：
-
-```bash
-mvn -pl agent-web clean package
-java -jar agent-web/target/agent-web.jar
-```
-
-默认绑 `127.0.0.1:18080`（loopback）。改 `application-web.yml` 暴露到 LAN，或加 `--agent.web.trusted-hosts=192.168.1.0/24`。
-
-SSE 事件流：后端用 7 种事件（`message_start` / `message_delta` / `tool_call_start` / `tool_call_end` / `permission_request` / `message_stop` / `error`）推模型输出 / 工具调用 / 权限请求。完整 schema 见 `docs/design/web-ui-design.md`。
+SSE 7 种事件：`message_start` / `message_delta` / `tool_call_start` / `tool_call_end` / `permission_request` / `message_stop` / `error`。完整 schema 见 `docs/design/web-ui-design.md`。
 
 ---
 
-## 9. 验证
+## 11. 验证
 
 ```bash
-mvn test                # 单元/集成测试（107 个）
-mvn verify              # 同上 + jacoco 覆盖率门禁（LINE ≥ 80%，BRANCH ≥ 70%）
-mvn -pl agent-web verify # agent-web 模块独立验证
+mvn test                 # 单元/集成测试
+mvn verify               # 同上 + jacoco 覆盖率门禁（LINE ≥ 80%，BRANCH ≥ 70%）
+mvn -pl agent-web verify # agent-web 模块（注意用 -DskipNpm=true 可跳过前端 build）
 ```
 
-测试报告：`docs/test-agent-demo/test-report.md`。
+> 测试文档见 `docs/test-agent-demo/`（按批次，每批四件套 + test-guide 登记）。前端 `vitest` 在 `agent-web/frontend` 下 `npx vitest run`。
 
 ---
 
-## 10. 后续阶段（已实现 / 进行中）
+## 12. 阶段与已归档变更
 
 | 阶段 | 状态 | 关键交付 |
 |------|------|----------|
-| **v0.1** | ✅ 已完成 | CLI REPL + 5 工具 + Memory + JSONL + Slash 命令 + 50 个 Task（M0-M10） |
-| **v0.2** | ✅ 已完成 | `/resume` 加载最近 session / `/model` 运行时切换 / Session Memory Compaction |
-| **v0.3** | ✅ 已完成 | agent-web Web UI + 可观测性（T1-T8 组：日志事件链路 / 脱敏 / 日志保留 / LogController）+ 可测试性（session 回放）+ MiniMax provider |
-| **v0.4** | ✅ 已完成 | OpenSpec 迭代流程 + MCP 客户端（add-mcp-client）+ Skills 系统（add-skills-system）+ Worktree 模式（add-worktree-mode）+ Memory 三 scope + 语义召回（sideQuery，add-memory-sidequery） |
-| **v1.0** | ✅ 部分 | Plugin 插件框架（add-plugin-system：可插拔 MCP / Skills / Memory）；剩余 Team Memory / 远程同步 / Prompt Cache 复用 计划中 |
+| **v0.1** | ✅ 已完成 | CLI REPL + 工具 + Memory + JSONL + Slash 命令（M0-M10） |
+| **v0.2** | ✅ 已完成 | `/resume` / `/model` / Session Memory Compaction |
+| **v0.3** | ✅ 已完成 | agent-web Web UI + 可观测性 + 可测试性 + MiniMax provider |
+| **v0.4** | ✅ 已完成 | MCP 客户端 / Skills 系统 / Worktree 模式 / Memory 三 scope / sideQuery 语义召回 |
+| **v1.0** | ✅ 已落地 | Plugin 插件框架（可插拔 MCP / Skills / Memory）+ web-search-tool + web 会话恢复/切换 + 工具调用 UI 优化；Team Memory / 远程同步 / Prompt Cache 计划中 |
 
-详见 `openspec/` 目录的 active changes。
+已归档 change（`openspec/changes/archive/`）：
+
+```mermaid
+flowchart LR
+    A[v0.1] --> B[v0.2] --> C[v0.3] --> D[v0.4] --> E[v1.0]
+    D --> D1[add-mcp-client]
+    D --> D2[add-skills-system]
+    D --> D3[add-worktree-mode]
+    D --> D4[add-memory-three-scope]
+    D --> D5[add-memory-sidequery]
+    D --> D6[fix-resume-link]
+    E --> E1[add-plugin-system]
+    E --> E2[add-web-search-tool]
+    E --> E3[add-web-session-restore]
+    E --> E4[add-session-switch]
+```
+
+详见 `openspec/` 目录。
 
 ---
 
-## 11. 参与开发
+## 13. OpenSpec 迭代流程
 
-```bash
-# 克隆
-git clone <repo> agent-demo
-cd agent-demo
-
-# IDE 导入（IntelliJ IDEA / VS Code + Extension Pack for Java）
-
-# 本地测试（不需要真实 API key）
-mvn test -Dtest=DeepSeekProviderTest   # 用 WebTestClient 模拟 SSE
-
-# 调试 CLI
-mvn -pl agent-core spring-boot:run -Dspring-boot.run.arguments="chat --model deepseek-chat"
-
-# 调试 Web
-mvn -pl agent-web spring-boot:run -Dspring-boot.run.profiles=web
-
-# 查看完整日志
-tail -f ~/.agent-demo/logs/agent.log
+```mermaid
+flowchart LR
+    S1["explore<br/>澄清意向"] --> S2["propose<br/>铺齐工件"] --> S3["apply<br/>TDD 实现"] --> S4["archive<br/>归档 + 合并 spec"]
+    S2 --> P["openspec/changes/id/"]
+    P --> PD[proposal.md]
+    P --> PK[tasks.md]
+    P --> DG[design.md]
+    P --> SP[specs/cap/spec.md]
 ```
-
-### 11.1 提交规范
-
-按全局规则 + AGENTS.md §2.2：
-- 中文 Conventional Commits 格式（`feat` / `fix` / `docs` / `refactor` / `chore` / `test`）
-- commit 即 push（本地 commit 后立即 push 到 origin/main）
-
-### 11.2 OpenSpec 流程
-
-AGENTS.md §2.5 默认所有功能改动走 OpenSpec 四阶段：
 
 | 阶段 | Skill | 产出 |
 |------|-------|------|
 | 1. 探索 | `openspec-explore` | 设计方向（不进 git） |
-| 2. 提案 | `openspec-propose` | `openspec/changes/<id>/{proposal.md, tasks.md, design.md, specs/<cap>/spec.md}` |
+| 2. 提案 | `openspec-propose` | `openspec/changes/<id>/{proposal, tasks, design, specs/*/spec}.md` |
 | 3. 实施 | `openspec-apply-change` | 按 tasks.md 逐项实现（TDD + commit 即 push） |
 | 4. 归档 | `openspec-archive-change` | delta spec 合并到 `openspec/specs/`，change 标记 completed |
 
@@ -316,23 +379,21 @@ AGENTS.md §2.5 默认所有功能改动走 OpenSpec 四阶段：
 
 ---
 
-## 12. 文档索引
+## 14. 文档索引
 
 | 路径 | 用途 |
 |------|------|
-| `docs/design/design.md` | 技术设计（1288 行，含 18 章：背景/架构/技术栈/模块结构/数据契约/Agent 主循环/压缩/配置/会话/错误/测试/打包/验收/版本/风险/中断/可观测性） |
-| `docs/design/memory-design.md` | Memory 系统设计（写入/索引/召回/注入 4 条链路） |
+| `docs/design/design.md` | 技术设计（背景/架构/技术栈/模块/数据契约/Agent 主循环/压缩/配置/会话/错误/测试/打包/验收/版本） |
+| `docs/design/memory-design.md` | Memory 系统设计（三 scope + sideQuery） |
 | `docs/design/logging-design.md` | 可观测性 / 日志脱敏 / 保留策略 |
 | `docs/design/web-ui-design.md` | agent-web 三栏布局 + SSE 协议 |
-| `docs/test-agent-demo/test-design.md` | 537 行测试设计 |
-| `docs/test-agent-demo/test-report.md` | 测试报告（验证清单 + 覆盖率） |
-| `docs/guides/architecture.md` | 11 张 Mermaid 图架构详解 |
-| `docs/guides/plugins.md` | Plugin 插件系统指南（hello-world + 多扩展点范例 + ChatRequestMapper） |
-| `docs/superpowers/plans/2026-08-26-agent-cli-v0.1.md` | v0.1 实施计划（M0-M10） |
+| `docs/guides/architecture.md` | 架构详解（Mermaid 图） |
+| `docs/guides/plugins.md` | Plugin 插件系统指南 |
+| `docs/test-agent-demo/` | 测试文档（批次四件套 + test-guide 登记） |
 | `openspec/` | 当前进行中的 OpenSpec changes |
-| `AGENTS.md` | 项目级规则（本文件 §2.5 含 OpenSpec 流程） |
+| `AGENTS.md` | 项目级规则（含 OpenSpec 流程 §2.5） |
 
 ---
 
 > **License**：MIT
-> **状态**：v0.1→v0.4 已完成（CLI + Web + OpenSpec + 可观测性 + MCP/Skills/Worktree + Memory 三 scope），v1.0 Plugin 插件框架已落地，Team Memory / 远程同步 / Prompt Cache 复用计划中
+> **状态**：v0.1→v0.4 已完成（CLI + Web + OpenSpec + 可观测性 + MCP/Skills/Worktree + Memory 三 scope + sideQuery）；v1.0 Plugin 插件框架 / web-search-tool / web 会话恢复切换 / 工具调用 UI 优化已落地；Team Memory / 远程同步 / Prompt Cache 计划中。
