@@ -15,6 +15,19 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chevron {
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .titleRunning, .titleOk, .titleFail {
