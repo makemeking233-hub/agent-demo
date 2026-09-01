@@ -3,7 +3,7 @@
  *
  * 定义 {@link Stt} 接口，并提供一个基于 Vosk（浏览器离线 WASM）的实现：
  * - 运行时从 CDN/打包动态加载 `vosk-browser`（`@vite-ignore`，不阻塞构建）
- * - 模型地址由 `VITE_VOSK_MODEL_URL` 配置（默认空，需部署方提供中文模型目录）
+ * - 模型地址默认指向应用自托管的 `/vosk-model/`（随 web 打包），可用 `VITE_VOSK_MODEL_URL` 覆盖
  * - 麦克风授权 / 模型加载失败时抛错，由上层降级到纯文本
  */
 
@@ -14,20 +14,26 @@ export interface Stt {
   stop(): void;
 }
 
-const DEFAULT_MODEL_URL =
-  (import.meta.env.VITE_VOSK_MODEL_URL as string | undefined) ?? "";
 /** vosk-browser 运行时模块 URL（CDN +esm）；不打包，运行时加载。 */
 const VOSK_LIB_URL =
   (import.meta.env.VITE_VOSK_LIB_URL as string | undefined) ??
   "https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/+esm";
 
+/** 默认模型地址：优先 VITE_VOSK_MODEL_URL，否则指向应用自托管的 /vosk-model/（随 web 打包）。 */
+function defaultModelUrl(): string {
+  const env = import.meta.env.VITE_VOSK_MODEL_URL as string | undefined;
+  if (env) return env;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return `${origin}/vosk-model/`;
+}
+
 /**
  * 创建 Vosk 后端 STT。
  *
- * @param modelUrl Vosk 中文模型目录 URL（含 model.conf/am/ivector 等）。
+ * @param modelUrl Vosk 中文模型目录 URL（含 conf/model.conf/am/… 等）。默认自托管 `/vosk-model/`。
  * @returns 一个可 start/stop 的 {@link Stt} 实例。
  */
-export async function createVoskStt(modelUrl: string = DEFAULT_MODEL_URL): Promise<Stt> {
+export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promise<Stt> {
   if (!modelUrl) {
     throw new Error("未配置 Vosk 模型地址（请设置 VITE_VOSK_MODEL_URL）");
   }

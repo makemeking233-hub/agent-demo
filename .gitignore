@@ -37,6 +37,9 @@ node_modules/
 agent-web/frontend/node/
 # 注：package-lock.json 必须 commit (npm ci 要求 lockfile 存在) — 之前被错误忽略导致 CI 7s 失败
 
+# Vosk 语音模型构建产物（~40MB，模型源在 agent-web/frontend/public/vosk-model/，构建时拷入 static/，勿重复提交）
+agent-web/src/main/resources/static/vosk-model/
+
 # OpenSpec 生成的 Claude Code 工具文件（本项目用 DSH，工具已复制到 .dsh/）
 .claude/
 
