@@ -286,6 +286,19 @@ cd agent-web/frontend && npm run dev   # http://localhost:5173
 
 跨平台危险命令黑名单（强制二次确认）：类 Unix（`rm -rf /`、`mkfs`、`dd`、`shutdown` 等）；Windows（`format`、`diskpart`、`bcdedit` 等）。匹配语义（归一化 basename + 短参数簇展开）见 `docs/design/design.md` §6.6。
 
+### 9.1 权限模式（Web UI 下拉）
+
+Web UI 输入区右下角有**权限模式下拉**，用于按会话设定全局权限基准（缺省 `Read Only`，仅会话内生效、无持久化）：
+
+| 模式 | 读文件/列目录 | 写/编辑（工作目录内）| 写/编辑（工作目录外）| 执行命令 / 其它工具 | 敏感路径 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **Read Only** | 放行 | 询问 | 询问 | 询问 | 询问 |
+| **Workspace Write** | 放行 | 放行 | 询问 | 询问 | 询问 |
+| **Full access** | 放行 | 放行 | 放行 | 放行 | 放行 |
+
+- 非放行类别仍走 `permission_request` 弹窗（不静默拒绝）；工具级 `DENY`（危险命令黑名单 / `isDestructive`）始终是终态兜底。
+- 切换即调 `POST /api/chat/{stream_id}/permission`；新会话缺省 `read_only`，随 `POST /api/chat/send` 的 `permission_mode` 设初始模式。
+
 ---
 
 ## 10. Web UI

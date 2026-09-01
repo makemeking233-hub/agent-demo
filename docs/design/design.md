@@ -482,6 +482,18 @@ public sealed interface StreamChunk
 
 > 敏感路径（`**/.ssh/**`、`**/.env*`、`**/*credentials*`、`**/*.pem` 等，见 §9 `permission.sensitivePathPatterns`）**读操作也强制 ask**，默认 allow-read 不适用。
 
+**权限模式**（add-permission-mode-dropdown）：web 输入区有权限模式下拉（`read_only` / `workspace_write` / `full_access`，缺省 `read_only`），由 `PermissionMode` 枚举承载，决定 `PermissionManager.decide()` 的**全局允许/询问基准**（不改变工具级 `DENY` 终态兜底）：
+
+| 模式 | READ | WRITE（工作目录内）| WRITE（工作目录外）| SHELL / OTHER | 敏感路径 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| `read_only` | allow | ask | ask | ask | ask |
+| `workspace_write` | allow | allow | ask | ask | ask |
+| `full_access` | allow | allow | allow | allow | allow |
+
+- 裁决顺序：`full_access` → 全 allow；否则命中敏感路径 → ask；否则按 `mode × category`（`workspace_write` 下 WRITE 用 `ToolContext.workingDirectory()` 判工作区边界）。
+- 模式为**会话（流）级运行状态**：新会话缺省 `read_only`；`POST /api/chat/send` 的 `permission_mode` 设初始模式；`POST /api/chat/{stream_id}/permission` 实时切换（`AgentLoop.setPermissionMode`，volatile，对齐 `setModel` 范式）。不持久化，刷新/新会话重置。
+- 工具级 `DENY`（`checkPermissions` / shell 黑名单 / `isDestructive`）始终是终态，任何模式都不能覆盖（§Q9）。
+
 ### 6.6 ShellTool 与 ShellAdapter（跨平台命令执行）
 
 ```java
