@@ -79,6 +79,7 @@
 }
 
 .abort { background: var(--dsw-static-danger-default); }
+.voiceOn { background: var(--dsw-alias-accent); outline: 2px solid var(--dsw-static-accent-subtle); }
 
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChatApi, type HistoryMessage, type PermissionMode } from "../api/chat";
 import { SseClient } from "../lib/sse-client";
 import { SseEvent } from "../lib/event-types";
+import { createVoice } from "../lib/voice";
+import { createVoskStt } from "../lib/stt";
+import { useVoiceChat } from "../lib/useVoiceChat";
 import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
@@ -112,6 +115,16 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
   const sessionIdRef = useRef<string | null>(null);
   const clientRef = useRef<SseClient | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+
+  // ---------- 自由语音（add-voice-interaction）----------
+  const voice = useMemo(() => createVoice(), []);
+  const [muted, setMuted] = useState(false);
+  const voiceChat = useVoiceChat({
+    getStt: () => createVoskStt(),
+    voice,
+    onSubmit: (t) => startStream(t),
+    canSubmit: () => !busy,
+  });
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
@@ -239,10 +252,12 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     if (ev.type === "message_delta" && ev.delta_type === "text") {
       // 函数式追加，避免闭包捕获陈旧 items 导致界面空白
       appendTextToLastAssistant(ev.content);
+      voiceChat.onAssistantDelta(ev.content);
     } else if (ev.type === "message_stop") {
       setBusy(false);
       setStreamId(null);
       streamIdRef.current = null;
+      voiceChat.onTurnEnd();
     } else if (ev.type === "tool_call_start") {
       // 内联到最近一条 assistant 消息项，保持工具调用与生成的文本同一消息块
       addToolToLastAssistant({
@@ -318,6 +333,31 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     if (sid) api.setPermission(sid, mode).catch(() => {});
   }
 
+  // 切换自由语音（add-voice-interaction）：开则开始循环（懒加载 Vosk），关则停止
+  function handleVoiceToggle() {
+    if (voiceChat.state !== "idle") {
+      voiceChat.stop();
+      return;
+    }
+    voiceChat
+      .start()
+      .catch(() => {
+        appendItem({
+          kind: "text",
+          id: "v-e-" + Date.now(),
+          role: "assistant",
+          text: "语音初始化失败（需配置 Vosk 模型地址，或浏览器不支持麦克风）。",
+        });
+      });
+  }
+
+  // 切换朗读静音
+  function handleMuteToggle() {
+    const next = !muted;
+    setMuted(next);
+    voice.setMuted(next);
+  }
+
   return (
     <div className={styles.panel}>
       <div ref={listRef} className={styles.list}>
@@ -339,6 +379,10 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
         onAbort={abortStream}
         permissionMode={permissionMode}
         onPermissionModeChange={handlePermissionModeChange}
+        voiceState={voiceChat.state}
+        muted={muted}
+        onVoiceToggle={handleVoiceToggle}
+        onMuteToggle={handleMuteToggle}
       />
     </div>
   );

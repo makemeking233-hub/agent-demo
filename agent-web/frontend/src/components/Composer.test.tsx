@@ -26,3 +26,28 @@ describe("Composer", () => {
     expect(select.value).toBe("workspace_write");
   });
 });
+
+describe("Composer 语音按钮（add-voice-interaction）", () => {
+  it("提供 onVoiceToggle/onMuteToggle 时渲染 🎤 与 🔊", () => {
+    render(<Composer busy={false} onSend={() => {}} onVoiceToggle={() => {}} onMuteToggle={() => {}} />);
+    expect(screen.getByLabelText("开启自由语音")).toBeInTheDocument();
+    expect(screen.getByLabelText("静音朗读")).toBeInTheDocument();
+  });
+
+  it("点击 🎤 触发 onVoiceToggle", () => {
+    const onVoiceToggle = vi.fn();
+    render(<Composer busy={false} onSend={() => {}} onVoiceToggle={onVoiceToggle} onMuteToggle={() => {}} />);
+    fireEvent.click(screen.getByLabelText("开启自由语音"));
+    expect(onVoiceToggle).toHaveBeenCalled();
+  });
+
+  it("muted=true 时展示「开启朗读」", () => {
+    render(<Composer busy={false} onSend={() => {}} muted onVoiceToggle={() => {}} onMuteToggle={() => {}} />);
+    expect(screen.getByLabelText("开启朗读")).toBeInTheDocument();
+  });
+
+  it("voiceState=listening 时 🎤 展示「关闭自由语音」", () => {
+    render(<Composer busy={false} onSend={() => {}} voiceState="listening" onVoiceToggle={() => {}} onMuteToggle={() => {}} />);
+    expect(screen.getByLabelText("关闭自由语音")).toBeInTheDocument();
+  });
+});

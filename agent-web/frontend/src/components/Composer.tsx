@@ -1,4 +1,4 @@
-import { Loader2, Send, Square } from "lucide-react";
+import { Loader2, Mic, MicOff, Send, Square, Volume2, VolumeX } from "lucide-react";
 import { KeyboardEvent, useState } from "react";
 import { type PermissionMode } from "../api/chat";
 import styles from "./Composer.module.css";
@@ -10,6 +10,11 @@ interface ComposerProps {
   placeholder?: string;
   permissionMode?: PermissionMode;
   onPermissionModeChange?: (mode: PermissionMode) => void;
+  /** 自由语音状态（add-voice-interaction）。 */
+  voiceState?: "idle" | "loading" | "listening" | "sending";
+  muted?: boolean;
+  onVoiceToggle?: () => void;
+  onMuteToggle?: () => void;
 }
 
 const SLASH_COMMANDS = ["/help", "/clear", "/resume", "/history", "/quit"];
@@ -26,6 +31,10 @@ export function Composer({
   placeholder = "输入消息或 /help...",
   permissionMode = "read_only",
   onPermissionModeChange,
+  voiceState = "idle",
+  muted = false,
+  onVoiceToggle,
+  onMuteToggle,
 }: ComposerProps) {
   const [value, setValue] = useState("");
   const [showSlashHint, setShowSlashHint] = useState(false);
@@ -51,6 +60,7 @@ export function Composer({
   }
 
   const trimmed = value.trim();
+  const voiceActive = voiceState !== "idle";
 
   return (
     <div className={styles.composer}>
@@ -73,6 +83,34 @@ export function Composer({
           placeholder={placeholder}
           disabled={busy}
         />
+        {onVoiceToggle && (
+          <button
+            type="button"
+            className={`${styles.button} ${voiceActive ? styles.voiceOn : ""}`}
+            onClick={onVoiceToggle}
+            aria-label={voiceActive ? "关闭自由语音" : "开启自由语音"}
+            title={voiceActive ? "关闭自由语音" : "开启自由语音"}
+          >
+            {voiceState === "loading" ? (
+              <Loader2 size={16} className={styles.spin} />
+            ) : voiceActive ? (
+              <Mic size={16} />
+            ) : (
+              <MicOff size={16} />
+            )}
+          </button>
+        )}
+        {onMuteToggle && (
+          <button
+            type="button"
+            className={styles.button}
+            onClick={onMuteToggle}
+            aria-label={muted ? "开启朗读" : "静音朗读"}
+            title={muted ? "开启朗读" : "静音朗读"}
+          >
+            {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
+        )}
         {busy && onAbort ? (
           <button type="button" className={`${styles.button} ${styles.abort}`} onClick={onAbort}>
             <Square size={16} />
