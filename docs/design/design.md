@@ -288,6 +288,8 @@ agent-demo/
 
 ### 5.2 v0.2+ 再考虑（v0.1 留扩展点）
 
+> 可插拔扩展点（Plugin 框架）已由 add-plugin-system 落地，详见 `docs/guides/plugins.md`；以下为其它待定扩展点。
+
 - 多入口 fast-path 分流（cli.tsx 模式）
 - MCP 工具池融合 `assembleToolPool()`
 - partitionToolCalls() 并发分批（v0.1 串行执行，不需要）
