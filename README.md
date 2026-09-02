@@ -324,6 +324,8 @@ sequenceDiagram
 
 SSE 7 种事件：`message_start` / `message_delta` / `tool_call_start` / `tool_call_end` / `permission_request` / `message_stop` / `error`。完整 schema 见 `docs/design/web-ui-design.md`。
 
+**Web UI 工作区与会话重命名**（仿 DeepSeek Harness）：侧栏顶部有 「＋」新建工作区（填名称 + 目录路径，工作区为真实运行目录，其会话在该目录下运行、存档落 `workspaces/<name>/sessions/`）；每条会话行有「`...`」菜单（重命名 / 归档 / 恢复 / 删除）。重命名写入 `<id>.meta.json` 侧车，永久覆盖首条消息自动标题。端点：`GET/POST /api/workspaces`、`POST /api/sessions/{id}/rename`、`GET /api/sessions?workspace=`。
+
 ---
 
 ## 11. 验证

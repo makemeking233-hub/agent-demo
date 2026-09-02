@@ -859,6 +859,12 @@ cost:
 └── cache/                                   # 临时缓存
 ```
 
+**工作区与会话重命名**（add-workspaces-and-rename）：
+
+- 工作区 = 真实运行目录。默认工作区 `agent-demo` 仍映射顶层 `sessions/`（**不迁移**既有会话）；新建工作区落到 `workspaces/<name>/{meta.json, sessions/}`，其会话 `cwd=工作区 dir`、会话存档落该工作区 `sessions/`。
+- 会话重命名走侧车 `<id>.meta.json{title}`；列表摘要（`SessionController.derive`）**优先侧车标题**，否则回落首条消息派生的自动标题。归档/恢复时 `SessionStore` 连带搬移该侧车。
+- 会话运行时落盘目录与运行目录按工作区路由：`WebAgentRuntime.sessionsDirFor(workspace)` / `buildLoop(..., workingDirOverride)`。
+
 **JSONL schema**（每行一个 entry，JSON）：
 
 ```json
