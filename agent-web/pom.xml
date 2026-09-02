@@ -83,7 +83,7 @@
                                 避免"不可测类拖垮逐包 80%/70% 门禁" -->
                             <excludes>
                                 <exclude>com/example/agent/web/WebApplication.*</exclude>
-                                <exclude>com/example/agent/web/StaticResourceConfig.*</exclude>
+                                <exclude>com/example/agent/web/routing/SpaFallbackRouter.*</exclude>
                             </excludes>
                             <rules>
                                 <rule>

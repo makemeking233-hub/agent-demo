@@ -9,7 +9,7 @@ agent-core/                                  agent-web/                         
 ├── PermissionManager                       ├── ChatController                         + TanStack Query
 └── SessionStore (JSONL)                    ├── ChatStreamController (SSE)             + Tailwind v4
        ↑                                      ├── HealthController                     + shadcn/ui
-       └────── web 端通过 WebAgentRuntime        ├── StaticResourceConfig (SPA)            + react-markdown
+       └────── web 端通过 WebAgentRuntime        ├── SpaFallbackRouter (routing/)         + react-markdown
               复用 agent-core bean (AgentLoop,    ├── SlashCommandRouter (in-chat)
               SessionStore, PermissionManager)   └── PermissionBridge (LockSupport)
                                                 frontend/
