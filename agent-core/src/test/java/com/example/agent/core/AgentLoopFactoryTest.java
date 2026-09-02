@@ -157,4 +157,42 @@ class AgentLoopFactoryTest {
         assertThat(loop.permissions().decide("WriteFile", new WriteFileTool.Input(outside, "x"), loop.toolContext()).behavior())
                 .isEqualTo(com.example.agent.permission.PermissionDecision.Behavior.ASK);
     }
+
+    // ---- add-workspaces-and-rename：工作目录覆盖 ----
+
+    @Test
+    void buildLoopWithWorkingDirOverrideUsesIt() {
+        Path override = Paths.get("C:", "ws-override").toAbsolutePath();
+        AgentLoop loop =
+                AgentLoopFactory.buildLoop(
+                        AgentConfig.defaults(),
+                        mock(LlmProvider.class),
+                        AgentLoopFactory.buildTools(AgentConfig.defaults()),
+                        new MessageHistory(new TokenEstimator()),
+                        new StreamingPrinter(),
+                        "deepseek-chat",
+                        SessionLogSink.NOOP,
+                        null,
+                        PermissionConfirmer.allowAll(),
+                        null,
+                        null,
+                        override);
+        assertThat(loop.toolContext().workingDirectory()).isEqualTo(override);
+    }
+
+    @Test
+    void buildLoopWithoutOverrideUsesResolvedWorkingDir() {
+        AgentLoop loop =
+                AgentLoopFactory.buildLoop(
+                        AgentConfig.defaults(),
+                        mock(LlmProvider.class),
+                        AgentLoopFactory.buildTools(AgentConfig.defaults()),
+                        new MessageHistory(new TokenEstimator()),
+                        new StreamingPrinter(),
+                        "deepseek-chat",
+                        SessionLogSink.NOOP,
+                        null,
+                        PermissionConfirmer.allowAll());
+        assertThat(loop.toolContext().workingDirectory()).isEqualTo(Paths.get(System.getProperty("user.dir")));
+    }
 }

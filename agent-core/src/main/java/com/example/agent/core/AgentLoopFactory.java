@@ -215,32 +215,8 @@ public final class AgentLoopFactory {
             Path agentDataDir,
             PermissionConfirmer confirmer,
             AbortSignal abortSignal) {
-        Path workingDir = resolveWorkingDir(cfg);
-        // Plugin 框架集成（T5）：init 自定义 plugin, 注册工具, 拼接 fragment, shutdown hook close
-        PluginManager pluginManager = new PluginManager(instantiatePlugins(cfg), cfg, tools);
-        pluginManager.init();
-        for (Tool<?, ?> t : pluginManager.collectTools()) {
-            tools.register(t);
-        }
-        String basePrompt = buildSystemPrompt(cfg, model, null, provider);
-        String fragment = pluginManager.collectSystemPromptFragment();
-        String systemPrompt =
-                (fragment == null || fragment.isEmpty()) ? basePrompt : basePrompt + "\n\n" + fragment;
-        // shutdown 前关闭所有 Plugin（pm.close 幂等；每个 AgentLoop 注册一次自己的 hook）
-        Runtime.getRuntime().addShutdownHook(new Thread(pluginManager::close, "agent-plugin-close"));
-        return new AgentLoop(
-                provider,
-                tools,
-                history,
-                printer,
-                MAX_TOOL_ITERATIONS,
-                model,
-                workingDir,
-                systemPrompt,
-                sink,
-                agentDataDir,
-                confirmer,
-                abortSignal);
+        return buildLoop(
+                cfg, provider, tools, history, printer, model, sink, agentDataDir, confirmer, abortSignal, null, null);
     }
 
     /**
@@ -260,14 +236,52 @@ public final class AgentLoopFactory {
             PermissionConfirmer confirmer,
             AbortSignal abortSignal,
             PermissionMode mode) {
+        return buildLoop(
+                cfg, provider, tools, history, printer, model, sink, agentDataDir, confirmer, abortSignal, mode, null);
+    }
+
+    /**
+     * 装配 {@link AgentLoop}（带权限模式 + 工作目录覆盖，add-workspaces-and-rename）。
+     *
+     * <p>{@code mode == null} 用缺省 {@link PermissionMode#READ_ONLY}；{@code workingDirOverride != null}
+     * 时以它为 agent 工作目录（工作区会话用），否则沿用 {@link #resolveWorkingDir}。
+     */
+    public static AgentLoop buildLoop(
+            AgentConfig cfg,
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            String model,
+            SessionLogSink sink,
+            Path agentDataDir,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal,
+            PermissionMode mode,
+            Path workingDirOverride) {
+        Path workingDir = workingDirOverride != null ? workingDirOverride : resolveWorkingDir(cfg);
+        // Plugin 框架集成（T5）：init 自定义 plugin, 注册工具, 拼接 fragment, shutdown hook close
+        PluginManager pluginManager = new PluginManager(instantiatePlugins(cfg), cfg, tools);
+        pluginManager.init();
+        for (Tool<?, ?> t : pluginManager.collectTools()) {
+            tools.register(t);
+        }
+        String basePrompt = buildSystemPrompt(cfg, model, null, provider);
+        String fragment = pluginManager.collectSystemPromptFragment();
+        String systemPrompt =
+                (fragment == null || fragment.isEmpty()) ? basePrompt : basePrompt + "\n\n" + fragment;
+        // shutdown 前关闭所有 Plugin（pm.close 幂等；每个 AgentLoop 注册一次自己的 hook）
+        Runtime.getRuntime().addShutdownHook(new Thread(pluginManager::close, "agent-plugin-close"));
         AgentLoop loop =
-                buildLoop(
-                        cfg,
+                new AgentLoop(
                         provider,
                         tools,
                         history,
                         printer,
+                        MAX_TOOL_ITERATIONS,
                         model,
+                        workingDir,
+                        systemPrompt,
                         sink,
                         agentDataDir,
                         confirmer,
