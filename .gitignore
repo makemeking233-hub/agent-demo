@@ -63,10 +63,8 @@ secrets.yaml
 # 测试/运行验证产生的本地日志（含 web/spring boot 启动 probe 日志）
 /test-logs/
 
-# agent-demo 运行时日志专门目录（项目内 logs/，不跟踪日志文件与会话日志）
-/logs/
-/logs/app.log*
-/logs/sessions/
+# agent-demo 运行时日志专门目录（任意深度 logs/ 均忽略：日志、会话日志、启动 probe 日志）
+**/logs/
 *.log
 
 # 误提交的临时测试文件（agent-core main 下不应有 test 目录；Solution0831.java 误提交已 git rm 移除）
