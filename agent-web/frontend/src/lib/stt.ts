@@ -57,7 +57,8 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1, sampleRate: 16000 },
       });
-      recognizer = new model.KaldiRecognizer();
+      // vosk-browser 的 KaldiRecognizer 需显式传 sampleRate，否则 wasm 把 undefined 转 float 失败
+      recognizer = new model.KaldiRecognizer(16000);
       recognizer.on("result", (msg: any) => {
         const text = msg?.result?.text;
         if (text && onFinalRef) onFinalRef(text);
