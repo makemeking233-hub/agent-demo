@@ -341,12 +341,12 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     }
     voiceChat
       .start()
-      .catch(() => {
+      .catch((e) => {
         appendItem({
           kind: "text",
           id: "v-e-" + Date.now(),
           role: "assistant",
-          text: "语音初始化失败（需配置 Vosk 模型地址，或浏览器不支持麦克风）。",
+          text: "语音初始化失败：" + ((e as Error)?.message ?? String(e)),
         });
       });
   }
