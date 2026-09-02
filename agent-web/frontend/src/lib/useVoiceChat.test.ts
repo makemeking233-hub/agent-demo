@@ -68,6 +68,34 @@ describe("useVoiceChat", () => {
     expect(result.current.state).toBe("listening");
   });
 
+  it("提交后本轮结束仍恢复监听（自由语音循环不自行退出，仅手动 stop 退出）", async () => {
+    let cb: ((t: string) => void) | undefined;
+    const stt = mockStt((c) => (cb = c));
+    const voice = mockVoice();
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useVoiceChat({ getStt: async () => stt, voice, onSubmit, canSubmit: () => true }),
+    );
+    await act(async () => {
+      await result.current.start();
+    });
+
+    // 收到一句 final 并提交
+    act(() => cb!("你好"));
+    expect(onSubmit).toHaveBeenCalledWith("你好");
+    expect(result.current.state).toBe("sending");
+
+    // 本轮结束 → 应恢复监听（循环继续），而非自动退出
+    await act(async () => {
+      result.current.onTurnEnd();
+    });
+    expect(result.current.state).toBe("listening");
+
+    // 只有手动 stop 才退出循环
+    act(() => result.current.stop());
+    expect(result.current.state).toBe("idle");
+  });
+
   it("stop 停止监听与朗读", async () => {
     const stt = mockStt();
     const voice = mockVoice();

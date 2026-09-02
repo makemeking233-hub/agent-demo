@@ -28,7 +28,7 @@ export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOpt
     (text: string) => {
       const t = text.trim();
       if (!t || !canSubmit()) return;
-      runningRef.current = false;
+      // 只暂停监听（本轮处理中不捕捉声音），但循环仍“武装”，每轮结束由 onTurnEnd 恢复监听
       sttRef.current?.stop();
       setState("sending");
       onSubmit(t);
