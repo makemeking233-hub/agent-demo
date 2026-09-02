@@ -47,6 +47,7 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
   let ctx: AudioContext | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
   let processor: ScriptProcessorNode | null = null;
+  let muteGain: GainNode | null = null;
 
   return {
     async start(onFinal) {
@@ -67,6 +68,12 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
         /* 可选：展示中间结果 */
       });
       ctx = new AudioContext();
+      // 确保 AudioContext 处于 running（Chrome 在非用户手势时可能 suspended）
+      try {
+        await ctx.resume();
+      } catch {
+        /* resume 失败不阻断，继续 */
+      }
       source = ctx.createMediaStreamSource(stream);
       processor = ctx.createScriptProcessor(4096, 1, 1);
       processor.onaudioprocess = (event) => {
@@ -76,11 +83,20 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
           /* 忽略单帧错误 */
         }
       };
-      // vosk 官方 README 模式：source → ScriptProcessor（不接 destination 以避免回放）
       source.connect(processor);
+      // 接到零增益输出：驱动 ScriptProcessor 被拉取（否则 onaudioprocess 可能不触发），且无回放
+      muteGain = ctx.createGain();
+      muteGain.gain.value = 0;
+      processor.connect(muteGain);
+      muteGain.connect(ctx.destination);
     },
     stop() {
       onFinalRef = null;
+      try {
+        muteGain?.disconnect();
+      } catch {
+        /* ignore */
+      }
       try {
         processor?.disconnect();
       } catch {
