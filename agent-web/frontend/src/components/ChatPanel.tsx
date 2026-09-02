@@ -318,7 +318,8 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     const sid = streamIdRef.current; // 用 ref 拿最新 streamId（避免闭包陈旧导致提交被跳过）
     if (!sid) return;
     await api.submitDecision(sid, permissionId, decision);
-    updateItem(itemId, { choices: [] } as Partial<Item>);
+    // 决策后移除权限卡：避免同一工具多次授权时残留成排的“权限已处理”重复卡（工具执行卡已体现结果）
+    setItems((prev) => prev.filter((it) => it.id !== itemId));
   }
 
   async function abortStream() {
