@@ -175,4 +175,44 @@ class SessionStoreTest {
         Path sessionsDir = tmp.resolve("sessions");
         assertTrue(SessionStore.listArchived(sessionsDir).isEmpty());
     }
+
+    // ---- add-workspaces-and-rename：会话标题侧车 ---- 
+
+    @Test
+    void writeTitleCreatesMetaSidecar() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        assertTrue(SessionStore.writeTitle(sessionsDir, "s-1", "我的项目"));
+        assertEquals("我的项目", SessionStore.readTitle(sessionsDir, "s-1"));
+    }
+
+    @Test
+    void readTitleReturnsNullWhenNoSidecar() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        assertEquals(null, SessionStore.readTitle(sessionsDir, "s-1"));
+    }
+
+    @Test
+    void writeTitleRejectsBlankOrInvalidId() {
+        Path sessionsDir = tmp.resolve("sessions");
+        assertFalse(SessionStore.writeTitle(sessionsDir, "s-1", "   "));
+        assertFalse(SessionStore.writeTitle(sessionsDir, "../evil", "x"));
+        assertFalse(SessionStore.writeTitle(null, "s-1", "x"));
+    }
+
+    @Test
+    void archiveAndRestoreMoveMetaSidecar() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        writeEntries(sessionsDir.resolve("s-1.jsonl"), SessionEntry.user("u1", null));
+        SessionStore.writeTitle(sessionsDir, "s-1", "我的项目");
+
+        assertTrue(SessionStore.archive(sessionsDir, "s-1"));
+        assertEquals("我的项目", SessionStore.readTitle(sessionsDir.resolve(".archive"), "s-1"));
+        assertEquals(null, SessionStore.readTitle(sessionsDir, "s-1"));
+
+        assertTrue(SessionStore.restore(sessionsDir, "s-1"));
+        assertEquals("我的项目", SessionStore.readTitle(sessionsDir, "s-1"));
+    }
 }

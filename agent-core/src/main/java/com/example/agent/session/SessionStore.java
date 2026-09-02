@@ -1,5 +1,6 @@
 package com.example.agent.session;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.slf4j.Logger;
@@ -17,6 +18,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -332,6 +334,7 @@ public class SessionStore implements AutoCloseable {
             Files.createDirectories(archiveDir);
             Path target = archiveDir.resolve(id + ".jsonl");
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            moveMetaIfPresent(sessionsDir, archiveDir, id);
             return true;
         } catch (IOException e) {
             log.warn("归档会话失败: id={}", id, e);
@@ -357,6 +360,7 @@ public class SessionStore implements AutoCloseable {
             Files.createDirectories(sessionsDir);
             Path target = sessionsDir.resolve(id + ".jsonl");
             Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            moveMetaIfPresent(archiveDir, sessionsDir, id);
             return true;
         } catch (IOException e) {
             log.warn("恢复会话失败: id={}", id, e);
@@ -364,9 +368,74 @@ public class SessionStore implements AutoCloseable {
         }
     }
 
+    /** 会话名侧车文件后缀（{@code <id>.meta.json}）。 */
+    private static final String META_SUFFIX = ".meta.json";
+
+    /** 静态 JSON 序列化器（侧车元数据读写用，与实例 {@link #json} 独立）。 */
+    private static final ObjectMapper STATIC_JSON = new ObjectMapper();
+
+    /**
+     * 写入（或覆盖）会话自定义标题到侧车 {@code <id>.meta.json{title}}。
+     *
+     * <p>{@code id} 非法 / {@code title} 空 返回 {@code false}；写失败返回 {@code false}。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @param id          会话 id
+     * @param title       自定义标题（非空）
+     * @return 是否写入成功
+     */
+    public static boolean writeTitle(Path sessionsDir, String id, String title) {
+        if (sessionsDir == null || !isValidId(id)) return false;
+        if (title == null || title.isBlank()) return false;
+        Path metaFile = sessionsDir.resolve(id + META_SUFFIX);
+        try {
+            Path parent = metaFile.getParent();
+            if (parent != null) Files.createDirectories(parent);
+            Files.writeString(
+                    metaFile,
+                    STATIC_JSON.writeValueAsString(Map.of("title", title)),
+                    StandardCharsets.UTF_8);
+            return true;
+        } catch (Exception e) {
+            log.warn("写入会话标题失败: id={}", id, e);
+            return false;
+        }
+    }
+
+    /**
+     * 读取会话自定义标题；无侧车 / 读失败 / {id} 非法 返回 {@code null}。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @param id          会话 id
+     * @return 自定义标题；无则 {@code null}
+     */
+    public static String readTitle(Path sessionsDir, String id) {
+        if (sessionsDir == null || !isValidId(id)) return null;
+        Path metaFile = sessionsDir.resolve(id + META_SUFFIX);
+        if (!Files.isRegularFile(metaFile)) return null;
+        try {
+            JsonNode node = STATIC_JSON.readTree(Files.readString(metaFile, StandardCharsets.UTF_8));
+            JsonNode t = node == null ? null : node.get("title");
+            return (t == null || t.isNull()) ? null : t.asText(null);
+        } catch (Exception e) {
+            log.warn("读取会话标题失败: id={}", id, e);
+            return null;
+        }
+    }
+
+    /** 归档/恢复时连带搬移 {@code <id>.meta.json}（保留自定义标题）。 */
+    private static void moveMetaIfPresent(Path fromDir, Path toDir, String id) {
+        Path src = fromDir.resolve(id + META_SUFFIX);
+        if (!Files.isRegularFile(src)) return;
+        try {
+            Files.move(src, toDir.resolve(id + META_SUFFIX), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            log.warn("搬移会话标题失败: id={}", id, e);
+        }
+    }
+
     /** 会话 id 白名单（防路径穿越）：仅字母/数字/下划线/连字符。 */
-    private static boolean isValidId(String id) {
-        if (id == null || id.isBlank()) return false;
+    private static boolean isValidId(String id) {        if (id == null || id.isBlank()) return false;
         for (int i = 0; i < id.length(); i++) {
             char c = id.charAt(i);
             boolean allowed = (c >= 'a' && c <= 'z')
