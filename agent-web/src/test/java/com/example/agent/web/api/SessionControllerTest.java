@@ -9,7 +9,9 @@ import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
 import com.example.agent.session.SessionEntry;
 import com.example.agent.session.SessionStore;
+import com.example.agent.session.WorkspaceStore;
 import com.example.agent.tools.ToolRegistry;
+import com.example.agent.web.api.dto.RenameRequest;
 import com.example.agent.web.api.dto.SessionMessagesResponse;
 import com.example.agent.web.stream.WebAgentRuntime;
 import java.nio.file.Files;
@@ -101,7 +103,7 @@ class SessionControllerTest {
         writeSession("s-2", SessionEntry.user("世界", null));
 
         ResponseEntity<java.util.List<com.example.agent.web.api.dto.SessionSummaryDto>> resp =
-                controller.list(false);
+                controller.list(false, null);
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(resp.getBody()).isNotNull();
@@ -115,7 +117,7 @@ class SessionControllerTest {
     @Test
     void listEmptyWhenNoSessions() {
         ResponseEntity<java.util.List<com.example.agent.web.api.dto.SessionSummaryDto>> resp =
-                controller.list(false);
+                controller.list(false, null);
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(resp.getBody()).isNotNull();
         assertThat(resp.getBody()).isEmpty();
@@ -137,9 +139,9 @@ class SessionControllerTest {
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(Files.exists(tmp.resolve("sessions").resolve(".archive").resolve("s-arch.jsonl"))).isTrue();
         // 默认列表不再含它，归档列表含它
-        assertThat(controller.list(false).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+        assertThat(controller.list(false, null).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
                 .doesNotContain("s-arch");
-        assertThat(controller.list(true).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+        assertThat(controller.list(true, null).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
                 .contains("s-arch");
     }
 
@@ -157,7 +159,7 @@ class SessionControllerTest {
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(Files.exists(tmp.resolve("sessions").resolve("s-res.jsonl"))).isTrue();
-        assertThat(controller.list(false).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+        assertThat(controller.list(false, null).getBody().stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
                 .contains("s-res");
     }
 
@@ -169,8 +171,57 @@ class SessionControllerTest {
     @Test
     void summaryTimeIsNonNegativeLong() throws Exception {
         writeSession("s-t", SessionEntry.user("时间", null));
-        var body = controller.list(false).getBody();
+        var body = controller.list(false, null).getBody();
         assertThat(body).isNotNull();
         assertThat(body.get(0).time()).isGreaterThanOrEqualTo(0);
+    }
+
+    // ---- add-workspaces-and-rename：重命名 + 工作区过滤 ----
+
+    @Test
+    void renameSetsCustomTitleOverDerived() throws Exception {
+        writeSession("s-r", SessionEntry.user("自动标题", null));
+
+        ResponseEntity<Map<String, Object>> resp = controller.rename("s-r", new RenameRequest("我的项目"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        var body = controller.list(false, null).getBody();
+        assertThat(body.stream().filter(s -> s.id().equals("s-r")).findFirst().get().title())
+                .isEqualTo("我的项目");
+    }
+
+    @Test
+    void renameUnknownReturns404() {
+        assertThat(controller.rename("nope", new RenameRequest("x")).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void renameEmptyTitleReturns400() throws Exception {
+        writeSession("s-r", SessionEntry.user("hi", null));
+        assertThat(controller.rename("s-r", new RenameRequest("   ")).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void listFiltersByWorkspace() throws Exception {
+        Path workDir = tmp.resolve("md-main");
+        Files.createDirectories(workDir);
+        WorkspaceStore.create(tmp, "md-main", workDir.toString());
+        Path wsSessions = tmp.resolve("workspaces/md-main/sessions");
+        Files.createDirectories(wsSessions);
+        SessionStore ws = new SessionStore(wsSessions.resolve("s-ws.jsonl"), 50, 60_000);
+        ws.append(SessionEntry.user("ws 会话", null));
+        ws.syncFlush();
+        ws.close();
+        writeSession("s-def", SessionEntry.user("默认会话", null));
+
+        var defList = controller.list(false, null).getBody();
+        assertThat(defList.stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+                .contains("s-def").doesNotContain("s-ws");
+        var wsList = controller.list(false, "md-main").getBody();
+        assertThat(wsList.stream().map(com.example.agent.web.api.dto.SessionSummaryDto::id))
+                .contains("s-ws").doesNotContain("s-def");
+        assertThat(wsList.get(0).workspace()).isEqualTo("md-main");
     }
 }

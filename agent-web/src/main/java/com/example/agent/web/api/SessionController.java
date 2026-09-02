@@ -3,11 +3,13 @@ package com.example.agent.web.api;
 import com.example.agent.core.Message;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
+import com.example.agent.web.api.dto.RenameRequest;
 import com.example.agent.web.api.dto.SessionMessageDto;
 import com.example.agent.web.api.dto.SessionMessagesResponse;
 import com.example.agent.web.api.dto.SessionSummaryDto;
 import com.example.agent.web.api.dto.ToolCallDto;
 import com.example.agent.web.stream.WebAgentRuntime;
+import com.example.agent.session.WorkspaceStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -65,9 +68,12 @@ public class SessionController {
      */
     @GetMapping
     public ResponseEntity<List<SessionSummaryDto>> list(
-            @RequestParam(name = "archived", defaultValue = "false") boolean archived) {
+            @RequestParam(name = "archived", defaultValue = "false") boolean archived,
+            @RequestParam(name = "workspace", required = false) String workspace) {
         return ResponseEntity.ok(
-                archived ? buildArchivedSummaries() : buildActiveSummaries());
+                archived
+                        ? buildArchivedSummaries(workspace)
+                        : buildActiveSummaries(workspace));
     }
 
     /**
@@ -101,6 +107,29 @@ public class SessionController {
     }
 
     /**
+     * 会话重命名（add-workspaces-and-rename）：写入侧车 {@code <id>.meta.json{title}} 覆盖自动标题。
+     *
+     * @param sessionId 会话 id
+     * @param req 载荷（{@code title} 非空）
+     * @return {@code 200} 重命名成功；会话不存在 {@code 404}；title 空 {@code 400}
+     */
+    @PostMapping("/{sessionId}/rename")
+    public ResponseEntity<Map<String, Object>> rename(
+            @PathVariable String sessionId, @RequestBody RenameRequest req) {
+        if (!runtime.hasSession(sessionId)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "session_not_found"));
+        }
+        if (req.title() == null || req.title().isBlank()) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "title_empty"));
+        }
+        boolean ok = SessionStore.writeTitle(runtime.sessionsDir(), sessionId, req.title());
+        if (!ok) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "rename_failed"));
+        }
+        return ResponseEntity.ok(Map.of("ok", true, "title", req.title()));
+    }
+
+    /**
      * 返回某会话的消息历史（v0.3 会话重进恢复）。
      *
      * @param sessionId 会话 id
@@ -118,38 +147,50 @@ public class SessionController {
 
     // ---------- 内部 ----------
 
-    private List<SessionSummaryDto> buildActiveSummaries() {
-        Path sessionsDir = runtime.sessionsDir();
+    private List<SessionSummaryDto> buildActiveSummaries(String workspace) {
+        Path sessionsDir = runtime.sessionsDirFor(workspace);
         List<SessionSummaryDto> out = new ArrayList<>();
         for (String id : SessionStore.listSessions(sessionsDir)) {
-            Derived d = derive(runtime.messagesFor(id), id);
+            Derived d = derive(runtime.messagesFor(workspace, id), id, sessionsDir);
             out.add(new SessionSummaryDto(
-                    id, d.title(), d.preview(), "agent-demo", mtime(sessionsDir.resolve(id + ".jsonl"))));
+                    id, d.title(), d.preview(), workspaceName(workspace), mtime(sessionsDir.resolve(id + ".jsonl"))));
         }
         return out;
     }
 
-    private List<SessionSummaryDto> buildArchivedSummaries() {
-        Path sessionsDir = runtime.sessionsDir();
+    private List<SessionSummaryDto> buildArchivedSummaries(String workspace) {
+        Path sessionsDir = runtime.sessionsDirFor(workspace);
         Path archiveDir = sessionsDir.resolve(".archive");
         List<SessionSummaryDto> out = new ArrayList<>();
         for (String id : SessionStore.listArchived(sessionsDir)) {
             Derived d =
-                    derive(SessionResumeLoader.loadArchivedById(sessionsDir, id).messages(), id);
+                    derive(
+                            SessionResumeLoader.loadArchivedById(sessionsDir, id).messages(),
+                            id,
+                            archiveDir);
             out.add(new SessionSummaryDto(
-                    id, d.title(), d.preview(), "agent-demo", mtime(archiveDir.resolve(id + ".jsonl"))));
+                    id, d.title(), d.preview(), workspaceName(workspace), mtime(archiveDir.resolve(id + ".jsonl"))));
         }
         return out;
     }
 
-    /** 从首条消息派生标题与预览。 */
-    private static Derived derive(List<Message> msgs, String id) {
-        String title = id;
+    private static String workspaceName(String workspace) {
+        return workspace == null || workspace.isBlank()
+                ? WorkspaceStore.DEFAULT_WORKSPACE
+                : workspace;
+    }
+
+    /** 标题：优先侧车自定义标题，否则从首条消息派生；预览始终从首条消息派生。 */
+    private static Derived derive(List<Message> msgs, String id, Path sessionsDir) {
+        String custom = SessionStore.readTitle(sessionsDir, id);
+        String title = custom != null && !custom.isBlank() ? custom : id;
         String preview = "";
         if (!msgs.isEmpty()) {
             Message first = msgs.get(0);
-            title = first.content().lines().findFirst().orElse(id);
-            if (title.trim().isEmpty()) title = id;
+            if (custom == null || custom.isBlank()) {
+                title = first.content().lines().findFirst().orElse(id);
+                if (title.trim().isEmpty()) title = id;
+            }
             preview = first.content().lines().skip(1).findFirst().orElse("");
             if (title.equals(preview)) preview = "";
         }
