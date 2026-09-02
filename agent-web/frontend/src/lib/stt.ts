@@ -2,7 +2,7 @@
  * 语音输入（STT）封装（add-voice-interaction）。
  *
  * 定义 {@link Stt} 接口，并提供一个基于 Vosk（浏览器离线 WASM）的实现：
- * - `vosk-browser` 与模型均已随 web 打包（自托管），离线自包含；也可用 env 覆盖
+ * - `vosk-browser` 库与模型均随 web 打包（自托管），离线自包含；也可用 env 覆盖
  * - 麦克风授权失败时抛错，由上层降级到纯文本
  */
 
@@ -21,18 +21,18 @@ function voskLibUrl(): string {
   return `${origin}/vosk-browser/vosk-browser.js`;
 }
 
-/** 默认模型地址：优先 VITE_VOSK_MODEL_URL，否则指向应用自托管的 /vosk-model/（随 web 打包）。 */
+/** 默认模型地址：优先 VITE_VOSK_MODEL_URL，否则指向自托管 `/vosk-model/model.tar.gz`（vosk-browser 需要 gzipped tar）。 */
 function defaultModelUrl(): string {
   const env = import.meta.env.VITE_VOSK_MODEL_URL as string | undefined;
   if (env) return env;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  return `${origin}/vosk-model/`;
+  return `${origin}/vosk-model/model.tar.gz`;
 }
 
 /**
  * 创建 Vosk 后端 STT。
  *
- * @param modelUrl Vosk 中文模型目录 URL（含 conf/model.conf/am/… 等）。默认自托管 `/vosk-model/`。
+ * @param modelUrl Vosk 模型 gzipped tar 的 URL（默认自托管 `/vosk-model/model.tar.gz`）。
  * @returns 一个可 start/stop 的 {@link Stt} 实例。
  */
 export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promise<Stt> {
@@ -42,27 +42,22 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
   let vosk: any;
   try {
     vosk = await import(/* @vite-ignore */ voskLibUrl());
-  } catch (e) {
+  } catch {
     throw new Error("vosk-browser 加载失败（请检查 /vosk-browser/vosk-browser.js 是否可达）");
   }
   let model: any;
   try {
-    model = await vosk.Model.fromUri(modelUrl);
-  } catch (e) {
-    throw new Error("Vosk 模型加载失败（请检查 /vosk-model/ 是否可达）");
+    model = await vosk.createModel(modelUrl);
+  } catch {
+    throw new Error("Vosk 模型加载失败（请检查 /vosk-model/model.tar.gz 是否可达）");
   }
-  const recognizer = new vosk.Recognizer({ model, sampleRate: 16000 });
 
+  let recognizer: any | null = null;
   let onFinalRef: ((text: string) => void) | null = null;
   let stream: MediaStream | null = null;
   let ctx: AudioContext | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
-
-  recognizer.on("result", (msg: any) => {
-    const res = msg?.result;
-    if (res?.final && onFinalRef) onFinalRef(res.text ?? "");
-  });
-  recognizer.on("error", (e: any) => console.error("[stt] vosk error", e));
+  let processor: ScriptProcessorNode | null = null;
 
   return {
     async start(onFinal) {
@@ -70,16 +65,44 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error("当前浏览器不支持麦克风（getUserMedia 不可用）");
       }
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1, sampleRate: 16000 },
+      });
+      recognizer = new model.KaldiRecognizer();
+      recognizer.on("result", (msg: any) => {
+        const text = msg?.result?.text;
+        if (text && onFinalRef) onFinalRef(text);
+      });
+      recognizer.on("partialresult", () => {
+        /* 可选：展示中间结果 */
+      });
       ctx = new AudioContext();
       source = ctx.createMediaStreamSource(stream);
-      // vosk-browser 通过 AudioWorklet 的 port 接收媒体流
-      source.connect(recognizer.port);
+      processor = ctx.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (event) => {
+        try {
+          recognizer?.acceptWaveform(event.inputBuffer);
+        } catch {
+          /* 忽略单帧错误 */
+        }
+      };
+      // vosk 官方 README 模式：source → ScriptProcessor（不接 destination 以避免回放）
+      source.connect(processor);
     },
     stop() {
       onFinalRef = null;
       try {
+        processor?.disconnect();
+      } catch {
+        /* ignore */
+      }
+      try {
         source?.disconnect();
+      } catch {
+        /* ignore */
+      }
+      try {
+        recognizer?.remove?.();
       } catch {
         /* ignore */
       }
@@ -93,6 +116,7 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
       } catch {
         /* ignore */
       }
+      recognizer = null;
     },
   };
 }
