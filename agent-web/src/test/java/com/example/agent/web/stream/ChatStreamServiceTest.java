@@ -49,22 +49,10 @@ class ChatStreamServiceTest {
     /** mock 运行时：{@code sinkFor} 把 SSE sink 原样透传（不落盘），{@code createLoop} 用传入 sink 装配。 */
     private static WebAgentRuntime mockRuntime() {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
-        when(runtime.sinkFor(any(String.class), any(SessionLogSink.class)))
-                .thenAnswer(inv -> inv.getArgument(1));
-        when(runtime.createLoop(any(String.class), any(String.class), any(SessionLogSink.class), any(), any()))
-                .thenAnswer(
-                        inv -> {
-                            SessionLogSink sink = inv.getArgument(2);
-                            return loopWithMockProvider(sink);
-                        });
-        // 6 参版本（含权限模式）：mock 装配 loop，并把传入的初始 mode 应用上去（保证默认非空）。
-        when(runtime.createLoop(
-                        any(String.class),
-                        any(String.class),
-                        any(SessionLogSink.class),
-                        any(),
-                        any(),
-                        any()))
+        // 用裸 any()（匹配含 null），因为默认 create 的 workspace / sink 可能为 null。
+        when(runtime.sinkFor(any(), any(), any()))
+                .thenAnswer(inv -> inv.getArgument(2));
+        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(
                         inv -> {
                             SessionLogSink sink = inv.getArgument(2);
@@ -191,5 +179,24 @@ class ChatStreamServiceTest {
         WebAgentRuntime runtime = mockRuntime();
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
         assertThat(svc.setPermission("unknown", com.example.agent.permission.PermissionMode.FULL_ACCESS)).isFalse();
+    }
+
+    // ---- add-workspaces-and-rename：create 归属工作区 + workspaceExists ----
+
+    @Test
+    void createWithWorkspaceBuilds() {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat", null, "md-main");
+        assertThat(meta).isNotNull();
+        assertThat(meta.loop().permissionMode()).isEqualTo(com.example.agent.permission.PermissionMode.DEFAULT);
+    }
+
+    @Test
+    void workspaceExistsDefaultsTrueForBlank() {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        assertThat(svc.workspaceExists(null)).isTrue();
+        assertThat(svc.workspaceExists("")).isTrue();
     }
 }

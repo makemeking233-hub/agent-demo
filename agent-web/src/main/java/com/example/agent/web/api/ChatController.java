@@ -49,7 +49,11 @@ public class ChatController {
         } catch (IllegalArgumentException e) {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "invalid_mode")));
         }
-        ChatStreamService.ActiveStream meta = streams.create(sessionId, "deepseek-chat", mode);
+        // 工作区：缺省使用默认工作区；非法 → 400（不创建流）。
+        if (!streams.workspaceExists(req.workspace())) {
+            return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "workspace_not_found")));
+        }
+        ChatStreamService.ActiveStream meta = streams.create(sessionId, "deepseek-chat", mode, req.workspace());
         streams.start(meta.streamId(), req.content());
         return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, "deepseek-chat")));
     }

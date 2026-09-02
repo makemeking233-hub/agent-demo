@@ -6,6 +6,7 @@ import com.example.agent.core.TurnResult;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionMode;
+import com.example.agent.session.WorkspaceStore;
 import com.example.agent.web.api.dto.SseEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
@@ -70,15 +71,20 @@ public class ChatStreamService {
         return create(sessionId, model, null);
     }
 
+    public ActiveStream create(String sessionId, String model, PermissionMode mode) {
+        return create(sessionId, model, mode, null);
+    }
+
     /**
-     * 创建一条活动流（带初始权限模式，add-permission-mode-dropdown）。
+     * 创建一条活动流（带初始权限模式 + 工作区，add-workspaces-and-rename）。
      *
      * @param sessionId 会话 id
      * @param model 模型名
      * @param mode 初始权限模式（{@code null} 用缺省 {@link PermissionMode#READ_ONLY}）
+     * @param workspace 归属工作区（{@code null} 用默认工作区）
      * @return 活动流元数据
      */
-    public ActiveStream create(String sessionId, String model, PermissionMode mode) {
+    public ActiveStream create(String sessionId, String model, PermissionMode mode, String workspace) {
         String streamId = UUID.randomUUID().toString();
         // replay().all(): 延迟订阅者(客户端 turn 完成后再连)能收到全部事件 + complete,
         // 支撑 spec §resume/Last-Event-ID 与测试中 send→stream 的先后时序。
@@ -102,8 +108,8 @@ public class ChatStreamService {
                 };
         // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
         // v0.3 会话重进恢复：用复合 sink (SSE + 落盘)，使该会话持续写入 sessions/<id>.jsonl。
-        SessionLogSink sessionSink = runtime.sinkFor(sessionId, adapter);
-        AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get, mode);
+        SessionLogSink sessionSink = runtime.sinkFor(workspace, sessionId, adapter);
+        AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get, mode, workspace);
         ActiveStream meta =
                 new ActiveStream(
                         streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted);
@@ -197,6 +203,13 @@ public class ChatStreamService {
     public boolean submitDecision(String streamId, String permissionId, String decision) {
         if (actives.get(streamId) == null) return false;
         return permissionBridge.submitDecision(permissionId, decision);
+    }
+
+    /** 工作区是否存在（空/null = 默认为 true，走默认工作区）。 */
+    public boolean workspaceExists(String workspace) {
+        return workspace == null
+                || workspace.isBlank()
+                || WorkspaceStore.exists(runtime.agentDataDir(), workspace);
     }
 
     /** 惰性清理: 超过保留时长的已结束流从 map 移除, 防内存泄漏。 */

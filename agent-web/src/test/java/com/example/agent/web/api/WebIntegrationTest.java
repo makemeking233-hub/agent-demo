@@ -287,4 +287,17 @@ class WebIntegrationTest {
                 .jsonPath("$.mode")
                 .isEqualTo("full_access");
     }
+
+    @Test
+    void sendUnknownWorkspaceReturns400() {
+        client.post()
+                .uri("/api/chat/send")
+                .bodyValue(Map.of("content", "hi", "workspace", "nope"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.BAD_REQUEST)
+                .expectBody()
+                .jsonPath("$.error")
+                .isEqualTo("workspace_not_found");
+    }
 }
