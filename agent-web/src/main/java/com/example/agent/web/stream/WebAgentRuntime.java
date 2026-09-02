@@ -17,6 +17,7 @@ import com.example.agent.permission.PermissionMode;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
+import com.example.agent.session.WorkspaceStore;
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.tools.ToolRegistry;
 import jakarta.annotation.PreDestroy;
@@ -156,18 +157,36 @@ public class WebAgentRuntime {
             PermissionConfirmer confirmer,
             AbortSignal abortSignal,
             PermissionMode mode) {
+        return createLoop(streamId, sessionId, sink, confirmer, abortSignal, mode, null);
+    }
+
+    /**
+     * 为单个 web 会话生成 {@link AgentLoop}（带初始权限模式 + 工作区，add-workspaces-and-rename）。
+     *
+     * <p>{@code workspace} 非默认时，该会话运行目录 = 工作区 dir（{@code null} 或缺省工作区 = 项目根），
+     * 会话历史/存储按工作区路由。
+     */
+    public AgentLoop createLoop(
+            String streamId,
+            String sessionId,
+            SessionLogSink sink,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal,
+            PermissionMode mode,
+            String workspace) {
         return AgentLoopFactory.buildLoop(
                 cfg,
                 provider,
                 tools,
-                historyFor(sessionId),
+                historyFor(workspace, sessionId),
                 new StreamingPrinter(),
                 model,
                 sink,
                 agentDataDir,
                 confirmer,
                 abortSignal,
-                mode);
+                mode,
+                workspaceDir(workspace));
     }
 
     /**
@@ -181,10 +200,15 @@ public class WebAgentRuntime {
      * @return 该会话的 history
      */
     public MessageHistory historyFor(String sessionId) {
+        return historyFor(null, sessionId);
+    }
+
+    /** 按工作区 + 会话 id 获取（或回填）{@link MessageHistory}。 */
+    public MessageHistory historyFor(String workspace, String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return new MessageHistory(estimator);
         }
-        return sessionHistories.computeIfAbsent(sessionId, this::restoreHistory);
+        return sessionHistories.computeIfAbsent(key(workspace, sessionId), k -> restoreHistory(workspace, sessionId));
     }
 
     /**
@@ -197,10 +221,15 @@ public class WebAgentRuntime {
      * @return 该会话的消息列表；无存档时为空
      */
     public List<Message> messagesFor(String sessionId) {
+        return messagesFor(null, sessionId);
+    }
+
+    /** 按工作区 + 会话 id 返回当前可见消息。 */
+    public List<Message> messagesFor(String workspace, String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return List.of();
-        MessageHistory live = sessionHistories.get(sessionId);
+        MessageHistory live = sessionHistories.get(key(workspace, sessionId));
         if (live != null) return live.all();
-        return restoreHistory(sessionId).all();
+        return restoreHistory(workspace, sessionId).all();
     }
 
     /**
@@ -214,26 +243,37 @@ public class WebAgentRuntime {
      * @return 复合 sink
      */
     public SessionLogSink sinkFor(String sessionId, SessionLogSink sseSink) {
-        SessionRecorder recorder = recorderFor(sessionId);
+        return sinkFor(null, sessionId, sseSink);
+    }
+
+    /** 按工作区组装复合 sink（含落盘录制）。 */
+    public SessionLogSink sinkFor(String workspace, String sessionId, SessionLogSink sseSink) {
+        SessionRecorder recorder = recorderFor(workspace, sessionId);
         if (recorder == null) return sseSink == null ? SessionLogSink.NOOP : sseSink;
         return new CompositeSessionLogSink(sseSink, recorder);
     }
 
     /** 按会话懒创建（并缓存）落盘录制器；失败时该会话降级为不落盘并返回 null。 */
     public SessionRecorder recorderFor(String sessionId) {
+        return recorderFor(null, sessionId);
+    }
+
+    /** 按工作区 + 会话懒创建落盘录制器。 */
+    public SessionRecorder recorderFor(String workspace, String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return null;
+        String mapKey = key(workspace, sessionId);
         return sessionRecorders.computeIfAbsent(
-                sessionId,
+                mapKey,
                 sid -> {
                     try {
-                        Path sessionsDir = agentDataDir.resolve("sessions");
+                        Path sessionsDir = sessionsDirFor(workspace);
                         Files.createDirectories(sessionsDir);
-                        SessionStore store = new SessionStore(sessionsDir.resolve(sid + ".jsonl"), 50, 200L);
-                        sessionStores.put(sid, store);
+                        SessionStore store = new SessionStore(sessionsDir.resolve(sessionId + ".jsonl"), 50, 200L);
+                        sessionStores.put(mapKey, store);
                         SessionLogger logger = null;
                         if (cfg.logging() != null && cfg.logging().enabled()) {
                             try {
-                                logger = new SessionLogger(cfg.logging(), sid);
+                                logger = new SessionLogger(cfg.logging(), sessionId);
                             } catch (Exception e) {
                                 log.warn("初始化 web 会话日志失败，降级为仅存档: {}", e.getMessage());
                             }
@@ -241,7 +281,7 @@ public class WebAgentRuntime {
                         return new SessionRecorder(logger, store);
                     } catch (Exception e) {
                         log.warn("初始化 web 会话存档失败，降级为不落盘: {}", e.getMessage());
-                        sessionStores.remove(sid);
+                        sessionStores.remove(mapKey);
                         return null;
                     }
                 });
@@ -249,18 +289,29 @@ public class WebAgentRuntime {
 
     /** 判断某会话是否可恢复（内存活动或有存档文件）。 */
     public boolean hasSession(String sessionId) {
+        return hasSession(null, sessionId);
+    }
+
+    /** 按工作区判断会话是否可恢复。 */
+    public boolean hasSession(String workspace, String sessionId) {
         if (sessionId == null || sessionId.isBlank()) return false;
-        if (sessionHistories.containsKey(sessionId)) return true;
-        return Files.isRegularFile(
-                agentDataDir.resolve("sessions").resolve(sessionId + ".jsonl"));
+        if (sessionHistories.containsKey(key(workspace, sessionId))) return true;
+        return Files.isRegularFile(sessionsDirFor(workspace).resolve(sessionId + ".jsonl"));
     }
 
     /** 归档（软删除）某会话：移动文件到 .archive/，并清理该会话的内存缓存与落盘录制器。 */
     public boolean archiveSession(String sessionId) {
-        boolean ok = SessionStore.archive(sessionsDir(), sessionId);
+        return archiveSession(null, sessionId);
+    }
+
+    /** 按工作区归档某会话。 */
+    public boolean archiveSession(String workspace, String sessionId) {
+        Path dir = sessionsDirFor(workspace);
+        boolean ok = SessionStore.archive(dir, sessionId);
         if (ok) {
-            sessionHistories.remove(sessionId);
-            SessionRecorder recorder = sessionRecorders.remove(sessionId);
+            String mapKey = key(workspace, sessionId);
+            sessionHistories.remove(mapKey);
+            SessionRecorder recorder = sessionRecorders.remove(mapKey);
             if (recorder != null) {
                 try {
                     recorder.close();
@@ -268,31 +319,56 @@ public class WebAgentRuntime {
                     log.warn("关闭归档会话录制器失败: {}", e.getMessage());
                 }
             }
-            sessionStores.remove(sessionId);
+            sessionStores.remove(mapKey);
         }
         return ok;
     }
 
     /** 恢复某归档会话：把文件从 .archive/ 移回 sessions/。 */
     public boolean restoreSession(String sessionId) {
-        return SessionStore.restore(sessionsDir(), sessionId);
+        return restoreSession(null, sessionId);
     }
 
-    /** 归档会话 id 列表（供「归档/回收站」视图）。 */
+    /** 按工作区恢复某归档会话。 */
+    public boolean restoreSession(String workspace, String sessionId) {
+        return SessionStore.restore(sessionsDirFor(workspace), sessionId);
+    }
+
+    /** 归档会话 id 列表（供「归档/回收站」视图，默认工作区）。 */
     public List<String> archivedIds() {
         return SessionStore.listArchived(sessionsDir());
     }
 
-    /** 会话存档目录（{@code <agentDataDir>/sessions}）。 */
+    /** 会话存档目录（默认工作区 {@code <agentDataDir>/sessions}）。 */
     public Path sessionsDir() {
-        return agentDataDir.resolve("sessions");
+        return sessionsDirFor(null);
     }
 
-    /** 首次触达某会话时的历史回填（只读磁盘，不改写存档）。 */
-    private MessageHistory restoreHistory(String sessionId) {
+    /** 某工作区的会话存储目录（add-workspaces-and-rename）。 */
+    public Path sessionsDirFor(String workspace) {
+        return WorkspaceStore.sessionsDirFor(agentDataDir, workspace);
+    }
+
+    /** 某工作区的运行目录（缺省工作区=项目根）。 */
+    private Path workspaceDir(String workspace) {
+        if (workspace == null || workspace.isBlank()) return null;
+        WorkspaceStore.Workspace ws = WorkspaceStore.get(agentDataDir, workspace);
+        return ws != null ? ws.dir() : null;
+    }
+
+    /** map 复合 key（工作区 + ":" + 会话 id）。 */
+    private static String key(String workspace, String sessionId) {
+        String ws = workspace == null || workspace.isBlank()
+                ? WorkspaceStore.DEFAULT_WORKSPACE
+                : workspace;
+        return ws + ":" + sessionId;
+    }
+
+    /** 首次触达某会话时的历史回填（只读磁盘，不改写存档），按工作区路由目录。 */
+    private MessageHistory restoreHistory(String workspace, String sessionId) {
         MessageHistory history = new MessageHistory(estimator);
         SessionResumeLoader.ResumeResult result =
-                SessionResumeLoader.loadById(agentDataDir.resolve("sessions"), sessionId);
+                SessionResumeLoader.loadById(sessionsDirFor(workspace), sessionId);
         if (!result.messages().isEmpty()) {
             history.replaceAll(
                     SessionResumeLoader.snip(result.messages(), estimator, MAX_RESUME_TOKENS));

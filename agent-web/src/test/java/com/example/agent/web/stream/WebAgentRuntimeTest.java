@@ -14,6 +14,7 @@ import com.example.agent.log.SessionLogSink;
 import com.example.agent.log.SessionRecorder;
 import com.example.agent.session.SessionEntry;
 import com.example.agent.session.SessionStore;
+import com.example.agent.session.WorkspaceStore;
 import com.example.agent.tools.ToolRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -210,6 +211,48 @@ class WebAgentRuntimeTest {
         WebAgentRuntime rt = runtime(tmp);
         assertThat(rt.archiveSession("no-such")).isFalse();
         assertThat(rt.restoreSession("no-such")).isFalse();
+    }
+
+    // ---- add-workspaces-and-rename：按工作区路由 ----
+
+    private Path createWorkspace(String name) throws Exception {
+        Path workDir = tmp.resolve(name);
+        Files.createDirectories(workDir);
+        WorkspaceStore.create(tmp, name, workDir.toString());
+        return workDir;
+    }
+
+    @Test
+    void sessionsDirForRoutesPerWorkspace() throws Exception {
+        createWorkspace("md-main");
+        WebAgentRuntime rt = runtime(tmp);
+        assertThat(rt.sessionsDirFor("md-main"))
+                .isEqualTo(tmp.resolve("workspaces/md-main/sessions"));
+        assertThat(rt.sessionsDirFor(null)).isEqualTo(tmp.resolve("sessions"));
+    }
+
+    @Test
+    void historyForWorkspaceRoutesToWorkspaceSessions() throws Exception {
+        createWorkspace("md-main");
+        Path wsSessions = tmp.resolve("workspaces/md-main/sessions");
+        Files.createDirectories(wsSessions);
+        SessionStore ws = new SessionStore(wsSessions.resolve("s-ws.jsonl"), 50, 60_000);
+        ws.append(SessionEntry.user("ws-hi", null));
+        ws.syncFlush();
+        ws.close();
+
+        WebAgentRuntime rt = runtime(tmp);
+        assertThat(rt.historyFor("md-main", "s-ws").all().get(0).content()).isEqualTo("ws-hi");
+        assertThat(rt.hasSession("s-ws")).isFalse();
+        assertThat(rt.hasSession("md-main", "s-ws")).isTrue();
+    }
+
+    @Test
+    void createLoopWithWorkspaceBuildsWithoutError() throws Exception {
+        createWorkspace("md-main");
+        WebAgentRuntime rt = runtime(tmp);
+        var loop = rt.createLoop("s1", "s-ws1", SessionLogSink.NOOP, null, null, null, "md-main");
+        assertThat(loop).isNotNull();
     }
 }
 
