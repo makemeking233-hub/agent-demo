@@ -137,18 +137,49 @@ export class ChatApi {
     return (await r.json()) as HistoryResponse;
   }
 
-  // 列出现实会话（add-session-switch）
-  async listSessions(): Promise<SessionSummary[]> {
-    const r = await fetch(this.base + '/api/sessions');
+  // 列出现实会话（add-session-switch）；可选按工作区过滤（add-workspaces-and-rename）
+  async listSessions(workspace?: string): Promise<SessionSummary[]> {
+    const q = workspace ? `?workspace=${encodeURIComponent(workspace)}` : '';
+    const r = await fetch(this.base + `/api/sessions${q}`);
     if (!r.ok) throw new Error(`listSessions ${r.status}`);
     return (await r.json()) as SessionSummary[];
   }
 
-  // 列出归档会话（add-session-management）
-  async listArchived(): Promise<SessionSummary[]> {
-    const r = await fetch(this.base + '/api/sessions?archived=true');
+  // 列出归档会话（add-session-management）；可选按工作区过滤
+  async listArchived(workspace?: string): Promise<SessionSummary[]> {
+    const q = new URLSearchParams({ archived: 'true' });
+    if (workspace) q.set('workspace', workspace);
+    const r = await fetch(this.base + `/api/sessions?${q}`);
     if (!r.ok) throw new Error(`listArchived ${r.status}`);
     return (await r.json()) as SessionSummary[];
+  }
+
+  // 列工作区（add-workspaces-and-rename）
+  async listWorkspaces(): Promise<Workspace[]> {
+    const r = await fetch(this.base + '/api/workspaces');
+    if (!r.ok) throw new Error(`listWorkspaces ${r.status}`);
+    return (await r.json()) as Workspace[];
+  }
+
+  // 创建工作区（add-workspaces-and-rename）
+  async createWorkspace(name: string, dir: string): Promise<{ ok: boolean; name: string }> {
+    const r = await fetch(this.base + '/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, dir }),
+    });
+    if (!r.ok) throw new Error(`createWorkspace ${r.status}: ${await r.text()}`);
+    return (await r.json()) as { ok: boolean; name: string };
+  }
+
+  // 会话重命名（add-workspaces-and-rename）
+  async renameSession(sessionId: string, title: string): Promise<void> {
+    const r = await fetch(this.base + `/api/sessions/${encodeURIComponent(sessionId)}/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!r.ok) throw new Error(`renameSession ${r.status}`);
   }
 
   // 归档（软删除）会话（add-session-management）

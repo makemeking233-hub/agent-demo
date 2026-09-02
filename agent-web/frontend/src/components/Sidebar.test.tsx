@@ -28,9 +28,14 @@ describe("Sidebar 会话管理", () => {
     const props = {
       sessions,
       archived: [] as SidebarSession[],
+      workspaces: [] as { name: string; dir: string; sessionCount: number }[],
+      activeWorkspace: "agent-demo",
       currentSessionId: null as string | null,
       onSelect: vi.fn(),
       onNewSession: vi.fn(),
+      onWorkspaceChange: vi.fn(),
+      onRename: vi.fn(),
+      onCreateWorkspace: vi.fn(),
       onArchive: vi.fn(),
       onRestore: vi.fn(),
       onCollapseToggle: vi.fn(),
@@ -62,19 +67,30 @@ describe("Sidebar 会话管理", () => {
     expect(p.onNewSession).toHaveBeenCalledTimes(1);
   });
 
-  it("点击删除显示确认，确认后调 onArchive", () => {
+  it("会话行 ... 菜单归档后调 onArchive", () => {
     const p = renderSidebar();
-    fireEvent.click(screen.getAllByLabelText("删除")[0]);
-    expect(screen.getByText("删除该会话？")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("删除"));
+    fireEvent.click(screen.getAllByLabelText("会话操作")[0]);
+    fireEvent.click(screen.getByText("归档"));
     expect(p.onArchive).toHaveBeenCalled();
   });
 
-  it("删除确认可取消", () => {
+  it("会话行 ... 菜单重命名提交后调 onRename", () => {
     const p = renderSidebar();
-    fireEvent.click(screen.getAllByLabelText("删除")[0]);
-    fireEvent.click(screen.getByText("取消"));
-    expect(p.onArchive).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByLabelText("会话操作")[0]);
+    fireEvent.click(screen.getByText("重命名"));
+    const input = screen.getByDisplayValue("一");
+    fireEvent.change(input, { target: { value: "改标题" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(p.onRename).toHaveBeenCalledWith("s1", "改标题");
+  });
+
+  it("新建工作区提交后调 onCreateWorkspace", () => {
+    const p = renderSidebar();
+    fireEvent.click(screen.getByLabelText("新建工作区"));
+    fireEvent.change(screen.getByPlaceholderText("工作区名（如 md-main）"), { target: { value: "md-main" } });
+    fireEvent.change(screen.getByPlaceholderText("目录路径（绝对路径）"), { target: { value: "E:\\md-main" } });
+    fireEvent.click(screen.getByText("创建"));
+    expect(p.onCreateWorkspace).toHaveBeenCalledWith("md-main", "E:\\md-main");
   });
 
   it("归档视图列出归档会话并可恢复", () => {
@@ -82,7 +98,8 @@ describe("Sidebar 会话管理", () => {
     const p = renderSidebar({ archived, sessions: [] });
     fireEvent.click(screen.getByLabelText("归档"));
     expect(screen.getByText("归档甲")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("恢复"));
+    fireEvent.click(screen.getAllByLabelText("会话操作")[0]);
+    fireEvent.click(screen.getByText("恢复"));
     expect(p.onRestore).toHaveBeenCalled();
   });
 

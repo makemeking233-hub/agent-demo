@@ -1,12 +1,16 @@
 import {
+  Archive,
+  Check,
   Folder,
   MessageSquare,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
+  Pencil,
   Plus,
-  Archive,
   RotateCcw,
   Trash2,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 import styles from "./Sidebar.module.css";
@@ -19,12 +23,23 @@ export interface SidebarSession {
   time: number;
 }
 
+export interface SidebarWorkspace {
+  name: string;
+  dir: string;
+  sessionCount: number;
+}
+
 interface SidebarProps {
   sessions: SidebarSession[];
   archived: SidebarSession[];
+  workspaces: SidebarWorkspace[];
+  activeWorkspace: string;
   currentSessionId: string | null;
   onSelect: (sessionId: string) => void;
   onNewSession: () => void;
+  onWorkspaceChange: (workspace: string) => void;
+  onRename: (sessionId: string, title: string) => void;
+  onCreateWorkspace: (name: string, dir: string) => void;
   onArchive: (sessionId: string) => void;
   onRestore: (sessionId: string) => void;
   onCollapseToggle: (collapsed: boolean) => void;
@@ -69,7 +84,13 @@ export function Sidebar(props: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [archiveView, setArchiveView] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(() => readExpanded());
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [showCreateWs, setShowCreateWs] = useState(false);
+  const [wsName, setWsName] = useState("");
+  const [wsDir, setWsDir] = useState("");
+  const [wsError, setWsError] = useState<string | null>(null);
 
   function toggle() {
     const next = !collapsed;
@@ -100,22 +121,40 @@ export function Sidebar(props: SidebarProps) {
     persistExpanded(next);
   }
 
-  function requestArchive(id: string) {
-    setConfirmingDelete(id);
+  function startRename(id: string, title: string) {
+    setRenamingId(id);
+    setRenameValue(title);
+    setMenuOpen(null);
   }
 
-  function confirmArchive() {
-    if (confirmingDelete) props.onArchive(confirmingDelete);
-    setConfirmingDelete(null);
+  function submitRename() {
+    if (renamingId && renameValue.trim()) {
+      props.onRename(renamingId, renameValue.trim());
+    }
+    setRenamingId(null);
+    setRenameValue("");
   }
 
-  function cancelArchive() {
-    setConfirmingDelete(null);
+  async function submitCreateWorkspace() {
+    if (!wsName.trim() || !wsDir.trim()) {
+      setWsError("名称与目录均需填写");
+      return;
+    }
+    try {
+      await props.onCreateWorkspace(wsName.trim(), wsDir.trim());
+      setShowCreateWs(false);
+      setWsName("");
+      setWsDir("");
+      setWsError(null);
+    } catch (e) {
+      setWsError((e as Error).message);
+    }
   }
+
+  const source = archiveView ? props.archived : props.sessions;
 
   return (
     <aside className={styles.sidebar}>
-      {/* 新会话按钮：侧栏顶部（add-session-management） */}
       <button type="button" className={styles.newSession} onClick={props.onNewSession}>
         <Plus size={16} />
         <span>新会话</span>
@@ -139,17 +178,69 @@ export function Sidebar(props: SidebarProps) {
         </div>
       </div>
 
-      {confirmingDelete && (
-        <div className={styles.confirmBar}>
-          <span className={styles.confirmText}>删除该会话？</span>
-          <span className={styles.confirmActions}>
-            <button type="button" className={styles.confirmYes} onClick={confirmArchive}>
-              删除
+      {/* 工作区切换条 + 新建工作区入口（仿 DSH 头部 +） */}
+      <div className={styles.workspaceBar}>
+        <div className={styles.workspaceList}>
+          {props.workspaces.map((ws) => (
+            <button
+              key={ws.name}
+              type="button"
+              className={`${styles.workspaceItem} ${
+                ws.name === props.activeWorkspace ? styles.workspaceActive : ""
+              }`}
+              onClick={() => {
+                setArchiveView(false);
+                props.onWorkspaceChange(ws.name);
+              }}
+              title={ws.dir}
+            >
+              <Folder size={12} />
+              <span className={styles.workspaceName}>{ws.name}</span>
+              <span className={styles.workspaceCount}>{ws.sessionCount}</span>
             </button>
-            <button type="button" className={styles.confirmNo} onClick={cancelArchive}>
+          ))}
+        </div>
+        <button
+          type="button"
+          className={styles.iconButton}
+          onClick={() => setShowCreateWs(true)}
+          aria-label="新建工作区"
+          title="新建工作区"
+        >
+          <Plus size={16} />
+        </button>
+      </div>
+
+      {showCreateWs && (
+        <div className={styles.workspaceForm}>
+          <input
+            className={styles.workspaceInput}
+            placeholder="工作区名（如 md-main）"
+            value={wsName}
+            onChange={(e) => setWsName(e.target.value)}
+          />
+          <input
+            className={styles.workspaceInput}
+            placeholder="目录路径（绝对路径）"
+            value={wsDir}
+            onChange={(e) => setWsDir(e.target.value)}
+          />
+          {wsError && <span className={styles.workspaceError}>{wsError}</span>}
+          <div className={styles.confirmActions}>
+            <button type="button" className={styles.confirmYes} onClick={submitCreateWorkspace}>
+              创建
+            </button>
+            <button
+              type="button"
+              className={styles.confirmNo}
+              onClick={() => {
+                setShowCreateWs(false);
+                setWsError(null);
+              }}
+            >
               取消
             </button>
-          </span>
+          </div>
         </div>
       )}
 
@@ -167,38 +258,77 @@ export function Sidebar(props: SidebarProps) {
               {visibleList.map((s) => (
                 <div
                   key={s.id}
-                  className={`${styles.item} ${s.id === props.currentSessionId ? styles.itemActive : ""}`}
+                  className={`${styles.item} ${
+                    s.id === props.currentSessionId ? styles.itemActive : ""
+                  }`}
                 >
-                  <button
-                    type="button"
-                    className={styles.itemMain}
-                    onClick={() => props.onSelect(s.id)}
-                    title={s.preview || s.title}
-                  >
-                    <MessageSquare size={12} className={styles.itemIcon} />
-                    <span className={styles.itemTitle}>{s.title}</span>
-                    <span className={styles.itemTime}>{formatRelativeTime(s.time)}</span>
-                  </button>
-                  {archiveView ? (
-                    <button
-                      type="button"
-                      className={styles.itemAction}
-                      onClick={() => props.onRestore(s.id)}
-                      aria-label="恢复"
-                      title="恢复"
-                    >
-                      <RotateCcw size={13} />
-                    </button>
+                  {renamingId === s.id ? (
+                    <div className={styles.renameRow}>
+                      <input
+                        className={styles.renameInput}
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") submitRename();
+                          if (e.key === "Escape") setRenamingId(null);
+                        }}
+                        autoFocus
+                      />
+                      <button type="button" className={styles.iconButton} onClick={submitRename} aria-label="确认重命名">
+                        <Check size={13} />
+                      </button>
+                      <button type="button" className={styles.iconButton} onClick={() => setRenamingId(null)} aria-label="取消重命名">
+                        <X size={13} />
+                      </button>
+                    </div>
                   ) : (
-                    <button
-                      type="button"
-                      className={styles.itemAction}
-                      onClick={() => requestArchive(s.id)}
-                      aria-label="删除"
-                      title="删除"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        className={styles.itemMain}
+                        onClick={() => props.onSelect(s.id)}
+                        title={s.preview || s.title}
+                      >
+                        <MessageSquare size={12} className={styles.itemIcon} />
+                        <span className={styles.itemTitle}>{s.title}</span>
+                        <span className={styles.itemTime}>{formatRelativeTime(s.time)}</span>
+                      </button>
+                      <div className={styles.menuWrap}>
+                        <button
+                          type="button"
+                          className={styles.menuButton}
+                          onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)}
+                          aria-label="会话操作"
+                          title="更多操作"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                        {menuOpen === s.id && (
+                          <div className={styles.menu}>
+                            {!archiveView && (
+                              <button
+                                type="button"
+                                className={styles.menuItem}
+                                onClick={() => startRename(s.id, s.title)}
+                              >
+                                <Pencil size={12} /> <span>重命名</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className={styles.menuItem}
+                              onClick={() => {
+                                archiveView ? props.onRestore(s.id) : props.onArchive(s.id);
+                                setMenuOpen(null);
+                              }}
+                            >
+                              {archiveView ? <RotateCcw size={12} /> : <Trash2 size={12} />}
+                              <span>{archiveView ? "恢复" : "归档"}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               ))}
@@ -210,6 +340,11 @@ export function Sidebar(props: SidebarProps) {
             </div>
           );
         })}
+        {source.length === 0 && (
+          <div className={styles.empty}>
+            <p>暂无会话</p>
+          </div>
+        )}
       </div>
     </aside>
   );
