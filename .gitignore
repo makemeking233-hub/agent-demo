@@ -39,6 +39,8 @@ agent-web/frontend/node/
 
 # Vosk 语音模型构建产物（~40MB，模型源在 agent-web/frontend/public/vosk-model/，构建时拷入 static/，勿重复提交）
 agent-web/src/main/resources/static/vosk-model/
+# vosk-browser 运行时库构建产物（源在 agent-web/frontend/public/vosk-browser/）
+agent-web/src/main/resources/static/vosk-browser/
 
 # OpenSpec 生成的 Claude Code 工具文件（本项目用 DSH，工具已复制到 .dsh/）
 .claude/

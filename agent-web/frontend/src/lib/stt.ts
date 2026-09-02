@@ -2,9 +2,8 @@
  * 语音输入（STT）封装（add-voice-interaction）。
  *
  * 定义 {@link Stt} 接口，并提供一个基于 Vosk（浏览器离线 WASM）的实现：
- * - 运行时从 CDN/打包动态加载 `vosk-browser`（`@vite-ignore`，不阻塞构建）
- * - 模型地址默认指向应用自托管的 `/vosk-model/`（随 web 打包），可用 `VITE_VOSK_MODEL_URL` 覆盖
- * - 麦克风授权 / 模型加载失败时抛错，由上层降级到纯文本
+ * - `vosk-browser` 与模型均已随 web 打包（自托管），离线自包含；也可用 env 覆盖
+ * - 麦克风授权失败时抛错，由上层降级到纯文本
  */
 
 export interface Stt {
@@ -14,10 +13,13 @@ export interface Stt {
   stop(): void;
 }
 
-/** vosk-browser 运行时模块 URL（CDN +esm）；不打包，运行时加载。 */
-const VOSK_LIB_URL =
-  (import.meta.env.VITE_VOSK_LIB_URL as string | undefined) ??
-  "https://cdn.jsdelivr.net/npm/vosk-browser@0.0.8/+esm";
+/** vosk-browser 运行时模块 URL：默认自托管 `/vosk-browser/vosk-browser.js`，可用 `VITE_VOSK_LIB_URL` 覆盖。 */
+function voskLibUrl(): string {
+  const env = import.meta.env.VITE_VOSK_LIB_URL as string | undefined;
+  if (env) return env;
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return `${origin}/vosk-browser/vosk-browser.js`;
+}
 
 /** 默认模型地址：优先 VITE_VOSK_MODEL_URL，否则指向应用自托管的 /vosk-model/（随 web 打包）。 */
 function defaultModelUrl(): string {
@@ -39,11 +41,16 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
   }
   let vosk: any;
   try {
-    vosk = await import(/* @vite-ignore */ VOSK_LIB_URL);
-  } catch {
-    throw new Error("vosk-browser 加载失败（需在运行时可达）");
+    vosk = await import(/* @vite-ignore */ voskLibUrl());
+  } catch (e) {
+    throw new Error("vosk-browser 加载失败（请检查 /vosk-browser/vosk-browser.js 是否可达）");
   }
-  const model = await vosk.Model.fromUri(modelUrl);
+  let model: any;
+  try {
+    model = await vosk.Model.fromUri(modelUrl);
+  } catch (e) {
+    throw new Error("Vosk 模型加载失败（请检查 /vosk-model/ 是否可达）");
+  }
   const recognizer = new vosk.Recognizer({ model, sampleRate: 16000 });
 
   let onFinalRef: ((text: string) => void) | null = null;
@@ -60,6 +67,9 @@ export async function createVoskStt(modelUrl: string = defaultModelUrl()): Promi
   return {
     async start(onFinal) {
       onFinalRef = onFinal;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("当前浏览器不支持麦克风（getUserMedia 不可用）");
+      }
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       ctx = new AudioContext();
       source = ctx.createMediaStreamSource(stream);
