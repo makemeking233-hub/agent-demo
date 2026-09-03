@@ -3,7 +3,7 @@
 - [x] 1.1 新增 `FsEntry` / `FsListResponse` / `FsMkdirRequest` / `FsHomeResponse` / `FsDrivesResponse` 五个 record DTO（在 `agent-web/.../api/dto/` 下），含最小字段与文档注释；`mvn -pl agent-web compile` 通过
 - [x] 1.2 新增 `HomePathGuard` 工具类（`agent-web/.../web/security/HomePathGuard.java`）：暴露 `resolveWithinHome(String input)` 返回 `Path` 或抛 `HomePathException`，内部用 `Path.toRealPath()` + `startsWith(homeRealPath)` 判前缀；对应单元测试覆盖正常路径 / `..` 越界 / 符号链接越界 / 路径不存在 / 路径非绝对
 - [x] 1.3 新增 `FsController`（`agent-web/.../api/FsController.java`）四个端点骨架：`GET /api/fs/home`、`GET /api/fs/list`、`POST /api/fs/mkdir`、`GET /api/fs/drives`；注入 `WebAgentRuntime` 拿环境、`HomePathGuard` 做安全；DTO 与 controller 通过 jackson 自动序列化；`mvn -pl agent-web compile` 通过
-- [ ] 1.4 写 `FsControllerTest`（`agent-web/.../api/FsControllerTest.java`，用 `@WebFluxTest` 或 `WebTestClient`）：覆盖正常列表 / 越界 403 / 路径不存在 404 / 非绝对路径 400 / Windows 盘符 / mkdir 成功 + 重名 409 + 越界 403 + 非法名 400；`mvn -pl agent-web test` 全绿
+- [x] 1.4 写 `FsControllerTest`（`agent-web/.../api/FsControllerTest.java`，用 `@WebFluxTest` 或 `WebTestClient`）：覆盖正常列表 / 越界 403 / 路径不存在 404 / 非绝对路径 400 / Windows 盘符 / mkdir 成功 + 重名 409 + 越界 403 + 非法名 400；`mvn -pl agent-web test` 全绿
 
 ## 2. 前端 Modal 基础设施
 

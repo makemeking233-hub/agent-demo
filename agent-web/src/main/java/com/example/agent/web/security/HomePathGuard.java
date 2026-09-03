@@ -105,29 +105,35 @@ public final class HomePathGuard {
         return new ResolvedPath(requested, real, real.getParent(), true);
     }
 
-    /** mkdir 模式：路径不存在时，校验父目录。 */
+    /** mkdir 模式：路径不存在时，沿 parent 链向上找第一个 existing 祖先并校验它在 home 内。 */
     private ResolvedPath resolveMissingForMkdir(Path requested) {
-        Path parent = requested.getParent();
-        if (parent == null) {
-            throw new HomePathException(
-                    "path_invalid", "Cannot resolve parent for: " + requested);
+        Path cur = requested;
+        Path existingAncestor = null;
+        while (cur != null) {
+            if (Files.exists(cur)) {
+                existingAncestor = cur;
+                break;
+            }
+            cur = cur.getParent();
         }
-        Path parentReal;
+        if (existingAncestor == null) {
+            throw new HomePathException(
+                    "path_not_found",
+                    "No existing ancestor for: " + requested);
+        }
+        Path real;
         try {
-            parentReal = parent.toRealPath();
-        } catch (NoSuchFileException e) {
-            throw new HomePathException("path_not_found", "Parent not found: " + parent);
+            real = existingAncestor.toRealPath();
         } catch (IOException e) {
             throw new HomePathException(
                     "path_unresolvable",
-                    "Cannot resolve parent: " + parent + " (" + e.getMessage() + ")");
+                    "Cannot resolve ancestor: " + existingAncestor + " (" + e.getMessage() + ")");
         }
-        if (!isUnderHome(parentReal)) {
+        if (!isUnderHome(real)) {
             throw new HomePathException(
-                    "path_outside_home",
-                    "Parent outside home: " + parentReal);
+                    "path_outside_home", "Ancestor outside home: " + real);
         }
-        return new ResolvedPath(requested, null, parentReal, false);
+        return new ResolvedPath(requested, null, real, false);
     }
 
     /** {@code toRealPath()} 后判前缀（注意 Windows 大小写不敏感，所以用小写比较）。 */
