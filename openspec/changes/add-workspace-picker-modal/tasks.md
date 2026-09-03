@@ -8,10 +8,10 @@
 ## 2. 前端 Modal 基础设施
 
 - [x] 2.1 新增 `frontend/src/api/fs.ts`：暴露 `getHome() / listDir(path, includeHidden) / mkdir(path) / getDrives()` 四个函数，统一走 `fetch`，错误统一抛 `Error` 带服务端错误码；新增 `frontend/src/api/fs.test.ts` 用 vitest mock fetch 覆盖 200/4xx/5xx 三种分支
-- [ ] 2.2 新增 `WorkspacePickerModal` 组件骨架（`frontend/src/components/WorkspacePickerModal.tsx` + `.module.css`）：Modal 外壳 + Esc/外部点击关闭 + 关闭时写 localStorage；用 `useReducer` 管理 `currentPath / entries / loading / error / selectedPath / workspaceName / includeHidden / isCreatingWs` 八字段；默认定位到 `localStorage["agent-demo.workspace-picker.last-path"]` 或 `getHome()` 结果
-- [ ] 2.3 实现 Modal 主体内容：路径输入框 + Enter 跳转 + 面包屑（点击跳转 / 最左侧"此电脑"层） + 工具栏（新建文件夹 inline 输入框、刷新、显示隐藏切换） + 条目列表（目录优先 + 名称升序、双击进、单击选中、文件灰掉、面包屑式加载/错误/空态）；`vitest run WorkspacePickerModal.test.tsx` 增 4 个用例（路径输入跳转 / 双击进入 / 面包屑跳转 / 文件不可选）
-- [ ] 2.4 实现提交区：底部"工作区名称"输入框（默认 `basename(selectedPath)`）+ 当前路径展示 + "取消 / 选择此目录"按钮；提交按钮在 `selectedPath` 非空且为目录、`workspaceName` 通过客户端校验（与 `WorkspaceStore.validateName` 同规则）时启用；调用 `createWorkspace(name, dir)` props 回调，成功后调用 props.onSuccess(workspaceName) 触发外部刷新 + 切换；增 2 个 vitest 用例（名称冲突 / 路径不存在）
-- [ ] 2.5 新增 `frontend/src/components/WorkspacePickerModal.test.tsx` 总装：覆盖"打开 → 浏览 → 双击进 → 选中 → 改 name → 提交 → 回调被调"主路径 + "按 Esc 关闭" + "localStorage 写入" + "localStorage 失效回退 $HOME" + "新建文件夹"五个集成用例；`vitest run --coverage WorkspacePickerModal` 覆盖率 ≥ 80%
+- [x] 2.2 新增 `WorkspacePickerModal` 组件骨架（`frontend/src/components/WorkspacePickerModal.tsx` + `.module.css`）：Modal 外壳 + Esc/外部点击关闭 + 关闭时写 localStorage；用 `useReducer` 管理 `currentPath / entries / loading / error / selectedPath / workspaceName / includeHidden / isCreatingWs` 八字段；默认定位到 `localStorage["agent-demo.workspace-picker.last-path"]` 或 `getHome()` 结果
+- [x] 2.3 实现 Modal 主体内容：路径输入框 + Enter 跳转 + 面包屑（点击跳转 / 最左侧"此电脑"层） + 工具栏（新建文件夹 inline 输入框、刷新、显示隐藏切换） + 条目列表（目录优先 + 名称升序、双击进、单击选中、文件灰掉、面包屑式加载/错误/空态）；`vitest run WorkspacePickerModal.test.tsx` 增 4 个用例（路径输入跳转 / 双击进入 / 面包屑跳转 / 文件不可选）
+- [x] 2.4 实现提交区：底部"工作区名称"输入框（默认 `basename(selectedPath)`）+ 当前路径展示 + "取消 / 选择此目录"按钮；提交按钮在 `selectedPath` 非空且为目录、`workspaceName` 通过客户端校验（与 `WorkspaceStore.validateName` 同规则）时启用；调用 `createWorkspace(name, dir)` props 回调，成功后调用 props.onSuccess(workspaceName) 触发外部刷新 + 切换；增 2 个 vitest 用例（名称冲突 / 路径不存在）
+- [x] 2.5 新增 `frontend/src/components/WorkspacePickerModal.test.tsx` 总装：覆盖"打开 → 浏览 → 双击进 → 选中 → 改 name → 提交 → 回调被调"主路径 + "按 Esc 关闭" + "localStorage 写入" + "localStorage 失效回退 $HOME" + "新建文件夹"五个集成用例；`vitest run --coverage WorkspacePickerModal` 覆盖率 ≥ 80%
 
 ## 3. 集成
 
