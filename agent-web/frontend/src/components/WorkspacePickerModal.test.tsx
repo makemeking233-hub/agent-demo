@@ -14,7 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { WorkspacePickerModal } from "./WorkspacePickerModal";
 
 // 用 hoisted 变量确保 vi.mock factory 拿到正确引用
@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   listDir: vi.fn(),
   mkdir: vi.fn(),
   getDrives: vi.fn(),
+  getQuickAccess: vi.fn(),
 }));
 
 vi.mock("../api/fs", async () => {
@@ -34,6 +35,7 @@ vi.mock("../api/fs", async () => {
     listDir: mocks.listDir,
     mkdir: mocks.mkdir,
     getDrives: mocks.getDrives,
+    getQuickAccess: mocks.getQuickAccess,
     FsError: actual.FsError,
   };
 });
@@ -48,8 +50,15 @@ beforeEach(() => {
   mocks.listDir.mockReset();
   mocks.mkdir.mockReset();
   mocks.getDrives.mockReset();
+  mocks.getQuickAccess.mockReset();
   mocks.getHome.mockResolvedValue({ path: HOME, platform: "linux" });
   mocks.getDrives.mockResolvedValue({ drives: [] });
+  mocks.getQuickAccess.mockResolvedValue({
+    items: [
+      { name: "Home", path: HOME },
+      { name: "Documents", path: `${HOME}/Documents` },
+    ],
+  });
   mocks.listDir.mockImplementation(async (p: string) => ({
     path: p,
     parent: p === HOME ? null : PROJECTS,
@@ -117,10 +126,10 @@ describe("WorkspacePickerModal 导航", () => {
     expect(await screen.findByText("agent-demo")).toBeInTheDocument();
   });
 
-  it("路径输入框 Enter 跳转", async () => {
+  it("底部文件夹路径框 Enter 跳转", async () => {
     renderModal();
     await screen.findByText("projects");
-    const input = screen.getByLabelText("路径输入框");
+    const input = screen.getByLabelText("文件夹路径");
     fireEvent.change(input, { target: { value: PROJECTS } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(mocks.listDir).toHaveBeenCalledWith(PROJECTS, false));
@@ -228,5 +237,116 @@ describe("WorkspacePickerModal 新建文件夹", () => {
     fireEvent.click(screen.getByText("创建"));
     expect(mocks.mkdir).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.getByText(/名称非法/)).toBeInTheDocument());
+  });
+});
+
+// ===== polish-workspace-picker-dsh-style 新增用例 =====
+
+describe("WorkspacePickerModal DSH 风格", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    mocks.getHome.mockReset();
+    mocks.listDir.mockReset();
+    mocks.mkdir.mockReset();
+    mocks.getDrives.mockReset();
+    mocks.getQuickAccess.mockReset();
+    mocks.getHome.mockResolvedValue({ path: HOME, platform: "linux" });
+    mocks.getDrives.mockResolvedValue({ drives: [] });
+    mocks.getQuickAccess.mockResolvedValue({
+      items: [
+        { name: "Home", path: HOME },
+        { name: "Documents", path: `${HOME}/Documents` },
+      ],
+    });
+    mocks.listDir.mockImplementation(async (p: string) => ({
+      path: p,
+      parent: p === HOME ? null : PROJECTS,
+      entries:
+        p === HOME
+          ? [
+              { name: "projects", path: PROJECTS, isDir: true, size: 0, mtime: 1 },
+              { name: "README.md", path: `${HOME}/README.md`, isDir: false, size: 100, mtime: 2 },
+            ]
+          : p === PROJECTS
+            ? [
+                { name: "agent-demo", path: AGENT_DEMO, isDir: true, size: 0, mtime: 3 },
+                { name: "md-main", path: `${PROJECTS}/md-main`, isDir: true, size: 0, mtime: 4 },
+              ]
+            : [],
+    }));
+    mocks.mkdir.mockResolvedValue({ path: `${PROJECTS}/new` });
+  });
+  afterEach(() => cleanup());
+
+  it("title aria-label 是中文 '选择工作区目录'", async () => {
+    renderModal();
+    await screen.findByRole("dialog", { name: "选择工作区目录" });
+  });
+
+  it("左侧导航树显示 quickAccess 列表（Home + Documents）", async () => {
+    renderModal();
+    await screen.findByText("projects"); // 等 Modal 渲染完
+    // Documents 在左侧 tree 里出现（同时 listDir mock 返回空）
+    const tree = screen.getByLabelText("导航树");
+    expect(within(tree).getByText("Home")).toBeInTheDocument();
+    expect(within(tree).getByText("Documents")).toBeInTheDocument();
+  });
+
+  it("history 后退 + 前进 + 边界禁用", async () => {
+    renderModal();
+    await screen.findByText("projects");
+    const back = screen.getByLabelText("后退") as HTMLButtonElement;
+    const forward = screen.getByLabelText("前进") as HTMLButtonElement;
+    // 初始只有 home 一次记录，无前驱节点
+    expect(back).toBeDisabled();
+    expect(forward).toBeDisabled();
+
+    // 双击进入 projects 目录 → history 增长
+    fireEvent.doubleClick(screen.getByText("projects"));
+    await waitFor(() => expect(mocks.listDir).toHaveBeenCalledWith(PROJECTS, false));
+    // 现在可以后退
+    await waitFor(() => expect(back).not.toBeDisabled());
+    fireEvent.click(back);
+    await waitFor(() => expect(mocks.listDir).toHaveBeenCalledWith(HOME, false));
+    // 后退后 forward 启用
+    await waitFor(() => expect(forward).not.toBeDisabled());
+  });
+
+  it("列头点击切换排序（点击 修改时间 后带 ↑）", async () => {
+    renderModal();
+    await screen.findByText("projects");
+    const mtimeHeader = screen.getByRole("button", { name: /^修改时间/ });
+    fireEvent.click(mtimeHeader);
+    await waitFor(() => expect(mtimeHeader.textContent).toMatch(/↑/));
+    // 再点切换降序
+    fireEvent.click(mtimeHeader);
+    await waitFor(() => expect(mtimeHeader.textContent).toMatch(/↓/));
+  });
+
+  it("底部文件夹路径框回车跳转非法路径显示错误", async () => {
+    renderModal();
+    await screen.findByText("projects");
+    // 让 listDir 对 /etc/passwd 抛 path_outside_home
+    mocks.listDir.mockImplementation(async (p: string) => {
+      if (!p.startsWith(HOME)) {
+        const { FsError } = await import("../api/fs");
+        throw new FsError(403, "path_outside_home", "路径不在家目录范围内");
+      }
+      return { path: p, parent: null, entries: [] };
+    });
+    const input = screen.getByLabelText("文件夹路径") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "/etc/passwd" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(screen.getByText(/家目录范围内/)).toBeInTheDocument(),
+    );
+  });
+
+  it("显示隐藏切换调 listDir(path, true)", async () => {
+    renderModal();
+    await screen.findByText("projects");
+    fireEvent.click(screen.getByLabelText("显示隐藏文件"));
+    await waitFor(() => expect(mocks.listDir).toHaveBeenCalledWith(HOME, true));
   });
 });

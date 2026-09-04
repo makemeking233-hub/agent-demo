@@ -37,6 +37,15 @@ export interface FsMkdirResponse {
   path: string;
 }
 
+export interface FsQuickAccessItem {
+  name: string;
+  path: string;
+}
+
+export interface FsQuickAccessResponse {
+  items: FsQuickAccessItem[];
+}
+
 /** /api/fs 调用错误（带 HTTP 状态码 + 服务端错误码）。 */
 export class FsError extends Error {
   constructor(
@@ -106,4 +115,14 @@ export async function getDrives(): Promise<FsDrivesResponse> {
   const res = await fetch(`${BASE}/drives`);
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as FsDrivesResponse;
+}
+
+/**
+ * 获取快速访问目录列表（polish-workspace-picker-dsh-style）：
+ * 返回 Home 始终 + 探测到的 Desktop/Documents/Downloads。
+ */
+export async function getQuickAccess(): Promise<FsQuickAccessResponse> {
+  const res = await fetch(`${BASE}/quick-access`);
+  if (!res.ok) throw await parseError(res);
+  return (await res.json()) as FsQuickAccessResponse;
 }

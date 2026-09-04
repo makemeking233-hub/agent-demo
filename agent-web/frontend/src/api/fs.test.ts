@@ -14,6 +14,7 @@ import {
   FsError,
   getDrives,
   getHome,
+  getQuickAccess,
   listDir,
   mkdir,
   type FsListResponse,
@@ -160,5 +161,47 @@ describe("getDrives", () => {
     mockFetchJson({ drives: [] }, { status: 200 });
     const out = await getDrives();
     expect(out.drives).toEqual([]);
+  });
+});
+
+describe("getQuickAccess", () => {
+  it("200 返回 items 列表（含 Home + Desktop + Documents）", async () => {
+    mockFetchJson(
+      {
+        items: [
+          { name: "Home", path: "/home/user" },
+          { name: "Desktop", path: "/home/user/Desktop" },
+          { name: "Documents", path: "/home/user/Documents" },
+        ],
+      },
+      { status: 200 },
+    );
+    const out = await getQuickAccess();
+    expect(out.items).toHaveLength(3);
+    expect(out.items[0].name).toBe("Home");
+    expect(out.items[1].path).toBe("/home/user/Desktop");
+  });
+
+  it("仅 Home（家目录下无快速访问目录）", async () => {
+    mockFetchJson({ items: [{ name: "Home", path: "/home/user" }] }, { status: 200 });
+    const out = await getQuickAccess();
+    expect(out.items).toHaveLength(1);
+    expect(out.items[0].name).toBe("Home");
+  });
+
+  it("403 host_not_trusted 抛 FsError", async () => {
+    mockFetchJson({ error: "host_not_trusted" }, { status: 403 });
+    await expect(getQuickAccess()).rejects.toMatchObject({
+      status: 403,
+      code: "host_not_trusted",
+    });
+  });
+
+  it("5xx 抛 FsError(code=unknown)", async () => {
+    mockFetchEmpty(500, "Internal Server Error");
+    await expect(getQuickAccess()).rejects.toMatchObject({
+      status: 500,
+      code: "unknown",
+    });
   });
 });

@@ -1,38 +1,51 @@
 /**
- * WorkspacePickerModal（add-workspace-picker-modal）。
+ * WorkspacePickerModal（polish-workspace-picker-dsh-style）。
  *
- * <p>仿 DSH 文件选择器布局的目录选择 Modal：路径框 + 面包屑 + 工具栏 + 条目列表 + 提交区。
- * 默认定位到 {@code localStorage["agent-demo.workspace-picker.last-path"]} 或家目录。
- *
- * <p>props.onSubmit 成功后由父组件负责刷新 + 切换工作区（设计 D5/D6）。
+ * <p>仿 DSH `Select Workspace Directory` 视觉：
+ * 顶部 ←/→/↑ + 面包屑 + 显示隐藏；主区域左导航树 + 右文件列表；底部路径框 + name 输入。
  */
 
 import {
   ChevronRight,
+  CornerLeftUp,
   Eye,
   EyeOff,
   Folder,
   FolderPlus,
+  HardDrive,
+  Home,
   RefreshCw,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useReducer, useRef } from "react";
-import { FsError, getDrives, getHome, listDir, mkdir, type FsDrive, type FsEntry } from "../api/fs";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import {
+  FsError,
+  getDrives,
+  getHome,
+  getQuickAccess,
+  listDir,
+  mkdir,
+  type FsDrive,
+  type FsEntry,
+  type FsQuickAccessItem,
+} from "../api/fs";
 import styles from "./WorkspacePickerModal.module.css";
 
 const STORAGE_KEY = "agent-demo.workspace-picker.last-path";
 const NAME_RE = /^[A-Za-z0-9._-]+$/;
+const HISTORY_MAX = 50;
+
+type SortBy = "name" | "mtime" | "type";
+type SortDir = "asc" | "desc";
 
 export interface WorkspacePickerModalProps {
   open: boolean;
   onClose: () => void;
-  /** 提交回调（创建工作区）。父组件负责 POST + 刷新 + 切换。 */
   onSubmit: (name: string, dir: string) => Promise<void>;
 }
 
 interface State {
   currentPath: string;
-  /** 递增计数器，让 effect 在 refresh 时（currentPath 不变）也重新拉列表。 */
   refreshCounter: number;
   entries: FsEntry[];
   loading: boolean;
@@ -42,12 +55,16 @@ interface State {
   includeHidden: boolean;
   isCreatingWs: boolean;
   drives: FsDrive[];
-  /** 顶部路径框当前输入内容（与 currentPath 解耦，支持尚未跳转的输入）。 */
   pathInput: string;
-  /** 新建文件夹 inline 输入态。 */
   showMkdir: boolean;
   mkdirName: string;
   mkdirError: string | null;
+  // polish-workspace-picker-dsh-style
+  history: string[];
+  historyIndex: number;
+  sortBy: SortBy;
+  sortDir: SortDir;
+  quickAccess: FsQuickAccessItem[];
 }
 
 type Action =
@@ -63,13 +80,27 @@ type Action =
   | { type: "set-drives"; drives: FsDrive[] }
   | { type: "show-mkdir"; show: boolean; error?: string }
   | { type: "set-mkdir-name"; name: string }
-  | { type: "set-mkdir-error"; error: string | null };
+  | { type: "set-mkdir-error"; error: string | null }
+  // polish-workspace-picker-dsh-style
+  | { type: "back" }
+  | { type: "forward" }
+  | { type: "up" }
+  | { type: "set-sort"; by: SortBy }
+  | { type: "set-quick-access"; items: FsQuickAccessItem[] };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "set-path-input":
       return { ...state, pathInput: action.value };
-    case "navigate":
+    case "navigate": {
+      const newHistory = [
+        ...state.history.slice(0, state.historyIndex + 1),
+        action.path,
+      ];
+      const trimmed =
+        newHistory.length > HISTORY_MAX
+          ? newHistory.slice(newHistory.length - HISTORY_MAX)
+          : newHistory;
       return {
         ...state,
         currentPath: action.path,
@@ -79,12 +110,12 @@ function reducer(state: State, action: Action): State {
         error: null,
         selectedPath: null,
         workspaceName: "",
-        // 同路径 refresh 时递增 counter，触发 effect 重新拉列表
+        history: trimmed,
+        historyIndex: trimmed.length - 1,
         refreshCounter:
-          state.currentPath === action.path
-            ? state.refreshCounter + 1
-            : state.refreshCounter,
+          state.currentPath === action.path ? state.refreshCounter + 1 : state.refreshCounter,
       };
+    }
     case "loaded":
       return { ...state, entries: action.entries, loading: false, error: null };
     case "set-loading":
@@ -119,6 +150,48 @@ function reducer(state: State, action: Action): State {
       return { ...state, mkdirName: action.name };
     case "set-mkdir-error":
       return { ...state, mkdirError: action.error };
+    case "back":
+      if (state.historyIndex <= 0) return state;
+      return {
+        ...state,
+        historyIndex: state.historyIndex - 1,
+        currentPath: state.history[state.historyIndex - 1],
+        pathInput: state.history[state.historyIndex - 1],
+        entries: [],
+        loading: true,
+        error: null,
+        selectedPath: null,
+        workspaceName: "",
+        refreshCounter: state.refreshCounter + 1,
+      };
+    case "forward":
+      if (state.historyIndex >= state.history.length - 1) return state;
+      return {
+        ...state,
+        historyIndex: state.historyIndex + 1,
+        currentPath: state.history[state.historyIndex + 1],
+        pathInput: state.history[state.historyIndex + 1],
+        entries: [],
+        loading: true,
+        error: null,
+        selectedPath: null,
+        workspaceName: "",
+        refreshCounter: state.refreshCounter + 1,
+      };
+    case "up": {
+      const parent = parentOf(state.currentPath);
+      if (!parent || parent === state.currentPath) return state;
+      return reducer(state, { type: "navigate", path: parent });
+    }
+    case "set-sort": {
+      // 同字段点击切换升降序；新字段默认升序
+      if (state.sortBy === action.by) {
+        return { ...state, sortDir: state.sortDir === "asc" ? "desc" : "asc" };
+      }
+      return { ...state, sortBy: action.by, sortDir: "asc" };
+    }
+    case "set-quick-access":
+      return { ...state, quickAccess: action.items };
   }
 }
 
@@ -137,6 +210,11 @@ const INITIAL: State = {
   showMkdir: false,
   mkdirName: "",
   mkdirError: null,
+  history: [],
+  historyIndex: -1,
+  sortBy: "name",
+  sortDir: "asc",
+  quickAccess: [],
 };
 
 function basenameOf(p: string): string {
@@ -148,7 +226,8 @@ function basenameOf(p: string): string {
 function parentOf(p: string): string | null {
   if (!p) return null;
   const idx = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
-  return idx <= 0 ? null : p.slice(0, idx);
+  if (idx <= 0) return null;
+  return p.slice(0, idx);
 }
 
 function errorMessage(err: unknown): string {
@@ -171,6 +250,37 @@ function errorMessage(err: unknown): string {
   return (err as Error)?.message ?? "未知错误";
 }
 
+function joinPath(parent: string, child: string): string {
+  const sep = parent.includes("\\") ? "\\" : "/";
+  return parent.endsWith(sep) ? parent + child : parent + sep + child;
+}
+
+function sortEntries(
+  entries: FsEntry[],
+  by: SortBy,
+  dir: SortDir,
+): FsEntry[] {
+  const out = entries.slice();
+  const mult = dir === "asc" ? 1 : -1;
+  out.sort((a, b) => {
+    // 目录始终优先
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    let cmp = 0;
+    if (by === "name") {
+      cmp = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    } else if (by === "mtime") {
+      cmp = a.mtime - b.mtime;
+    } else {
+      // type: 目录固定为 __dir__，文件按扩展名
+      const ka = a.isDir ? "__dir__" : (a.name.split(".").pop() ?? "");
+      const kb = b.isDir ? "__dir__" : (b.name.split(".").pop() ?? "");
+      cmp = ka.localeCompare(kb, undefined, { sensitivity: "base" });
+    }
+    return cmp * mult;
+  });
+  return out;
+}
+
 export function WorkspacePickerModal({
   open,
   onClose,
@@ -179,17 +289,23 @@ export function WorkspacePickerModal({
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
-  // 打开时初始化路径
+  // 打开时初始化：拉 home + drives + quick-access
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     (async () => {
       try {
-        const [home, drives] = await Promise.all([getHome(), getDrives().catch(() => ({ drives: [] }))]);
+        const [home, drives, qa] = await Promise.all([
+          getHome(),
+          getDrives().catch(() => ({ drives: [] as FsDrive[] })),
+          getQuickAccess().catch(() => ({ items: [] as FsQuickAccessItem[] })),
+        ]);
         if (cancelled) return;
         const remembered = localStorage.getItem(STORAGE_KEY);
-        const initial = remembered && remembered.startsWith(home.path) ? remembered : home.path;
+        const initial =
+          remembered && remembered.startsWith(home.path) ? remembered : home.path;
         dispatch({ type: "set-drives", drives: drives.drives });
+        dispatch({ type: "set-quick-access", items: qa.items });
         dispatch({ type: "navigate", path: initial });
       } catch (e) {
         dispatch({ type: "set-error", error: errorMessage(e) });
@@ -200,7 +316,7 @@ export function WorkspacePickerModal({
     };
   }, [open]);
 
-  // 路径变化或 refresh 时拉列表
+  // 路径变化 / refresh / includeHidden 变化时拉列表
   useEffect(() => {
     if (!open || !state.currentPath) return;
     let cancelled = false;
@@ -219,13 +335,13 @@ export function WorkspacePickerModal({
     };
   }, [open, state.currentPath, state.includeHidden, state.refreshCounter]);
 
-  // Esc 关闭（依赖 handleClose，让 handleClose 拿到最新的 currentPath）
+  // Esc 关闭
   const handleClose = useCallback(() => {
     if (state.currentPath) {
       try {
         localStorage.setItem(STORAGE_KEY, state.currentPath);
       } catch {
-        /* 静默失败 */
+        /* 静默 */
       }
     }
     onClose();
@@ -240,9 +356,23 @@ export function WorkspacePickerModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, handleClose]);
 
-  const handleRefresh = useCallback(() => {
-    dispatch({ type: "navigate", path: state.currentPath });
-  }, [state.currentPath]);
+  // 排序后的条目
+  const sortedEntries = useMemo(
+    () => sortEntries(state.entries, state.sortBy, state.sortDir),
+    [state.entries, state.sortBy, state.sortDir],
+  );
+
+  const canBack = state.historyIndex > 0;
+  const canForward = state.historyIndex < state.history.length - 1;
+  const canUp = (() => {
+    const p = parentOf(state.currentPath);
+    return p && p !== state.currentPath;
+  })();
+  const isDrivesView = state.currentPath === "__drives__";
+
+  const breadcrumbs = isDrivesView
+    ? []
+    : state.currentPath.split(/[\\/]/).filter(Boolean);
 
   const handlePathInputKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -263,21 +393,12 @@ export function WorkspacePickerModal({
     dispatch({ type: "navigate", path: entry.path });
   };
 
-  const handleParentNav = () => {
-    const p = parentOf(state.currentPath);
-    if (p) dispatch({ type: "navigate", path: p });
+  const handleQuickAccessClick = (item: FsQuickAccessItem) => {
+    dispatch({ type: "navigate", path: item.path });
   };
 
-  const handleDrillDown = (path: string) => {
-    dispatch({ type: "navigate", path });
-  };
-
-  const handleShowThisPc = () => {
-    // "此电脑"层：仅 Windows 有意义；Linux/macOS 直接跳回 home
-    if (state.drives.length > 0) {
-      // 切到第一个盘符列表视图 —— 用临时路径表示
-      dispatch({ type: "navigate", path: "__drives__" });
-    }
+  const handleDriveClick = (drive: FsDrive) => {
+    dispatch({ type: "navigate", path: drive.path });
   };
 
   const handleSubmit = async () => {
@@ -308,18 +429,11 @@ export function WorkspacePickerModal({
     try {
       await mkdir(fullPath);
       dispatch({ type: "show-mkdir", show: false });
-      handleRefresh();
+      dispatch({ type: "navigate", path: state.currentPath });
     } catch (e) {
       dispatch({ type: "set-mkdir-error", error: errorMessage(e) });
     }
   };
-
-  if (!open) return null;
-
-  // 面包屑段
-  const breadcrumbs = state.currentPath === "__drives__"
-    ? []
-    : state.currentPath.split(/[\\/]/).filter(Boolean);
 
   const canSubmit =
     !!state.selectedPath &&
@@ -328,6 +442,8 @@ export function WorkspacePickerModal({
     state.workspaceName.trim().length <= 64 &&
     !state.isCreatingWs;
 
+  if (!open) return null;
+
   return (
     <div
       className={styles.overlay}
@@ -335,75 +451,120 @@ export function WorkspacePickerModal({
       onClick={(e) => {
         if (e.target === overlayRef.current) handleClose();
       }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="选择工作区目录"
     >
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label="选择工作区目录">
+      <div className={styles.modal}>
         <header className={styles.header}>
-          <span className={styles.title}>选择工作区目录</span>
-          <button type="button" className={styles.iconButton} onClick={handleClose} aria-label="关闭">
+          <span className={styles.title}>Select Workspace Directory</span>
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={handleClose}
+            aria-label="关闭"
+          >
             <X size={16} />
           </button>
         </header>
 
-        <div className={styles.pathRow}>
-          <input
-            className={styles.pathInput}
-            value={state.pathInput}
-            onChange={(e) => dispatch({ type: "set-path-input", value: e.target.value })}
-            onKeyDown={handlePathInputKey}
-            placeholder="输入绝对路径后按 Enter 跳转"
-            aria-label="路径输入框"
-          />
-          <button
-            type="button"
-            className={styles.pathJump}
-            onClick={() => dispatch({ type: "navigate", path: state.pathInput.trim() })}
-            disabled={!state.pathInput.trim()}
-          >
-            跳转
-          </button>
-        </div>
-
-        <nav className={styles.breadcrumb} aria-label="面包屑">
-          <button
-            type="button"
-            className={styles.breadcrumbItem}
-            onClick={handleShowThisPc}
-            disabled={state.drives.length === 0 && breadcrumbs.length === 0}
-          >
-            此电脑
-          </button>
-          {breadcrumbs.length > 0 && state.currentPath !== "__drives__" && (
-            <ChevronRight size={12} className={styles.breadcrumbSep} />
-          )}
-          {breadcrumbs.map((seg, i) => {
-            const fullPath = reconstructPath(state.currentPath, i);
-            const isLast = i === breadcrumbs.length - 1;
-            return (
-              <span key={`${seg}-${i}`} className={styles.breadcrumbPart}>
-                <button
-                  type="button"
-                  className={`${styles.breadcrumbItem} ${isLast ? styles.breadcrumbCurrent : ""}`}
-                  onClick={() => !isLast && handleDrillDown(fullPath)}
-                  disabled={isLast}
-                >
-                  {seg}
-                </button>
-                {!isLast && <ChevronRight size={12} className={styles.breadcrumbSep} />}
-              </span>
-            );
-          })}
-        </nav>
-
         <div className={styles.toolbar}>
-          <button type="button" className={styles.toolButton} onClick={() => dispatch({ type: "show-mkdir", show: true })} disabled={state.currentPath === "__drives__"}>
-            <FolderPlus size={14} /> 新建文件夹
+          <div className={styles.historyButtons}>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={() => dispatch({ type: "back" })}
+              disabled={!canBack}
+              aria-label="后退"
+              title="后退"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={() => dispatch({ type: "forward" })}
+              disabled={!canForward}
+              aria-label="前进"
+              title="前进"
+            >
+              →
+            </button>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={() => dispatch({ type: "up" })}
+              disabled={!canUp}
+              aria-label="上一级"
+              title="上一级"
+            >
+              <CornerLeftUp size={14} />
+            </button>
+          </div>
+
+          <nav className={styles.breadcrumb} aria-label="面包屑">
+            <button
+              type="button"
+              className={styles.breadcrumbItem}
+              onClick={() =>
+                dispatch({
+                  type: "navigate",
+                  path: state.quickAccess[0]?.path ?? "",
+                })
+              }
+            >
+              <Home size={12} /> Home
+            </button>
+            {!isDrivesView &&
+              breadcrumbs.slice(1).map((seg, i) => {
+                const fullPath = state.currentPath
+                  .split(/[\\/]/)
+                  .slice(0, i + 2)
+                  .join(state.currentPath.includes("\\") ? "\\" : "/");
+                return (
+                  <span key={`${seg}-${i}`} className={styles.breadcrumbPart}>
+                    <ChevronRight size={12} className={styles.breadcrumbSep} />
+                    <button
+                      type="button"
+                      className={styles.breadcrumbItem}
+                      onClick={() => dispatch({ type: "navigate", path: fullPath })}
+                    >
+                      {seg}
+                    </button>
+                  </span>
+                );
+              })}
+          </nav>
+
+          <button
+            type="button"
+            className={`${styles.iconButton} ${styles.showHiddenToggle}`}
+            onClick={() => dispatch({ type: "toggle-hidden" })}
+            aria-label={state.includeHidden ? "隐藏文件" : "显示隐藏文件"}
+            title={state.includeHidden ? "隐藏文件" : "显示隐藏文件"}
+          >
+            {state.includeHidden ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
-          <button type="button" className={styles.toolButton} onClick={handleRefresh} aria-label="刷新">
+
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={() =>
+              dispatch({ type: "navigate", path: state.currentPath })
+            }
+            aria-label="刷新"
+            title="刷新"
+          >
             <RefreshCw size={14} />
           </button>
-          <button type="button" className={styles.toolButton} onClick={() => dispatch({ type: "toggle-hidden" })} aria-label={state.includeHidden ? "隐藏文件" : "显示文件"}>
-            {state.includeHidden ? <EyeOff size={14} /> : <Eye size={14} />}
-            {state.includeHidden ? "隐藏文件" : "显示隐藏"}
+
+          <button
+            type="button"
+            className={styles.toolButton}
+            onClick={() => dispatch({ type: "show-mkdir", show: true })}
+            disabled={isDrivesView}
+          >
+            <FolderPlus size={14} /> 新建文件夹
           </button>
         </div>
 
@@ -412,75 +573,167 @@ export function WorkspacePickerModal({
             <input
               className={styles.pathInput}
               value={state.mkdirName}
-              onChange={(e) => dispatch({ type: "set-mkdir-name", name: e.target.value })}
+              onChange={(e) =>
+                dispatch({ type: "set-mkdir-name", name: e.target.value })
+              }
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleMkdirConfirm();
-                if (e.key === "Escape") dispatch({ type: "show-mkdir", show: false });
+                if (e.key === "Escape")
+                  dispatch({ type: "show-mkdir", show: false });
               }}
               placeholder="新文件夹名"
               autoFocus
             />
-            <button type="button" className={styles.confirmYes} onClick={handleMkdirConfirm}>
+            <button
+              type="button"
+              className={styles.confirmYes}
+              onClick={handleMkdirConfirm}
+            >
               创建
             </button>
-            <button type="button" className={styles.confirmNo} onClick={() => dispatch({ type: "show-mkdir", show: false })}>
+            <button
+              type="button"
+              className={styles.confirmNo}
+              onClick={() => dispatch({ type: "show-mkdir", show: false })}
+            >
               取消
             </button>
-            {state.mkdirError && <span className={styles.errorText}>{state.mkdirError}</span>}
+            {state.mkdirError && (
+              <span className={styles.errorText}>{state.mkdirError}</span>
+            )}
           </div>
         )}
 
         {state.error && <div className={styles.errorBanner}>{state.error}</div>}
 
-        <div className={styles.entryList} role="list">
-          {state.currentPath !== "__drives__" && (
-            <button type="button" className={styles.entryItem} onClick={handleParentNav}>
-              <Folder size={14} className={styles.entryIcon} /> ..
-            </button>
-          )}
-          {state.currentPath === "__drives__" &&
-            state.drives.map((d) => (
+        <div className={styles.main}>
+          <aside className={styles.tree} aria-label="导航树">
+            <div className={styles.treeSection}>
+              <div className={styles.treeSectionTitle}>快速访问</div>
+              {state.quickAccess.map((item) => (
+                <button
+                  key={item.path}
+                  type="button"
+                  className={`${styles.treeItem} ${
+                    state.currentPath === item.path ? styles.treeItemActive : ""
+                  }`}
+                  onClick={() => handleQuickAccessClick(item)}
+                  title={item.path}
+                >
+                  {item.name === "Home" ? (
+                    <Home size={13} className={styles.treeItemIcon} />
+                  ) : (
+                    <Folder size={13} className={styles.treeItemIcon} />
+                  )}
+                  <span>{item.name}</span>
+                </button>
+              ))}
+            </div>
+            {state.drives.length > 0 && (
+              <div className={styles.treeSection}>
+                <div className={styles.treeSectionTitle}>此电脑</div>
+                {state.drives.map((d) => (
+                  <button
+                    key={d.path}
+                    type="button"
+                    className={styles.treeItem}
+                    onClick={() => handleDriveClick(d)}
+                    title={d.path}
+                  >
+                    <HardDrive size={13} className={styles.treeItemIcon} />
+                    <span>{d.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </aside>
+
+          <div className={styles.list}>
+            <div className={styles.listHeader}>
               <button
-                key={d.path}
                 type="button"
-                className={styles.entryItem}
-                onClick={() => dispatch({ type: "select", path: d.path })}
-                onDoubleClick={() => dispatch({ type: "navigate", path: d.path })}
+                className={`${styles.listHeaderCell} ${styles.listHeaderName}`}
+                onClick={() => dispatch({ type: "set-sort", by: "name" })}
               >
-                <Folder size={14} className={styles.entryIcon} /> {d.name}
+                名称{state.sortBy === "name" && (state.sortDir === "asc" ? " ↑" : " ↓")}
               </button>
-            ))}
-          {state.currentPath !== "__drives__" &&
-            state.entries.map((e) => (
               <button
-                key={e.path}
                 type="button"
-                className={`${styles.entryItem} ${state.selectedPath === e.path ? styles.entrySelected : ""} ${
-                  !e.isDir ? styles.entryDisabled : ""
-                }`}
-                onClick={() => handleEntryClick(e)}
-                onDoubleClick={() => handleEntryDoubleClick(e)}
-                disabled={!e.isDir}
-                title={e.path}
+                className={`${styles.listHeaderCell} ${styles.listHeaderMtime}`}
+                onClick={() => dispatch({ type: "set-sort", by: "mtime" })}
               >
-                {e.isDir ? <Folder size={14} className={styles.entryIcon} /> : <span className={styles.fileIcon}>📄</span>}
-                <span className={styles.entryName}>{e.name}</span>
-                <span className={styles.entryMeta}>{formatSize(e.size)}</span>
+                修改时间{state.sortBy === "mtime" && (state.sortDir === "asc" ? " ↑" : " ↓")}
               </button>
-            ))}
-          {state.currentPath !== "__drives__" && state.entries.length === 0 && !state.loading && !state.error && (
-            <div className={styles.emptyHint}>此目录为空</div>
-          )}
-          {state.loading && <div className={styles.loadingHint}>加载中…</div>}
+              <button
+                type="button"
+                className={`${styles.listHeaderCell} ${styles.listHeaderType}`}
+                onClick={() => dispatch({ type: "set-sort", by: "type" })}
+              >
+                类型{state.sortBy === "type" && (state.sortDir === "asc" ? " ↑" : " ↓")}
+              </button>
+            </div>
+
+            <div className={styles.entryList} role="list">
+              {!isDrivesView && (
+                <button
+                  type="button"
+                  className={styles.entryItem}
+                  onClick={() => dispatch({ type: "up" })}
+                >
+                  <Folder size={14} className={styles.entryIcon} /> ..
+                </button>
+              )}
+              {sortedEntries.map((e) => (
+                <button
+                  key={e.path}
+                  type="button"
+                  className={`${styles.entryItem} ${
+                    state.selectedPath === e.path ? styles.entrySelected : ""
+                  } ${!e.isDir ? styles.entryDisabled : ""}`}
+                  onClick={() => handleEntryClick(e)}
+                  onDoubleClick={() => handleEntryDoubleClick(e)}
+                  disabled={!e.isDir}
+                  title={e.path}
+                >
+                  {e.isDir ? (
+                    <Folder size={14} className={styles.entryIcon} />
+                  ) : (
+                    <span className={styles.fileIcon}>📄</span>
+                  )}
+                  <span className={styles.entryName}>{e.name}</span>
+                  <span className={styles.entryMtime}>
+                    {e.mtime ? new Date(e.mtime).toLocaleString() : ""}
+                  </span>
+                  <span className={styles.entryType}>
+                    {e.isDir ? "文件夹" : "文件"}
+                  </span>
+                </button>
+              ))}
+              {!isDrivesView &&
+                sortedEntries.length === 0 &&
+                !state.loading &&
+                !state.error && <div className={styles.emptyHint}>此目录为空</div>}
+              {state.loading && <div className={styles.loadingHint}>加载中…</div>}
+            </div>
+          </div>
         </div>
 
         <footer className={styles.footer}>
-          <div className={styles.footerPath}>
-            <span className={styles.footerLabel}>当前路径：</span>
-            <span className={styles.footerValue}>{state.selectedPath ?? state.currentPath ?? "—"}</span>
+          <div className={styles.footerRow}>
+            <span className={styles.footerLabel}>文件夹:</span>
+            <input
+              className={styles.pathInput}
+              value={state.pathInput}
+              onChange={(e) =>
+                dispatch({ type: "set-path-input", value: e.target.value })
+              }
+              onKeyDown={handlePathInputKey}
+              placeholder="输入绝对路径后按 Enter 跳转"
+              aria-label="文件夹路径"
+            />
           </div>
-          <div className={styles.footerNameRow}>
-            <span className={styles.footerLabel}>工作区名称：</span>
+          <div className={styles.footerRow}>
+            <span className={styles.footerLabel}>工作区名称:</span>
             <input
               className={styles.workspaceNameInput}
               value={state.workspaceName}
@@ -488,42 +741,26 @@ export function WorkspacePickerModal({
               placeholder="md-main"
               aria-label="工作区名称"
             />
-          </div>
-          <div className={styles.footerActions}>
-            <button type="button" className={styles.confirmYes} onClick={handleSubmit} disabled={!canSubmit}>
-              {state.isCreatingWs ? "创建中…" : "选择此目录"}
-            </button>
-            <button type="button" className={styles.confirmNo} onClick={handleClose}>
-              取消
-            </button>
+            <div className={styles.footerActions}>
+              <button
+                type="button"
+                className={styles.confirmNo}
+                onClick={handleClose}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className={styles.confirmYes}
+                onClick={handleSubmit}
+                disabled={!canSubmit}
+              >
+                {state.isCreatingWs ? "创建中…" : "选择此目录"}
+              </button>
+            </div>
           </div>
         </footer>
       </div>
     </div>
   );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes === 0) return "—";
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  let v = bytes;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
-}
-
-function joinPath(parent: string, child: string): string {
-  if (parent === "__drives__") return child;
-  const sep = parent.includes("\\") ? "\\" : "/";
-  return parent.endsWith(sep) ? parent + child : parent + sep + child;
-}
-
-/** 从完整路径与分隔符位置重组面包屑点击的路径。 */
-function reconstructPath(full: string, segmentIndex: number): string {
-  const sep = full.includes("\\") ? "\\" : "/";
-  const parts = full.split(/[\\/]/).filter(Boolean);
-  return parts.slice(0, segmentIndex + 1).join(sep);
 }
