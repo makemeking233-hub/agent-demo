@@ -15,7 +15,7 @@
 
 ## 3. 集成
 
-- [ ] 3.1 改造 `Sidebar.tsx`：删除 `showCreateWs / wsName / wsDir / wsError` 四个 state 与 `workspaceForm` JSX 块（约 30 行）；保留 `onCreateWorkspace` props，新增 `onCreateWorkspaceFromPicker(name, dir)` 透传 + `WorkspacePickerModal` 嵌入；`+` 按钮 onClick 改为 `setShowPicker(true)`；样式同步删除 `.workspaceForm / .workspaceInput / .workspaceError` 三类（`Sidebar.module.css`）；`Sidebar.test.tsx` 增 1 个用例（点击 `+` 弹 Modal）
+- [x] 3.1 改造 `Sidebar.tsx`：删除 `showCreateWs / wsName / wsDir / wsError` 四个 state 与 `workspaceForm` JSX 块（约 30 行）；保留 `onCreateWorkspace` props，新增 `onCreateWorkspaceFromPicker(name, dir)` 透传 + `WorkspacePickerModal` 嵌入；`+` 按钮 onClick 改为 `setShowPicker(true)`；样式同步删除 `.workspaceForm / .workspaceInput / .workspaceError` 三类（`Sidebar.module.css`）；`Sidebar.test.tsx` 增 1 个用例（点击 `+` 弹 Modal）
 - [ ] 3.2 改造 `App.tsx`：新增 `showPicker` state + `handleCreateWorkspaceFromPicker(name, dir)` 回调（成功后刷新 workspaces 列表 + `setActiveWorkspace(newWs.name)`）；把 Modal 渲染放在 `Sidebar` 旁边；`mvn -pl agent-web verify` 通过（包含 jacoco 门禁）
 - [ ] 3.3 手动跑 `mvn -pl agent-web spring-boot:run -Dspring-boot.run.profiles=web` + 浏览器打开 `http://127.0.0.1:8080`，端到端验证：点击 `+` 弹 Modal → 浏览/跳转/新建/选目录 → 输入 name → 点选择 → Sidebar 出现新工作区并自动切换；截图归档到 `docs/test-agent-demo/<时间戳>-workspace-picker-e2e/` 四件套
 

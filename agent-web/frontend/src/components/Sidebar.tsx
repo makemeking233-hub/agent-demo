@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
+import { WorkspacePickerModal } from "./WorkspacePickerModal";
 import styles from "./Sidebar.module.css";
 
 export interface SidebarSession {
@@ -87,10 +88,7 @@ export function Sidebar(props: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const [showCreateWs, setShowCreateWs] = useState(false);
-  const [wsName, setWsName] = useState("");
-  const [wsDir, setWsDir] = useState("");
-  const [wsError, setWsError] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
 
   function toggle() {
     const next = !collapsed;
@@ -133,22 +131,6 @@ export function Sidebar(props: SidebarProps) {
     }
     setRenamingId(null);
     setRenameValue("");
-  }
-
-  async function submitCreateWorkspace() {
-    if (!wsName.trim() || !wsDir.trim()) {
-      setWsError("名称与目录均需填写");
-      return;
-    }
-    try {
-      await props.onCreateWorkspace(wsName.trim(), wsDir.trim());
-      setShowCreateWs(false);
-      setWsName("");
-      setWsDir("");
-      setWsError(null);
-    } catch (e) {
-      setWsError((e as Error).message);
-    }
   }
 
   const source = archiveView ? props.archived : props.sessions;
@@ -203,7 +185,7 @@ export function Sidebar(props: SidebarProps) {
         <button
           type="button"
           className={styles.iconButton}
-          onClick={() => setShowCreateWs(true)}
+          onClick={() => setShowPicker(true)}
           aria-label="新建工作区"
           title="新建工作区"
         >
@@ -211,37 +193,12 @@ export function Sidebar(props: SidebarProps) {
         </button>
       </div>
 
-      {showCreateWs && (
-        <div className={styles.workspaceForm}>
-          <input
-            className={styles.workspaceInput}
-            placeholder="工作区名（如 md-main）"
-            value={wsName}
-            onChange={(e) => setWsName(e.target.value)}
-          />
-          <input
-            className={styles.workspaceInput}
-            placeholder="目录路径（绝对路径）"
-            value={wsDir}
-            onChange={(e) => setWsDir(e.target.value)}
-          />
-          {wsError && <span className={styles.workspaceError}>{wsError}</span>}
-          <div className={styles.confirmActions}>
-            <button type="button" className={styles.confirmYes} onClick={submitCreateWorkspace}>
-              创建
-            </button>
-            <button
-              type="button"
-              className={styles.confirmNo}
-              onClick={() => {
-                setShowCreateWs(false);
-                setWsError(null);
-              }}
-            >
-              取消
-            </button>
-          </div>
-        </div>
+      {showPicker && (
+        <WorkspacePickerModal
+          open={showPicker}
+          onClose={() => setShowPicker(false)}
+          onSubmit={props.onCreateWorkspace}
+        />
       )}
 
       <div className={styles.list}>

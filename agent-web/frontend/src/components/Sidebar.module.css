@@ -295,28 +295,6 @@
 .workspaceName { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .workspaceCount { opacity: 0.7; }
 
-.workspaceForm {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 6px 12px;
-  padding: 8px;
-  border: 1px solid var(--dsw-alias-border);
-  border-radius: var(--dsw-alias-radius-sm);
-  background: var(--dsw-static-surface-sunken);
-}
-
-.workspaceInput {
-  padding: 5px 8px;
-  border: 1px solid var(--dsw-alias-border);
-  border-radius: var(--dsw-alias-radius-sm);
-  background: var(--dsw-alias-bg);
-  color: var(--dsw-alias-text);
-  font-size: 12px;
-}
-
-.workspaceError { font-size: 11px; color: var(--dsw-alias-danger, #d9480f); }
-
 .menuWrap { position: relative; flex-shrink: 0; }
 
 .menuButton {

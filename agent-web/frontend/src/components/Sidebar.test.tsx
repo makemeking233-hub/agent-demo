@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Sidebar, type SidebarSession } from "./Sidebar";
+
+// 嵌入的 WorkspacePickerModal 会调 /api/fs/*；mock 掉避免真实 fetch
+vi.mock("../api/fs", () => ({
+  getHome: vi.fn().mockResolvedValue({ path: "/home/user", platform: "linux" }),
+  listDir: vi.fn().mockResolvedValue({ path: "/home/user", parent: null, entries: [] }),
+  mkdir: vi.fn().mockResolvedValue({ path: "/home/user/new" }),
+  getDrives: vi.fn().mockResolvedValue({ drives: [] }),
+}));
 
 function sess(id: string, title: string, time: number, workspace = "agent-demo"): SidebarSession {
   return { id, title, preview: "", workspace, time };
@@ -84,13 +92,19 @@ describe("Sidebar 会话管理", () => {
     expect(p.onRename).toHaveBeenCalledWith("s1", "改标题");
   });
 
-  it("新建工作区提交后调 onCreateWorkspace", () => {
+  it("点击新建工作区 + 弹出 WorkspacePickerModal", async () => {
     const p = renderSidebar();
     fireEvent.click(screen.getByLabelText("新建工作区"));
-    fireEvent.change(screen.getByPlaceholderText("工作区名（如 md-main）"), { target: { value: "md-main" } });
-    fireEvent.change(screen.getByPlaceholderText("目录路径（绝对路径）"), { target: { value: "E:\\md-main" } });
-    fireEvent.click(screen.getByText("创建"));
-    expect(p.onCreateWorkspace).toHaveBeenCalledWith("md-main", "E:\\md-main");
+    // Modal 出现，含 "选择工作区目录" 标题
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "选择工作区目录" })).toBeInTheDocument(),
+    );
+    // 关闭 Modal → dialog 消失
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "选择工作区目录" })).not.toBeInTheDocument(),
+    );
+    expect(p.onCreateWorkspace).not.toHaveBeenCalled();
   });
 
   it("归档视图列出归档会话并可恢复", () => {
