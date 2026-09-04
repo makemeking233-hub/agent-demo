@@ -15,6 +15,7 @@
 | `2026-08-30-plugin-system/` | add-plugin-system Plugin 插件框架测试（Plugin / PluginContext / ExtensionPoints / PluginManager + Mcp / Skills / Memory 三插件） | 2026-08-30 | 12（6 新增 + 6 既有） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-02-web-search/` | add-web-search-tool 内置 WebSearch 工具测试（WebSearchProvider 契约 / DeepSeek 原生搜索 / Tavily 检索 / 工厂选择 / Tool 协议） | 2026-09-02 | 27（新增，另 250 既有回归） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-02-session-switch-selenium/` | web 会话切换功能 Selenium 自动化验证（真实会话列表 / 点击加载历史 / 切换更新） | 2026-09-02 | 5 | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-04-workspace-picker/` | add-workspace-picker-modal 工作区目录选择器测试（后端 fs API + 前端 Modal + Sidebar 集成） | 2026-09-04 | 51（28 Java + 23 vitest） | ✅ 全绿 | ✅ | 已归档 |
 
 ---
 
@@ -49,6 +50,14 @@
 - **测试目标**：对 add-web-search-tool（内置 WebSearch 工具）做单元测试收尾，验证 `WebSearchProvider` 契约 + `WebSearchResult`/`Source` record、DeepSeek 原生搜索（Anthropic 兼容 `/messages` + `web_search_20250305` 严格模式 + 去重）与 Tavily 检索端点（`results[]` 解析 + 截断）、`WebSearchProviderFactory` 自动选择/显式优先、`WebSearchTool` 协议与 Fail-Closed、`search` 配置解析。
 - **执行要点**：`mvn -pl agent-core test` + `mvn -pl agent-core clean verify`；新增 `WebSearchProviderTest`(4) + `DeepSeekWebSearchProviderTest`(4) + `TavilyWebSearchProviderTest`(4) + `WebSearchProviderFactoryTest`(5) + `WebSearchToolTest`(8) 共 25 条 + 扩展 `ConfigLoaderTest`(+2) = 27 条；另扩展 `AgentLoopFactoryTest` 断言注册 `web_search`；全量 277 用例全绿（`Tests run: 277, Failures: 0, Errors: 0, Skipped: 0`）。
 - **关键发现**：jacoco 覆盖率门禁达标（`All coverage checks have been met`，LINE≥80% / BRANCH≥70%）；缺陷 0；既有 250 条用例无回归。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.6 `2026-09-04-workspace-picker/` — add-workspace-picker-modal 工作区目录选择器测试
+
+- **测试目标**：对 `add-workspace-picker-modal` change 做完整验证，覆盖后端 fs API（`/api/fs/home|list|mkdir|drives` 4 端点 + 路径安全边界）、前端 `WorkspacePickerModal`（仿 DSH 文件选择器交互）、Sidebar 嵌入 Modal 端到端链路（点 `+` → 弹 Modal → 浏览 → 选中 → 改 name → 提交 → `onCreateWorkspace`）；同时确认 jacoco 门禁（LINE≥80% / BRANCH≥70%）通过。
+- **执行要点**：后端 `mvn -pl agent-web -am test`（149 + 既有 322 = 471 全绿）+ 前端 `npx vitest run`（72 全绿）+ `mvn -pl agent-web verify`（jacoco check-coverage BUILD SUCCESS）；新增 28 Java 单测（HomePathGuardTest 13 + FsControllerTest 15）+ 23 vitest 用例（fs.test 12 + WorkspacePickerModal 14 + Sidebar 9 其中 1 新增端到端集成）。
+- **关键发现**：`mkdir 模式`首版只校验直接父目录，测试 `mkdirCreatesNestedDirectories` 暴露"嵌套 mkdir"逻辑缺失，沿 parent 链向上找第一个 existing 祖先后才通过；`vi.mock` factory 不能引用顶层 var，用 `vi.hoisted` 包装 mock 对象解决；PowerShell 把 `-DskipNpm=true` 误解析为 lifecycle phase，需用 `cmd.exe /c` 调用 mvn 绕过。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 

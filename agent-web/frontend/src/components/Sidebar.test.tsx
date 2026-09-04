@@ -1,14 +1,52 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Sidebar, type SidebarSession } from "./Sidebar";
 
 // 嵌入的 WorkspacePickerModal 会调 /api/fs/*；mock 掉避免真实 fetch
-vi.mock("../api/fs", () => ({
-  getHome: vi.fn().mockResolvedValue({ path: "/home/user", platform: "linux" }),
-  listDir: vi.fn().mockResolvedValue({ path: "/home/user", parent: null, entries: [] }),
-  mkdir: vi.fn().mockResolvedValue({ path: "/home/user/new" }),
-  getDrives: vi.fn().mockResolvedValue({ drives: [] }),
+// vi.hoisted 让 fsMock 在 vi.mock factory 里可见
+const fsMock = vi.hoisted(() => ({
+  getHome: vi.fn(),
+  listDir: vi.fn(),
+  mkdir: vi.fn(),
+  getDrives: vi.fn(),
 }));
+
+vi.mock("../api/fs", async () => {
+  const actual = await vi.importActual<typeof import("../api/fs")>("../api/fs");
+  return {
+    ...actual,
+    getHome: fsMock.getHome,
+    listDir: fsMock.listDir,
+    mkdir: fsMock.mkdir,
+    getDrives: fsMock.getDrives,
+  };
+});
+
+beforeEach(() => {
+  fsMock.getHome.mockReset();
+  fsMock.listDir.mockReset();
+  fsMock.mkdir.mockReset();
+  fsMock.getDrives.mockReset();
+  fsMock.getHome.mockResolvedValue({ path: "/home/user", platform: "linux" });
+  fsMock.listDir.mockImplementation(async (p: string) => ({
+    path: p,
+    parent: p === "/home/user" ? null : "/home/user",
+    entries:
+      p === "/home/user"
+        ? [
+            { name: "projects", path: "/home/user/projects", isDir: true, size: 0, mtime: 1 },
+            { name: "README.md", path: "/home/user/README.md", isDir: false, size: 100, mtime: 2 },
+          ]
+        : p === "/home/user/projects"
+          ? [
+              { name: "agent-demo", path: "/home/user/projects/agent-demo", isDir: true, size: 0, mtime: 3 },
+              { name: "md-main", path: "/home/user/projects/md-main", isDir: true, size: 0, mtime: 4 },
+            ]
+          : [],
+  }));
+  fsMock.mkdir.mockResolvedValue({ path: "/home/user/new" });
+  fsMock.getDrives.mockResolvedValue({ drives: [] });
+});
 
 function sess(id: string, title: string, time: number, workspace = "agent-demo"): SidebarSession {
   return { id, title, preview: "", workspace, time };
@@ -105,6 +143,38 @@ describe("Sidebar 会话管理", () => {
       expect(screen.queryByRole("dialog", { name: "选择工作区目录" })).not.toBeInTheDocument(),
     );
     expect(p.onCreateWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("端到端：点击 + → 弹 Modal → 浏览 → 选中 → 改 name → 提交 → 调 onCreateWorkspace", async () => {
+    const p = renderSidebar();
+    // 1. 点击 + 弹 Modal
+    fireEvent.click(screen.getByLabelText("新建工作区"));
+    const dialog = await screen.findByRole("dialog", { name: "选择工作区目录" });
+
+    // 2. 等 home 目录条目渲染（限定到 dialog 内避免跟 Sidebar 工作区列表冲突）
+    await within(dialog).findByText("projects");
+
+    // 3. 双击进入 projects 目录
+    fireEvent.doubleClick(within(dialog).getByText("projects"));
+    await within(dialog).findByText("agent-demo");
+
+    // 4. 单击 agent-demo 选中（footer 自动填 basename）
+    fireEvent.click(within(dialog).getByText("agent-demo"));
+    const nameInput = within(dialog).getByLabelText("工作区名称") as HTMLInputElement;
+    expect(nameInput.value).toBe("agent-demo");
+
+    // 5. 改成自定义 name
+    fireEvent.change(nameInput, { target: { value: "ws-from-picker" } });
+
+    // 6. 点击 "选择此目录" 调 onCreateWorkspace
+    fireEvent.click(within(dialog).getByText("选择此目录"));
+
+    await waitFor(() =>
+      expect(p.onCreateWorkspace).toHaveBeenCalledWith(
+        "ws-from-picker",
+        "/home/user/projects/agent-demo",
+      ),
+    );
   });
 
   it("归档视图列出归档会话并可恢复", () => {
