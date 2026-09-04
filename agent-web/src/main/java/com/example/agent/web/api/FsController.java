@@ -5,12 +5,14 @@ import com.example.agent.web.api.dto.FsEntry;
 import com.example.agent.web.api.dto.FsHomeResponse;
 import com.example.agent.web.api.dto.FsListResponse;
 import com.example.agent.web.api.dto.FsMkdirRequest;
+import com.example.agent.web.api.dto.FsQuickAccessResponse;
 import com.example.agent.web.security.HomePathException;
 import com.example.agent.web.security.HomePathGuard;
 import java.io.IOException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -62,6 +64,37 @@ public class FsController {
     public ResponseEntity<FsHomeResponse> home() {
         return ResponseEntity.ok(
                 new FsHomeResponse(guard.homeRealPath().toString(), detectPlatform()));
+    }
+
+    /**
+     * 快速访问目录列表（polish-workspace-picker-dsh-style）：
+     *
+     * <ul>
+     *   <li>始终包含 Home（= homeDir）；
+     *   <li>探测 Home + Desktop / Documents / Downloads，仅返回已存在且落在 homeDir 子树内的目录；
+     *   <li>探测失败的目录（不存在 / 越界 / IO 异常）静默跳过。
+     * </ul>
+     */
+    @GetMapping("/quick-access")
+    public ResponseEntity<FsQuickAccessResponse> quickAccess() {
+        List<FsQuickAccessResponse.FsQuickAccessItem> items = new ArrayList<>();
+        // Home 始终返回
+        items.add(
+                new FsQuickAccessResponse.FsQuickAccessItem(
+                        "Home", guard.homeRealPath().toString()));
+        // 探测常见快速访问目录；不存在或越界时跳过
+        for (String sub : new String[] {"Desktop", "Documents", "Downloads"}) {
+            Path candidate = Paths.get(guard.homeRealPath().toString(), sub);
+            try {
+                if (!Files.isDirectory(candidate)) continue;
+                Path real = candidate.toRealPath();
+                if (!real.startsWith(guard.homeRealPath())) continue;
+                items.add(new FsQuickAccessResponse.FsQuickAccessItem(sub, real.toString()));
+            } catch (IOException e) {
+                // 静默跳过无法解析的目录
+            }
+        }
+        return ResponseEntity.ok(new FsQuickAccessResponse(items));
     }
 
     @GetMapping("/list")

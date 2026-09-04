@@ -6,10 +6,12 @@ import com.example.agent.web.api.dto.FsDrivesResponse;
 import com.example.agent.web.api.dto.FsHomeResponse;
 import com.example.agent.web.api.dto.FsListResponse;
 import com.example.agent.web.api.dto.FsMkdirRequest;
+import com.example.agent.web.api.dto.FsQuickAccessResponse;
 import com.example.agent.web.security.HomePathGuard;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -200,5 +202,55 @@ class FsControllerTest {
 
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    // ----- GET /api/fs/quick-access (polish-workspace-picker-dsh-style) -----
+
+    @Test
+    void quickAccessAlwaysContainsHome() throws IOException {
+        ResponseEntity<com.example.agent.web.api.dto.FsQuickAccessResponse> resp =
+                controller.quickAccess();
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // 始终含 Home，且 home path 是真实 home（@TempDir 注入的就是测试 fake home）
+        assertThat(resp.getBody().items()).isNotEmpty();
+        assertThat(resp.getBody().items().get(0).name()).isEqualTo("Home");
+        assertThat(resp.getBody().items().get(0).path()).isEqualTo(home.toRealPath().toString());
+    }
+
+    @Test
+    void quickAccessIncludesExistingSubdirs() throws IOException {
+        // given: home/Desktop + home/Documents 存在，Downloads 不存在
+        Files.createDirectory(home.resolve("Desktop"));
+        Files.createDirectory(home.resolve("Documents"));
+
+        ResponseEntity<com.example.agent.web.api.dto.FsQuickAccessResponse> resp =
+                controller.quickAccess();
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        var names = resp.getBody().items().stream().map(i -> i.name()).toList();
+        assertThat(names).contains("Home", "Desktop", "Documents");
+        assertThat(names).doesNotContain("Downloads");
+    }
+
+    @Test
+    void quickAccessSkipsNonExistentSubdirs() throws IOException {
+        // given: home 下没有任何快速访问目录
+        ResponseEntity<com.example.agent.web.api.dto.FsQuickAccessResponse> resp =
+                controller.quickAccess();
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        // 只有 Home
+        assertThat(resp.getBody().items()).hasSize(1);
+        assertThat(resp.getBody().items().get(0).name()).isEqualTo("Home");
+    }
+
+    @Test
+    void quickAccessReturnsValidAbsolutePaths() throws IOException {
+        Files.createDirectory(home.resolve("Desktop"));
+        ResponseEntity<com.example.agent.web.api.dto.FsQuickAccessResponse> resp =
+                controller.quickAccess();
+        for (var item : resp.getBody().items()) {
+            // 每条 path 必须是非空绝对路径
+            assertThat(item.path()).isNotBlank();
+            assertThat(Path.of(item.path()).isAbsolute()).isTrue();
+        }
     }
 }
