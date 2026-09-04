@@ -16,6 +16,7 @@
 | `2026-09-02-web-search/` | add-web-search-tool 内置 WebSearch 工具测试（WebSearchProvider 契约 / DeepSeek 原生搜索 / Tavily 检索 / 工厂选择 / Tool 协议） | 2026-09-02 | 27（新增，另 250 既有回归） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-02-session-switch-selenium/` | web 会话切换功能 Selenium 自动化验证（真实会话列表 / 点击加载历史 / 切换更新） | 2026-09-02 | 5 | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-workspace-picker/` | add-workspace-picker-modal 工作区目录选择器测试（后端 fs API + 前端 Modal + Sidebar 集成） | 2026-09-04 | 51（28 Java + 23 vitest） | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-04-workspace-picker-v2/` | polish-workspace-picker-dsh-style Modal 重写为 DSH 风格（左侧导航树 + history 栈 + 列头排序 + 底部路径框 + quick-access API） | 2026-09-04 | 14（4 Java + 10 vitest） | ✅ 全绿 | ✅ | 已归档 |
 
 ---
 
@@ -50,6 +51,14 @@
 - **测试目标**：对 add-web-search-tool（内置 WebSearch 工具）做单元测试收尾，验证 `WebSearchProvider` 契约 + `WebSearchResult`/`Source` record、DeepSeek 原生搜索（Anthropic 兼容 `/messages` + `web_search_20250305` 严格模式 + 去重）与 Tavily 检索端点（`results[]` 解析 + 截断）、`WebSearchProviderFactory` 自动选择/显式优先、`WebSearchTool` 协议与 Fail-Closed、`search` 配置解析。
 - **执行要点**：`mvn -pl agent-core test` + `mvn -pl agent-core clean verify`；新增 `WebSearchProviderTest`(4) + `DeepSeekWebSearchProviderTest`(4) + `TavilyWebSearchProviderTest`(4) + `WebSearchProviderFactoryTest`(5) + `WebSearchToolTest`(8) 共 25 条 + 扩展 `ConfigLoaderTest`(+2) = 27 条；另扩展 `AgentLoopFactoryTest` 断言注册 `web_search`；全量 277 用例全绿（`Tests run: 277, Failures: 0, Errors: 0, Skipped: 0`）。
 - **关键发现**：jacoco 覆盖率门禁达标（`All coverage checks have been met`，LINE≥80% / BRANCH≥70%）；缺陷 0；既有 250 条用例无回归。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.7 `2026-09-04-workspace-picker-v2/` — polish-workspace-picker-dsh-style Modal 重写为 DSH 风格
+
+- **测试目标**：把 `WorkspacePickerModal` 从单栏条目录表重写为 DSH 资源管理器风格（顶部 ←/→/↑ + 面包屑；主区域左 200px 导航树 + 右文件列表带列头排序；底部"文件夹"路径框 + 工作区名称框）；新增后端 `GET /api/fs/quick-access` 接口支持左导航树。
+- **执行要点**：后端 `mvn -pl agent-web test`（FsControllerTest 新增 4 quick-access 用例，19/19 全绿）+ 前端 `npx vitest run`（82/82，新增 10：fs.test 4 + Modal 6）+ `mvn -pl agent-web verify` jacoco 门禁 BUILD SUCCESS（"All coverage checks have been met"）。
+- **关键发现**：User 选了"保留 name 输入框"+ "B + DSH 风格"路径；File System Access API 在我们场景下拿不到绝对路径，所以放弃 C 方案改回 A 方案 Modal 仿 DSH；history 栈纯前端 + 列头排序 useMemo + grid 布局是性能/视觉兼顾的选择；旧 beforeEach 缺 getQuickAccess 默认值导致首跑 16 失败，补充后通过；`listDir` mock 缺越界校验让"路径框非法"测试失败，补充 mock 后通过。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
