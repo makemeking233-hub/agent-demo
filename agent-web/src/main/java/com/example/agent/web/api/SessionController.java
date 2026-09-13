@@ -6,6 +6,7 @@ import com.example.agent.session.SessionStore;
 import com.example.agent.web.api.dto.RenameRequest;
 import com.example.agent.web.api.dto.SessionMessageDto;
 import com.example.agent.web.api.dto.SessionMessagesResponse;
+import com.example.agent.web.api.dto.SessionStatsDto;
 import com.example.agent.web.api.dto.SessionSummaryDto;
 import com.example.agent.web.api.dto.ToolCallDto;
 import com.example.agent.web.stream.WebAgentRuntime;
@@ -143,6 +144,24 @@ public class SessionController {
         List<SessionMessageDto> messages =
                 runtime.messagesFor(sessionId).stream().map(SessionController::toDto).toList();
         return ResponseEntity.ok(new SessionMessagesResponse(sessionId, messages));
+    }
+
+    /**
+     * 会话累计统计（add-session-stats-bar）：供首屏 / resume 回填底部状态栏。
+     *
+     * @param sessionId 会话 id
+     * @param workspace 归属工作区（可选，缺省默认工作区）
+     * @return {@code 200} 含累计与派生指标；会话不存在 {@code 404}
+     */
+    @GetMapping("/{sessionId}/stats")
+    public ResponseEntity<?> stats(
+            @PathVariable String sessionId,
+            @RequestParam(name = "workspace", required = false) String workspace) {
+        if (!runtime.hasSession(workspace, sessionId)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "session_not_found"));
+        }
+        return ResponseEntity.ok(SessionStatsDto.from(runtime.statsFor(workspace, sessionId)));
     }
 
     // ---------- 内部 ----------

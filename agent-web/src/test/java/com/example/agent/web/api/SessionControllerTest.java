@@ -224,5 +224,42 @@ class SessionControllerTest {
                 .contains("s-ws").doesNotContain("s-def");
         assertThat(wsList.get(0).workspace()).isEqualTo("md-main");
     }
+
+    // ---- add-session-stats-bar：统计端点 ----
+
+    @Test
+    void statsReturnsZerosForKnownSessionWithoutData() throws Exception {
+        writeSession("s-st", SessionEntry.user("hi", null));
+
+        ResponseEntity<?> resp = controller.stats("s-st", null);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        var dto = (com.example.agent.web.api.dto.SessionStatsDto) resp.getBody();
+        assertThat(dto.turns()).isZero();
+        assertThat(dto.avgTtftMs()).isNull();
+        assertThat(dto.cacheHitRate()).isNull();
+    }
+
+    @Test
+    void statsReflectsAccumulatedValues() throws Exception {
+        writeSession("s-st2", SessionEntry.user("hi", null));
+        rt.accumulateStats(
+                null,
+                "s-st2",
+                new com.example.agent.stats.TurnDelta(2, 100, 50, 0, 2000, 300, 500, 1, 80, 20));
+
+        ResponseEntity<?> resp = controller.stats("s-st2", null);
+
+        var dto = (com.example.agent.web.api.dto.SessionStatsDto) resp.getBody();
+        assertThat(dto.turns()).isEqualTo(1);
+        assertThat(dto.steps()).isEqualTo(2);
+        assertThat(dto.tokensIn()).isEqualTo(100);
+        assertThat(dto.cacheHitRate()).isEqualTo(0.8);
+    }
+
+    @Test
+    void statsUnknownSessionReturns404() {
+        assertThat(controller.stats("nope", null).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
 }
 
