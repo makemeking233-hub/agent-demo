@@ -32,6 +32,29 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         // 提高 precache 上限（vosk 模型 5.79MB 超过默认 2MB）
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        // 预缓存白名单（add-mermaid-diagrams）。
+        //
+        // 为什么改成白名单而不是用默认的 `**/*.{js,css,html}` 再 globIgnores 拉黑：
+        // mermaid 12 把每种图型拆成按需 chunk，实测一次构建产出 63 个，名字五花八门
+        // （chunk / diagram / elk / dagre / cytoscape.esm / arc / graph / *Diagram …），
+        // **没有共同前缀**，黑名单会又长又脆且随版本失效。白名单则把"必须离线可用"的东西
+        // 显式列出来，安装体积从此有上界、与引了多少按需库无关。
+        //
+        // 实测代价对照：默认 glob 下预缓存 70 entries / 11609 KiB（每次安装或更新多下约 5MB）；
+        // 白名单下回到 7 entries / 约 6530 KiB（与引入 mermaid 之前一致）。
+        //
+        // 取舍：**新增需要离线可用的顶层资源时，必须往这里加一条**，否则它只会在运行时
+        // 按 /assets/ 的 CacheFirst 缓存，离线首次打开会缺。大体积的可选能力（mermaid、
+        // 以及后续任何按需库）刻意不进白名单。
+        globPatterns: [
+          'index.html',
+          'assets/index-*.js',
+          'assets/index-*.css',
+          'assets/katex-*.js',
+          'assets/katex-*.css',
+          'assets/vosk-*.js',
+          'assets/workbox-window*.js',
+        ],
         runtimeCaching: [
           {
             // 静态资源：永久缓存（带版本号 hash，部署后自动失效）

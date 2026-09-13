@@ -1,17 +1,8 @@
 import type { Element, ElementContent, Root } from "hast";
+import { textOf } from "./hast-text";
 
 const MATH_INLINE_CLASS = "math-inline";
 const MATH_DISPLAY_CLASS = "math-display";
-
-/** 取出元素下所有文本（remark-math 产出的 math 元素里就是原始 TeX）。 */
-function textOf(node: Element): string {
-  let out = "";
-  for (const child of node.children) {
-    if (child.type === "text") out += child.value;
-    else if (child.type === "element") out += textOf(child);
-  }
-  return out;
-}
 
 function transformElement(node: Element): ElementContent {
   const classes = node.properties?.className;

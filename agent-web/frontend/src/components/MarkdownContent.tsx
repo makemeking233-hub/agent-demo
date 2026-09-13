@@ -6,9 +6,11 @@ import remarkMath from "remark-math";
 import "highlight.js/styles/github-dark.css";
 import { markdownUrlTransform } from "../lib/image-src";
 import { rehypeMathPlaceholder } from "../lib/rehype-math-placeholder";
+import { rehypeMermaid } from "../lib/rehype-mermaid";
 import { MarkdownImage } from "./MarkdownImage";
 import { MarkdownLink } from "./MarkdownLink";
 import { MathNode } from "./MathNode";
+import { MermaidBlock } from "./MermaidBlock";
 import styles from "./MarkdownContent.module.css";
 
 /**
@@ -19,6 +21,8 @@ import styles from "./MarkdownContent.module.css";
  * <ul>
  *   <li>方言用 GFM（remark-gfm）：表格 / 删除线 / 任务列表 / 自动链接；
  *   <li>公式：remark-math 只负责解析，KaTeX 由 {@link MathNode} 懒加载（design.md D2）；
+ *   <li>mermaid：围栏由 rehype-mermaid 换成自定义标签，运行时由 {@link MermaidBlock} 懒加载
+ *       （add-mermaid-diagrams）；该插件排在代码高亮之前，避免图源码先被高亮处理一遍；
  *   <li>代码高亮用 rehype-highlight 的**默认** `common` 语言集（34 个）。刻意不传 `languages`
  *       自选子集——`lowlight` 的 `common` 被 rehype-highlight 顶层静态 import，传不传都会进包，
  *       自选只会白白砍掉 go/rust/c/cpp 等语言（design.md D3，2026-09-13 实测纠正）；
@@ -35,11 +39,12 @@ const markdownComponents = {
   ),
   img: MarkdownImage,
   a: MarkdownLink,
-  // math-inline / math-block 是 rehype-math-placeholder 产出的自定义标签。
-  // react-markdown 运行时按 tagName 查表，能命中；但这两个标签不在 JSX.IntrinsicElements 里，
+  // math-inline / math-block / mermaid-block 是自定义 rehype 插件产出的标签。
+  // react-markdown 运行时按 tagName 查表，能命中；但这些标签不在 JSX.IntrinsicElements 里，
   // 与 Components 的映射类型对不上，故在此收口处做一次类型断言。
   "math-inline": (props: { tex?: string }) => <MathNode tex={props.tex ?? ""} display={false} />,
   "math-block": (props: { tex?: string }) => <MathNode tex={props.tex ?? ""} display />,
+  "mermaid-block": (props: { source?: string }) => <MermaidBlock source={props.source ?? ""} />,
 } as unknown as Components;
 
 export function MarkdownContent(props: { text: string }) {
@@ -52,7 +57,7 @@ export function MarkdownContent(props: { text: string }) {
     <div className={styles.markdown}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeHighlight, rehypeMathPlaceholder]}
+        rehypePlugins={[rehypeMermaid, rehypeHighlight, rehypeMathPlaceholder]}
         components={markdownComponents}
         urlTransform={markdownUrlTransform}
       >
