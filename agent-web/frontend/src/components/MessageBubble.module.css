@@ -47,32 +47,8 @@
   max-width: 85%;
 }
 
-.markdown {
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.markdown p { margin: 0 0 8px; }
-.markdown p:last-child { margin: 0; }
-.markdown pre {
-  background: var(--dsw-static-neutral-900);
-  color: var(--dsw-static-neutral-100);
-  padding: 8px 12px;
-  border-radius: var(--dsw-alias-radius-sm);
-  overflow-x: auto;
-  font-size: 13px;
-  margin: 8px 0;
-}
-.markdown code {
-  background: var(--dsw-static-surface-sunken);
-  padding: 1px 4px;
-  border-radius: 3px;
-  font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: 13px;
-}
-.markdown pre code { background: transparent; padding: 0; }
-.markdown ul, .markdown ol { margin: 4px 0 4px 20px; }
-.markdown a { color: var(--dsw-static-text-link); }
+/* Markdown 正文样式已迁到 MarkdownContent.module.css（add-rich-markdown-rendering）：
+   渲染入口从 "裸用 ReactMarkdown" 改为独立的 MarkdownContent 组件，样式随组件走。 */
 
 .cursor {
   color: var(--dsw-alias-text-muted);

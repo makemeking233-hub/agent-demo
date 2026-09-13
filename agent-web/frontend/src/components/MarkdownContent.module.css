@@ -1,0 +1,107 @@
+/*
+ * 富 Markdown 渲染样式（add-rich-markdown-rendering）。
+ *
+ * 从 MessageBubble.module.css 迁出并补齐：标题层级、表格、图片、引用块、分隔线、删除线。
+ * 只使用项目既有 design token（--dsw-*），不新造变量。
+ */
+
+.markdown {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.markdown p { margin: 0 0 8px; }
+.markdown p:last-child { margin: 0; }
+
+/* ----- 标题层级：字号随层级递减，与正文明确区分 ----- */
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 12px 0 6px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.markdown h1 { font-size: 20px; }
+.markdown h2 { font-size: 18px; }
+.markdown h3 { font-size: 16px; }
+.markdown h4 { font-size: 15px; }
+.markdown h5 { font-size: 14px; }
+.markdown h6 { font-size: 13px; color: var(--dsw-alias-text-muted); }
+.markdown h1:first-child,
+.markdown h2:first-child,
+.markdown h3:first-child { margin-top: 0; }
+
+/* ----- 代码 ----- */
+.markdown pre {
+  background: var(--dsw-static-neutral-900);
+  color: var(--dsw-static-neutral-100);
+  padding: 8px 12px;
+  border-radius: var(--dsw-alias-radius-sm);
+  overflow-x: auto;
+  font-size: 13px;
+  margin: 8px 0;
+}
+.markdown code {
+  background: var(--dsw-static-surface-sunken);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px;
+}
+.markdown pre code { background: transparent; padding: 0; }
+
+/* ----- 列表 ----- */
+.markdown ul, .markdown ol { margin: 4px 0 4px 20px; }
+.markdown li { margin: 2px 0; }
+.markdown li > input[type="checkbox"] { margin-right: 6px; }
+
+/* ----- 表格：外层容器负责横向滚动，避免宽表格撑破气泡 ----- */
+.tableWrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 8px 0;
+}
+.markdown table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--dsw-alias-border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown th {
+  background: var(--dsw-static-surface-sunken);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ----- 图片 ----- */
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--dsw-alias-radius-sm);
+  display: block;
+  margin: 8px 0;
+}
+
+/* ----- 引用块 / 分隔线 / 删除线 ----- */
+.markdown blockquote {
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--dsw-alias-border);
+  color: var(--dsw-alias-text-muted);
+}
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--dsw-alias-border);
+  margin: 12px 0;
+}
+.markdown del { color: var(--dsw-alias-text-muted); }
+
+.markdown a { color: var(--dsw-static-text-link); }

@@ -1,6 +1,6 @@
 import { User } from "lucide-react";
-import ReactMarkdown from "react-markdown";
 import styles from "./MessageBubble.module.css";
+import { MarkdownContent } from "./MarkdownContent";
 import { ThinkingCollapse } from "./ThinkingCollapse";
 import { ToolCallCard } from "./ToolCallCard";
 
@@ -33,9 +33,7 @@ export function MessageBubble(props: {
           <ThinkingCollapse text={props.thinking} tokens={props.reasoningTokens} />
         )}
         {props.text ? (
-          <div className={styles.markdown}>
-            <ReactMarkdown>{props.text}</ReactMarkdown>
-          </div>
+          <MarkdownContent text={props.text} />
         ) : (
           !isUser && tools.length === 0 && !props.thinking && (
             <span className={styles.cursor}>…</span>
