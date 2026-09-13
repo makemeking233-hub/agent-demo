@@ -1,0 +1,44 @@
+{
+  "name": "Agent-Demo",
+  "short_name": "Agent",
+  "description": "企业级 AI Agent CLI 平台（Claude Code 风格）",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1f2328",
+  "theme_color": "#0969da",
+  "lang": "zh-CN",
+  "categories": ["developer", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "新会话",
+      "short_name": "新会话",
+      "description": "快速创建新会话",
+      "url": "/?action=new-session",
+      "icons": [
+        { "src": "/pwa-192x192.png", "sizes": "192x192", "type": "image/png" }
+      ]
+    }
+  ]
+}
