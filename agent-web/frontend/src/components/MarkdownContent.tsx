@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef } from "react";
+import { useDeferredValue, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
@@ -43,6 +43,11 @@ const markdownComponents = {
 } as unknown as Components;
 
 export function MarkdownContent(props: { text: string }) {
+  // 流式追加时每个 message_delta 都会推一次 text，而 Markdown 重解析（表格 / 高亮 / 公式）
+  // 相对昂贵。useDeferredValue 把解析降到低优先级由 React 调度，文本写入本身仍是即时的。
+  // 相比手写 150ms 定时器：无需在流式结束或组件卸载时清理 timer（不会漏 / 不会竞态），
+  // 也不会把"文本追加"一起延迟——延迟的只是解析。
+  const deferredText = useDeferredValue(props.text);
   return (
     <div className={styles.markdown}>
       <ReactMarkdown
@@ -51,7 +56,7 @@ export function MarkdownContent(props: { text: string }) {
         components={markdownComponents}
         urlTransform={markdownUrlTransform}
       >
-        {props.text}
+        {deferredText}
       </ReactMarkdown>
     </div>
   );

@@ -249,4 +249,51 @@ describe("MessageBubble 富 Markdown 渲染", () => {
       expect(a!.getAttribute("rel")).toBe("noopener noreferrer");
     });
   });
+
+  /**
+   * 流式渲染时序。
+   *
+   * 注意：这里**不是**红→绿驱动的测试。`useDeferredValue` 的作用是降低 Markdown 重解析的调度
+   * 优先级，而 jsdom 里没有可观测的调度差异（真实收益要靠浏览器里的大消息实测）。
+   * 因此本组是**回归护栏**：把"增量即时可见、快速追加不丢内容、长文混排不崩"钉死，
+   * 防止后续为了性能优化而引入卡顿或内容丢失。
+   */
+  describe("流式渲染时序", () => {
+    it("单次追加的文本立即出现在 DOM 中", () => {
+      const { container, rerender } = render(<MessageBubble role="assistant" text="第一段" />);
+      expect(container.textContent).toContain("第一段");
+
+      rerender(<MessageBubble role="assistant" text="第一段，第二段" />);
+      expect(container.textContent).toContain("第一段，第二段");
+    });
+
+    it("快速连续追加后内容完整，取最后一次的值", () => {
+      const { container, rerender } = render(<MessageBubble role="assistant" text="A" />);
+      for (const t of ["AB", "ABC", "ABCD", "ABCDE", "ABCDEF"]) {
+        rerender(<MessageBubble role="assistant" text={t} />);
+      }
+      expect(container.textContent).toContain("ABCDEF");
+    });
+
+    it("长文本与表格、代码块混排时完整渲染", () => {
+      const text = [
+        ...Array.from({ length: 40 }, (_, i) => `第 ${i} 段落文字。`),
+        "",
+        "| 维度 | 2PC | TCC |",
+        "|---|---|---|",
+        "| 一致性 | 强一致 | 最终一致 |",
+        "",
+        "```java",
+        "public class A {}",
+        "```",
+      ].join("\n");
+
+      const { container } = render(<MessageBubble role="assistant" text={text} />);
+
+      expect(container.querySelector("table")).not.toBeNull();
+      expect(container.querySelector("pre code")).not.toBeNull();
+      expect(container.textContent).toContain("第 39 段落文字。");
+      expect(container.textContent).toContain("一致性");
+    });
+  });
 });
