@@ -88,3 +88,4 @@ class LogControllerTest {
         assertThat(c.listSessions()).isEmpty();
     }
 }
+

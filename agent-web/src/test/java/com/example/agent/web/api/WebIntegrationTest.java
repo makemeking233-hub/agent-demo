@@ -301,3 +301,4 @@ class WebIntegrationTest {
                 .isEqualTo("workspace_not_found");
     }
 }
+

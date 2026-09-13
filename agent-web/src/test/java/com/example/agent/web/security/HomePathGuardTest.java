@@ -188,3 +188,4 @@ class HomePathGuardTest {
         Files.delete(outside);
     }
 }
+

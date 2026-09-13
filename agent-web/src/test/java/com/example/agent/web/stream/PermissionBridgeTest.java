@@ -86,3 +86,4 @@ class PermissionBridgeTest {
         assertThat(bridge.hasPending(permId)).isFalse();
     }
 }
+

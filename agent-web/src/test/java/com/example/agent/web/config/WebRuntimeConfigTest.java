@@ -21,7 +21,7 @@ class WebRuntimeConfigTest {
     @Test
     void webPropertiesNormalizesDefaults() {
         // host/trustedHosts null -> 归一化
-        var p = new WebProperties(null, 0, null);
+        var p = new WebProperties(null, 0, null, null);
         assertThat(p.host()).isEqualTo("127.0.0.1");
         assertThat(p.port()).isEqualTo(8080);
         assertThat(p.trustedHosts()).isEmpty();
@@ -29,7 +29,7 @@ class WebRuntimeConfigTest {
 
     @Test
     void webPropertiesKeepsProvidedValues() {
-        var p = new WebProperties("192.168.1.42", 9090, List.of("192.168.1.0/24"));
+        var p = new WebProperties("192.168.1.42", 9090, List.of("192.168.1.0/24"), null);
         assertThat(p.host()).isEqualTo("192.168.1.42");
         assertThat(p.port()).isEqualTo(9090);
         assertThat(p.trustedHosts()).containsExactly("192.168.1.0/24");
@@ -38,7 +38,7 @@ class WebRuntimeConfigTest {
     @Test
     void webPropertiesRejectsOutOfRangePort() {
         // port 越界 -> 回落 8080
-        var p = new WebProperties("127.0.0.1", 70000, List.of());
+        var p = new WebProperties("127.0.0.1", 70000, List.of(), null);
         assertThat(p.port()).isEqualTo(8080);
     }
 
@@ -55,3 +55,4 @@ class WebRuntimeConfigTest {
         assertThat(r2).isEqualTo("abc");
     }
 }
+

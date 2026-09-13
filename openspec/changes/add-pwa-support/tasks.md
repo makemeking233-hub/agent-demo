@@ -18,10 +18,10 @@
 
 ## 3. 后端 HTTPS 支持
 
-- [ ] 3.1 新增 `agent-web/.../config/SslCertificateGenerator.java`：启动监听器，检测 `https` profile + 生成 RSA 2048 自签证书（SHA256withRSA / 365 天）到 `${java.io.tmpdir}/agent-demo-cert/{cert,key}.pem`
-- [ ] 3.2 `agent-web/.../config/WebSecurityConfig.java`：HTTPS profile 下启用 `server.ssl.key-store` / `key-store-password` / `key-alias` / `key-store-type` 从 PEM 文件读取
-- [ ] 3.3 `agent-web/src/main/resources/application-web.yml` 加 `agent.web.https.enabled: false` + `spring.profiles.include: web,https` 注释说明
-- [ ] 3.4 `agent-web/.../security/TrustedHostFilter.java`：检测 `agent.web.https.enabled=true` 时放宽到 `127.0.0.1 + localhost`，不再强制 LAN IP
+- [x] 3.1 新增 `agent-web/.../config/SslCertificateGenerator.java`：启动监听器，检测 `https` profile + 生成 RSA 2048 自签证书（SHA256withRSA / 365 天）到 `${java.io.tmpdir}/agent-demo-cert/{cert,key}.pem`
+- [x] 3.2 `agent-web/.../config/WebSecurityConfig.java`：HTTPS profile 下启用 `server.ssl.key-store` / `key-store-password` / `key-alias` / `key-store-type` 从 PEM 文件读取
+- [x] 3.3 `agent-web/src/main/resources/application-web.yml` 加 `agent.web.https.enabled: false` + `spring.profiles.include: web,https` 注释说明
+- [x] 3.4 `agent-web/.../security/TrustedHostFilter.java`：检测 `agent.web.https.enabled=true` 时放宽到 `127.0.0.1 + localhost`，不再强制 LAN IP
 
 ## 4. 测试 + 文档 + 收尾
 

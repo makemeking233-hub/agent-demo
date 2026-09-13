@@ -1,0 +1,29 @@
+# agent-web + https profile 配置 (add-pwa-support)
+# 激活方式: -Dspring.profiles.active=web,https
+# 启动时自动生成自签证书到 ${java.io.tmpdir}/agent-demo-cert/keystore.p12
+# HTTPS 监听 8443 端口（与 HTTP 18080 并存，Spring Boot WebFlux 双协议支持）
+#
+# 浏览器访问 https://localhost:8443/ 会弹"连接不是私密连接"警告（自签证书）
+# 点"高级 -> 继续前往 localhost"即可。生产部署应替换为受信 CA 签发的证书。
+
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    # PKCS12 keystore（自签证书生成于 ${java.io.tmpdir}/agent-demo-cert/keystore.p12）
+    key-store: ${agent.web.https.keystore-path}
+    key-store-password: ${agent.web.https.keystore-password}
+    key-store-type: PKCS12
+    key-alias: ${agent.web.https.keystore-alias}
+    key-password: ${agent.web.https.keystore-password}
+
+agent:
+  web:
+    https:
+      enabled: true
+      # 自签证书生成目录
+      cert-dir: ${java.io.tmpdir}/agent-demo-cert
+      # keystore 密码（自签证书场景，生产部署替换为受信证书后改密码）
+      keystore-password: changeit
+      # keystore alias
+      keystore-alias: agent-demo

@@ -200,3 +200,4 @@ class ChatStreamServiceTest {
         assertThat(svc.workspaceExists("")).isTrue();
     }
 }
+

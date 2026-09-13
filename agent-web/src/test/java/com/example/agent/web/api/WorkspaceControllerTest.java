@@ -111,3 +111,4 @@ class WorkspaceControllerTest {
         assertThat(md.sessionCount()).isEqualTo(1);
     }
 }
+

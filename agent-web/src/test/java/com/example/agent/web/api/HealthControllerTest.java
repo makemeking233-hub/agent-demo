@@ -14,7 +14,7 @@ class HealthControllerTest {
     @Test
     void returnsOkWhenProviderConfigured() {
         var env = new MockEnvironment().withProperty("DEEPSEEK_API_KEY", "sk-test-1234");
-        var props = new WebProperties("127.0.0.1", 8080, List.of());
+        var props = new WebProperties("127.0.0.1", 8080, List.of(), null);
         var c = new HealthController(env, props);
         Map<String, Object> body = c.health();
         assertThat(body).containsEntry("status", "ok");
@@ -26,7 +26,7 @@ class HealthControllerTest {
     @Test
     void returnsDegradedWhenProviderMissing() {
         var env = new MockEnvironment();
-        var props = new WebProperties("127.0.0.1", 8080, List.of());
+        var props = new WebProperties("127.0.0.1", 8080, List.of(), null);
         var c = new HealthController(env, props);
         Map<String, Object> body = c.health();
         assertThat(body).containsEntry("status", "degraded");
@@ -36,7 +36,7 @@ class HealthControllerTest {
     @Test
     void returnsDegradedWhenApiKeyBlank() {
         var env = new MockEnvironment().withProperty("DEEPSEEK_API_KEY", "   ");
-        var props = new WebProperties("127.0.0.1", 8080, List.of());
+        var props = new WebProperties("127.0.0.1", 8080, List.of(), null);
         var c = new HealthController(env, props);
         assertThat(c.health()).containsEntry("status", "degraded");
     }
@@ -44,7 +44,7 @@ class HealthControllerTest {
     @Test
     void includesUptimeAndVersion() {
         var env = new MockEnvironment().withProperty("DEEPSEEK_API_KEY", "sk-test");
-        var props = new WebProperties("127.0.0.1", 8080, List.of());
+        var props = new WebProperties("127.0.0.1", 8080, List.of(), null);
         var c = new HealthController(env, props);
         Map<String, Object> body = c.health();
         assertThat(body).containsKey("version");

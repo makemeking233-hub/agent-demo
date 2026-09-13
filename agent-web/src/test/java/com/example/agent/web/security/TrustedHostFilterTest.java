@@ -16,7 +16,7 @@ import reactor.test.StepVerifier;
 class TrustedHostFilterTest {
 
     private static WebProperties props(List<String> trusted) {
-        return new WebProperties("127.0.0.1", 8080, trusted);
+        return new WebProperties("127.0.0.1", 8080, trusted, null);
     }
 
     @Test

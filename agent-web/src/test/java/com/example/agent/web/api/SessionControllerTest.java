@@ -225,3 +225,4 @@ class SessionControllerTest {
         assertThat(wsList.get(0).workspace()).isEqualTo("md-main");
     }
 }
+

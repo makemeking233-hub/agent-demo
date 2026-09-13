@@ -182,3 +182,4 @@ class UiLayoutE2ETest extends E2EBase {
         assertThat(driver.getTitle()).contains("agent-demo");
     }
 }
+

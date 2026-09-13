@@ -15,22 +15,23 @@ class WebStartupBannerTest {
 
     @Test
     void formatsLoopbackHostBanner() {
-        var props = new WebProperties("127.0.0.1", 8080, java.util.List.of());
+        var props = new WebProperties("127.0.0.1", 8080, java.util.List.of(), null);
         String banner = WebStartupBanner.banner(props);
         assertThat(banner).isEqualTo("dsh web: http://127.0.0.1:8080");
     }
 
     @Test
     void formatsLanHostBanner() {
-        var props = new WebProperties("192.168.1.42", 8080, java.util.List.of());
+        var props = new WebProperties("192.168.1.42", 8080, java.util.List.of(), null);
         String banner = WebStartupBanner.banner(props);
         assertThat(banner).isEqualTo("dsh web: http://192.168.1.42:8080");
     }
 
     @Test
     void isSingleLine() {
-        var props = new WebProperties("127.0.0.1", 8080, java.util.List.of());
+        var props = new WebProperties("127.0.0.1", 8080, java.util.List.of(), null);
         String banner = WebStartupBanner.banner(props);
         assertThat(banner).doesNotContain("\n").doesNotContain("\r");
     }
 }
+

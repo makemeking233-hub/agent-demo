@@ -54,6 +54,13 @@ public class TrustedHostFilter implements WebFilter {
             return chain.filter(exchange);
         }
 
+        // add-pwa-support：HTTPS profile 下放宽到 127.0.0.1 + localhost（本地安装场景）
+        // 因为 PWA install 要求 HTTPS，但本地无 LAN IP 可配；self-signed cert 在 localhost
+        // 是合法连接，浏览器只需手动"继续前往"即可。
+        if (props.https() != null && props.https().enabled() && isHttpsLocalhost(remote)) {
+            return chain.filter(exchange);
+        }
+
         if (!isTrusted(remote, props.trustedHosts())) {
             exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
             exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
@@ -63,6 +70,12 @@ public class TrustedHostFilter implements WebFilter {
         }
 
         return chain.filter(exchange);
+    }
+
+    /** HTTPS profile 下额外接受 "localhost" / "::1" 形式的主机头（按 IP 解析后是 127.0.0.1）。 */
+    private static boolean isHttpsLocalhost(String ip) {
+        if (ip == null) return false;
+        return ip.equals("127.0.0.1") || ip.equals("::1") || ip.equals("0:0:0:0:0:0:0:1") || ip.startsWith("127.");
     }
 
     private static String resolveRemote(ServerWebExchange exchange) {

@@ -67,3 +67,4 @@ class SlashCommandRouterTest {
         assertThat(r.getBody().consumed()).isFalse();
     }
 }
+
