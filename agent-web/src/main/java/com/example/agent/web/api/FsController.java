@@ -9,6 +9,8 @@ import com.example.agent.web.api.dto.FsQuickAccessResponse;
 import com.example.agent.web.security.HomePathException;
 import com.example.agent.web.security.HomePathGuard;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,7 +22,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,6 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>{@code GET /api/fs/list?path=...&includeHidden=false} 列目录
  *   <li>{@code POST /api/fs/mkdir} body {@code {"path":"..."}} 新建空目录
  *   <li>{@code GET /api/fs/drives} 盘符列表（仅 Windows 返回有内容；Linux/macOS 返回空数组）
+ *   <li>{@code GET /api/fs/raw?path=...} 读取图片字节流（add-rich-markdown-rendering）
  * </ul>
  *
  * <p>所有端点继承 {@code TrustedHostFilter} 的 IP 白名单；路径解析统一经 {@link HomePathGuard}，
@@ -48,6 +53,31 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/fs")
 @Profile("web")
 public class FsController {
+
+    /** 单文件大小上限：16 MiB，超过则拒绝，且不把文件读入内存。 */
+    private static final long MAX_RAW_BYTES = 16L * 1024 * 1024;
+
+    /**
+     * 图片类型白名单（add-rich-markdown-rendering）：扩展名（小写、不含点）→ MIME。
+     *
+     * <p>白名单是**安全边界**而非便利措施：{@code /api/fs/raw} 在**应用同源**下返回字节，若放开任意
+     * 扩展名，家目录内一个攻击者可控的 {@code .html} 就会被以 {@code text/html} 打开，构成同源存储型
+     * XSS——比放开 raw HTML 那条链更直接，且不需要模型配合。
+     */
+    private static final Map<String, String> RAW_MIME_BY_EXTENSION =
+            Map.ofEntries(
+                    Map.entry("png", "image/png"),
+                    Map.entry("jpg", "image/jpeg"),
+                    Map.entry("jpeg", "image/jpeg"),
+                    Map.entry("gif", "image/gif"),
+                    Map.entry("webp", "image/webp"),
+                    Map.entry("avif", "image/avif"),
+                    Map.entry("bmp", "image/bmp"),
+                    Map.entry("ico", "image/x-icon"),
+                    Map.entry("svg", "image/svg+xml"));
+
+    /** SVG 作为顶层文档被直接访问时其中的 {@code <script>} 会在同源执行；sandbox 使其失效。 */
+    private static final String SVG_SANDBOX_CSP = "sandbox";
 
     private final HomePathGuard guard;
 
@@ -127,6 +157,60 @@ public class FsController {
         }
     }
 
+    /**
+     * 读取本地图片字节流（add-rich-markdown-rendering）：供对话区渲染消息里的本地图片。
+     *
+     * <p>安全约束（缺一不可，顺序即校验顺序）：
+     *
+     * <ol>
+     *   <li>trusted-host 由 {@code TrustedHostFilter} 在过滤器层先行把关；
+     *   <li>路径经 {@link HomePathGuard} 解析，{@code toRealPath()} 后必须落在 homeDir 子树内；
+     *   <li>目标必须是普通文件（目录返回 400）；
+     *   <li>扩展名必须命中图片白名单（否则 415，绝不按 {@code text/html} 吐出去）；
+     *   <li>大小超过 {@link #MAX_RAW_BYTES} 直接拒绝，不读盘。
+     * </ol>
+     */
+    @GetMapping("/raw")
+    public ResponseEntity<?> raw(@RequestParam("path") String path) {
+        HomePathGuard.ResolvedPath resolved;
+        try {
+            resolved = guard.resolveWithinHome(path, true);
+        } catch (HomePathException e) {
+            return errorFor(e);
+        }
+        Path real = resolved.realPath();
+        if (!Files.isRegularFile(real)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", "not_a_file"));
+        }
+        String mime = mimeForRaw(real);
+        if (mime == null) {
+            return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+                    .body(Map.of("error", "unsupported_media_type"));
+        }
+        byte[] bytes;
+        try {
+            long size = Files.size(real);
+            if (size > MAX_RAW_BYTES) {
+                return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                        .body(Map.of("error", "file_too_large"));
+            }
+            bytes = Files.readAllBytes(real);
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "read_failed", "message", e.getMessage()));
+        }
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(mime));
+        headers.setContentLength(bytes.length);
+        headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Content-Disposition", contentDispositionFor(real));
+        if ("image/svg+xml".equals(mime)) {
+            headers.set("Content-Security-Policy", SVG_SANDBOX_CSP);
+        }
+        return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+    }
+
     @PostMapping("/mkdir")
     public ResponseEntity<?> mkdir(@RequestBody FsMkdirRequest req) {
         if (req == null || req.path() == null || req.path().isBlank()) {
@@ -168,6 +252,37 @@ public class FsController {
         }
         out.sort(Comparator.comparing(FsDrivesResponse.FsDrive::name));
         return ResponseEntity.ok(new FsDrivesResponse(out));
+    }
+
+    /** 按扩展名查白名单；无扩展名或未命中返回 {@code null}（调用方据此返回 415）。 */
+    private static String mimeForRaw(Path file) {
+        String name = file.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || dot == name.length() - 1) {
+            return null;
+        }
+        return RAW_MIME_BY_EXTENSION.get(name.substring(dot + 1).toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * 构造 {@code Content-Disposition}：同时给 ASCII 回退名与 RFC 5987 的 UTF-8 名，避免中文文件名
+     * 在 header 里被按 ISO-8859-1 写出后变成乱码。
+     */
+    private static String contentDispositionFor(Path file) {
+        String name = file.getFileName().toString();
+        String encoded = URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
+        return "inline; filename=\"" + asciiFallback(name) + "\"; filename*=UTF-8''" + encoded;
+    }
+
+    /** 把非 ASCII 与 header 不安全字符替换为下划线，仅用于 ASCII 回退名。 */
+    private static String asciiFallback(String name) {
+        StringBuilder sb = new StringBuilder(name.length());
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            boolean unsafe = c < 0x20 || c > 0x7e || c == '"' || c == '\\' || c == ';';
+            sb.append(unsafe ? '_' : c);
+        }
+        return sb.toString();
     }
 
     private static FsEntry toEntry(Path p) {
