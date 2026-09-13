@@ -45,7 +45,7 @@
 #### Scenario: 文件不存在
 
 - **WHEN** 客户端请求家目录内一个不存在的路径
-- **THEN** 服务端返回 `404`，响应体 `{"error": "not_found"}`
+- **THEN** 服务端返回 `404`，响应体 `{"error": "path_not_found"}`（沿用既有 `/api/fs/**` 的错误码约定）
 
 #### Scenario: 超过大小上限
 
