@@ -60,6 +60,24 @@ public class SseSessionLogSink implements SessionLogSink {
         stream.emit(streamId, new SseEvent.MessageDelta("text", text));
     }
 
+    /**
+     * 思考增量逐 token 转发（fix-thinking-delta-streaming）。
+     *
+     * <p>与 {@link #onTextDelta(String)} 对称：模型（{@code deepseek-reasoner} 等）每个
+     * {@code ThinkingDelta} chunk 立刻变成 SSE {@code message_delta(thinking)}，前端
+     * ChatPanel.tsx 在 {@code ev.delta_type === "thinking"} 分支累加 thinking，
+     * ThinkingCollapse 折叠展示。
+     *
+     * <p>此前 SessionLogSink.onThinkingDelta 在 SseSessionLogSink 里没 override，
+     * 默认 no-op → thinking 增量被丢弃，只在回合结束时由 {@link #onAssistant} 一次性
+     * 推整段，看起来"等一会儿才出来"。本方法补上对称的流式转发。
+     */
+    @Override
+    public void onThinkingDelta(String text) {
+        if (text == null || text.isEmpty()) return;
+        stream.emit(streamId, new SseEvent.MessageDelta("thinking", text));
+    }
+
     @Override
     public void onToolCall(ToolCall call) {
         // 记录 toolCallId → name，供 onToolResult 回流 ToolCallEnd 时用真实工具名
