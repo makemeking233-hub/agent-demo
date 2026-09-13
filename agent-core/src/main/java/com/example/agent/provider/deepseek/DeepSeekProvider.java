@@ -10,6 +10,11 @@ import java.time.Duration;
  * <p>v0.1 简化：拿到完整 SSE body 后按行解析（避免依赖分块传输语义）。 v0.2 升级：用 bodyToFlux(DataBuffer) + 流式按行解析，启用真正的流式。
  *
  * <p>所有协议细节（HTTP client / SSE 解析 / 请求体构造）继承自 {@link OpenAiCompatibleProvider}，本类只需声明 5 个常量。
+ *
+ * <p>add-models-dropdown-v0：DeepSeek 不接受 {@code reasoning_effort} 参数（reasoner 模型自己控制思考深度）。
+ * 由于 {@code OpenAiCompatibleMapper.isOpenAiReasonerModel()} 仅识别 {@code o1/o3/o4} 系列，{@code deepseek-*}
+ * 模型永远不会被注入 reasoning_effort 到 body。AgentLoop.toRequest() 写入 ChatRequest.extra 的
+ * {@code reasoning_effort} 字段对 DeepSeek 无副作用（putAll 到 body 是无害的多余字段，上游忽略）。
  */
 public class DeepSeekProvider extends OpenAiCompatibleProvider {
 

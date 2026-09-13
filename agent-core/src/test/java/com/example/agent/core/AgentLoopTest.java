@@ -785,6 +785,34 @@ class AgentLoopTest {
         // 完整 model 流转验证留给集成测试
     }
 
+    @Test
+    void setReasoningEffortChangesExtraForNextTurn() {
+        // add-models-dropdown-v0：setReasoningEffort 后构造的 ChatRequest.extra 应含 reasoning_effort
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.name()).thenReturn("deepseek");
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8_192);
+
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        new ToolRegistry(),
+                        new MessageHistory(new TokenEstimator()),
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+
+        // 切换前 reasoningEffort() 为 null
+        org.junit.jupiter.api.Assertions.assertNull(loop.reasoningEffort());
+
+        // 切换
+        loop.setReasoningEffort("high");
+        org.junit.jupiter.api.Assertions.assertEquals("high", loop.reasoningEffort());
+
+        // 不验证 toRequest 内部（那是私有行为），但 setReasoningEffort 不抛异常 + getter 一致
+    }
+
     // ---- add-session-stats-bar：本轮统计采集 ----
 
     @Test

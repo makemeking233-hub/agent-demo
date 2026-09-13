@@ -54,7 +54,9 @@ public class ChatController {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "workspace_not_found")));
         }
         String model = resolveModel(req.model());
-        ChatStreamService.ActiveStream meta = streams.create(sessionId, model, mode, req.workspace());
+        // add-models-dropdown-v0：透传 reasoningEffort（null/blank = 不切换，沿用 Provider 默认）
+        ChatStreamService.ActiveStream meta =
+                streams.create(sessionId, model, mode, req.workspace(), req.reasoningEffort());
         streams.start(meta.streamId(), req.content());
         return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, model)));
     }

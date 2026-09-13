@@ -178,6 +178,24 @@ class OpenAiCompatibleMapperTest {
     }
 
     @Test
+    void reasoningEffortPassedThroughFromRequest() {
+        // add-models-dropdown-v0：用户传 reasoning_effort="low" → body 含 "low"（而非默认 medium）
+        Map<String, Object> extra = new java.util.HashMap<>();
+        extra.put("reasoning_effort", "low");
+        ChatRequest req =
+                new ChatRequest(
+                        "o1",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        extra);
+        Map<String, Object> body = mapper.toRequestBody(req);
+        assertEquals("low", body.get("reasoning_effort"));
+    }
+
+    @Test
     void sseLineWithReasoningContentProducesThinkingDelta() {
         String sse = "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"我先思考\"}}]}";
         Optional<StreamChunk> chunk = mapper.parseSseLine(sse);

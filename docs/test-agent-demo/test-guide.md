@@ -21,6 +21,7 @@
 | `2026-09-04-reasoning-thinking/` | add-reasoning-thinking-streaming 推理过程流式（DeepSeek / OpenAI o1 / Anthropic 三 provider reasoning 解析 + SSE thinking 透传 + 折叠 UI） | 2026-09-04 | 30（21 Java + 9 vitest） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-true-streaming/` | add-true-streaming 真流式改造（Provider bodyToFlux + 跨帧行重组 + 正文逐 token 透传 + 复合 sink 转发 + 多流隔离） | 2026-09-04 | 20 新增改动（另 353 core + 158 web + 104 vitest 回归） | ⚠️ 用例全绿，jacoco 门禁既有欠账 | ✅ | 待归档 |
 | `2026-09-13-rich-markdown/` | add-rich-markdown-rendering 富 Markdown 渲染（GFM 表格 / 公式 / 代码高亮 / 图片 / 安全基线 / 流式时序 + 后端 GET /api/fs/raw） | 2026-09-13 | 44（20 后端 + 24 前端；另 158 web + 143 vitest 回归 → 178 / 167） | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-13-add-models-dropdown-v0/` | add-models-dropdown-v0 模型+思考强度下拉（AgentLoop 透传 + 三 Provider effort 适配 + Web 后端 reasoningEffort + CLI /effort + 前端 Dropdown/ModelSelect/ReasoningEffortSelect + localStorage 持久化） | 2026-09-13 | 17（10 Java 新增 + 7 vitest Dropdown；前端集成/localStorage 测试未写） | ✅ Java 全绿 / ⚠️ 前端 vitest 沙箱 npm ci 失败未跑 | ✅ | 已实施未归档 |
 
 ---
 
@@ -105,6 +106,14 @@
 - **关键发现**：（1）design.md D3 原本打算「只注册 14 个常用语言省体积」前提被实测推翻——`rehype-highlight` 顶层静态 `import {common}` 引用关系真实存在、Rollup 摇不掉，自选子集不但不省反而**净减功能**，改回默认 `common` 后主包从 612.87 kB 降到 561.31 kB（**小 51 kB**）。（2）`react-markdown` 默认的 `defaultUrlTransform` 按 `:` 与 `/` 相对位置判断危险协议、**看不见反斜杠**，`C:\...` 被清空；`mdast-util-to-hast` 又会把链接目标规范化成 URI（反斜杠被 `%5C` 编码）——必须自写 `urlTransform` 并对本地路径 `decodeURIComponent`、远程 URL 不解码。（3）`rehype-highlight` 对每个 `pre>code` 无条件加 `hljs` 类（需显式 `no-highlight` 才不加），故「未注册语言降级」的判据只能是「没有 token span」，原测试断言过度指定已修正。（4）新增 `.module.css` import 把 tsc 从 27 顶到 28，根因是项目缺 `src/vite-env.d.ts`（**假报错**），补 `/// <reference types="vite/client" />` 后降到 7（详见 `AGENTS.md §2.7.7`）。（5）一个既有测试因高亮拆分代码文本为多 token span 而合理失败——改为断言 `<code>` 整体文本一字未少，属正常连带而非放宽断言。（6）**T8 流式渲染时序做不到红→绿**——`useDeferredValue` 作用是调度优先级，jsdom 无可观测调度差异，真实收益需浏览器大消息实测；3 个用例是**回归护栏**（增量即时可见 / 快速追加不丢内容 / 长文混排不崩），加实现前后均全绿；这是测试方法学上的诚实交代而非缺陷。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
+### 2.11 `2026-09-13-add-models-dropdown-v0/` — add-models-dropdown-v0 模型 + 思考强度下拉
+
+- **测试目标**：验证 `add-models-dropdown-v0` change 落地——前端 UI 下拉切换模型 + 思考强度（对齐 dsh web `ModelSelect` 体验简化版）；后端 reasoningEffort 透传到三 Provider（OpenAI 透传 / Anthropic 折算 budget_tokens / DeepSeek 忽略）；CLI `/effort <low|medium|high>` 命令；localStorage 跨会话持久化。
+- **执行要点**：worktree `feat/add-models-dropdown-v0` 隔离作业（§2.7）；Java 后端 10 个新测试（AgentLoop + OpenAi Mapper + Anthropic + SlashCommand + ModelsController）+ Java 既有测试全绿（agent-core 418/0/0, agent-web 单测 170/0/0, 排除 E2E）；前端 vitest 沙箱 npm ci 失败未跑；7 个 commit 已 push 到 origin（main 干净）。
+- **关键发现**：`ChatRequest` record 7 字段签名不破坏（避免改 20 处现有调用方），改用 `extra: Map<String, Object>` 透传 `reasoning_effort`；`ModelsResponse.Model` 加 `reasoningEfforts` 字段（v0.1 固定三档）；`ChatStreamService.create` 新增 5 参重载，向后兼容 1-4 参调用方；`App.tsx` 提升 model/effort state 到顶层共享给 TopBar 和 ChatPanel，避免状态不同步；`OpenAiCompatibleMapper` 显式读 `extra.get("reasoning_effort") instanceof String` 替代原 `containsKey` 检查，语义更清晰。
+- **遗留**：前端集成 / localStorage 持久化测试未实施；沙箱 npm ci 失败导致 vitest 未跑；E2E 失败（`WebIntegrationTest` 404 / `UiLayoutE2ETest` 中文编码）已对照 main 基线确认非本 change 引起。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已实施未归档（branch `feat/add-models-dropdown-v0` 已 push，merge 后 archive）。
 
 ---
 

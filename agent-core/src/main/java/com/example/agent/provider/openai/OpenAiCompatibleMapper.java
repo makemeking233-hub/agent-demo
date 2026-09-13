@@ -73,10 +73,17 @@ public class OpenAiCompatibleMapper {
         body.put(STREAM_OPTIONS_KEY, Map.of(INCLUDE_USAGE_KEY, true));
         if (req.temperature() != null) body.put("temperature", req.temperature());
         if (req.maxTokens() != null) body.put("max_tokens", req.maxTokens());
-        // add-reasoning-thinking-streaming: OpenAI o1/o3/o4 reasoning 注入
-        if (isOpenAiReasonerModel(req.model())
-                && (req.extra() == null || !req.extra().containsKey("reasoning_effort"))) {
-            body.put("reasoning_effort", "medium");
+        // add-reasoning-thinking-streaming + add-models-dropdown-v0：
+        // OpenAI o1/o3/o4 reasoning 模型自动注入 reasoning_effort。
+        //   - 用户在 extra 里显式传了"reasoning_effort" → 用 extra 的值（add-models-dropdown-v0：AgentLoop.setReasoningEffort）
+        //   - 用户没传 → 注入默认 "medium"（add-reasoning-thinking-streaming 老行为，向后兼容）
+        //   - 非 OpenAI o1/o3/o4 模型 → 不注入（DeepSeek 等不识别 reasoning_effort 参数）
+        if (isOpenAiReasonerModel(req.model())) {
+            String customEffort =
+                    req.extra() != null && req.extra().get("reasoning_effort") instanceof String s
+                            ? s
+                            : null;
+            body.put("reasoning_effort", customEffort != null ? customEffort : "medium");
         }
         if (req.systemPrompt() != null && !req.systemPrompt().isEmpty()) {
             body.put("messages", mergeSystemPrompt(req));

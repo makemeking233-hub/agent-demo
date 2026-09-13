@@ -207,6 +207,9 @@ public class ChatCommand implements Runnable {
                         aborted,
                         recorder,
                         sessionsDir);
+        // add-models-dropdown-v0：/effort 切换 AgentLoop.setReasoningEffort，下一轮生效
+        // (ctx 已 final，此处 lambda 安全捕获)
+        slash.setOnEffort(newEffort -> ctx.loop().setReasoningEffort(newEffort));
         try {
             runReplLoop(ctx, reader);
         } finally {

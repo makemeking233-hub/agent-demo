@@ -14,6 +14,8 @@ import com.example.agent.tools.websearch.WebSearchResult;
 
 import org.junit.jupiter.api.Test;
 
+import reactor.test.StepVerifier;
+
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -108,6 +110,55 @@ class WebSearchToolTest {
         WebSearchTool tool = toolWith((q, max, t) -> new WebSearchResult(List.of(), false));
         ToolResult<String> r = tool.execute(new WebSearchTool.Input("  ", null), ctx).block();
         assertTrue(r.isError());
+    }
+
+    /**
+     * 验证 fix-web-search-blocking-call：provider 模拟阻塞 IO 时，execute 不会把阻塞调用留在
+     * 订阅线程上，应调度到 boundedElastic 弹性线程池；调用方能在合理时间内拿到结果，不抛
+     * {@code block() are not supported} 错误。
+     */
+    @Test
+    void executeSchedulesBlockingCallOffSubscriberThread() {
+        WebSearchProvider provider =
+                (q, max, t) -> {
+                    // 模拟 provider.search 内的同步阻塞 IO（如 WebClient.mono.block）
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return new WebSearchResult(
+                            List.of(new Source("https://a.example", "A", "摘要", "2024-01-01")),
+                            false);
+                };
+        WebSearchTool tool = toolWith(provider);
+        StepVerifier.create(tool.execute(tool.parseArguments("{\"query\":\"x\"}"), ctx))
+                .assertNext(r -> {
+                    assertFalse(r.isError());
+                    assertTrue(r.output().contains("https://a.example"));
+                })
+                .verifyComplete();
+    }
+
+    /**
+     * 验证 fix-web-search-blocking-call：provider 抛错时，错误结果透传原始异常消息，且不再
+     * 附加 "请检查搜索 provider 的 API key 配置与网络连接" 这条误导性 fallback 文案。
+     */
+    @Test
+    void executePassesThroughProviderExceptionMessageWithoutFallback() {
+        String originalMessage = "DeepSeek 搜索缺少 API key：请设置环境变量 DEEPSEEK_API_KEY";
+        WebSearchProvider provider =
+                (q, max, t) -> {
+                    throw new IllegalStateException(originalMessage);
+                };
+        WebSearchTool tool = toolWith(provider);
+        ToolResult<String> r = tool.execute(tool.parseArguments("{\"query\":\"x\"}"), ctx).block();
+        assertTrue(r.isError());
+        // 透传原始消息
+        assertTrue(r.toModelContent().contains(originalMessage), () -> "应包含原始异常消息，实际=" + r.toModelContent());
+        // 不再附加误导性 fallback 文案
+        assertFalse(r.toModelContent().contains("请检查搜索 provider 的 API key"),
+                () -> "不应再含 fallback 误导文案，实际=" + r.toModelContent());
     }
 }
 
