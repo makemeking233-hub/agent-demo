@@ -1039,6 +1039,10 @@ agent-demo/
 └── README.md
 ```
 
+**web 模块的前端产物不入库**（`stop-tracking-web-build-output`）：`agent-web/src/main/resources/static/` 完全由 Vite 生成（`vite.config.ts` 的 `outDir` 指向此处且 `emptyOutDir: true`，文件名带内容 hash），因此该目录在 `.gitignore` 中。产物在 Maven `generate-resources` 阶段由 `frontend-maven-plugin`（`npm ci` + `npm run build`）生成，早于 `compile` / `test`，所以 `mvn test|verify|package` 无需额外步骤。
+
+> 入库这份快照只会带来两个问题：快照随源码演进变陈旧（实际发生过——自 `bff39ad` 起再未更新），以及每次构建都弄脏工作树。源码唯一副本在 `agent-web/frontend/`（含 `public/` 下的 `favicon.svg`、`manifest.webmanifest`、PWA 图标与 vosk 模型）。
+
 ### 13.3 用户使用流程
 
 ```bash

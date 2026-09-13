@@ -340,6 +340,10 @@ mvn -pl agent-web verify # agent-web 模块（注意用 -DskipNpm=true 可跳过
 
 > 测试文档见 `docs/test-agent-demo/`（按批次，每批四件套 + test-guide 登记）。前端 `vitest` 在 `agent-web/frontend` 下 `npx vitest run`。
 
+**前端产物不入库**：`agent-web/src/main/resources/static/` 整个目录由 Vite 拥有（`vite.config.ts` 的 `outDir` 指向此处且 `emptyOutDir: true`），每次构建都会按内容 hash 重写文件名，因此该目录已在 `.gitignore` 中。产物由 Maven 的 `generate-resources` 阶段（`frontend-maven-plugin` 跑 `npm ci` + `npm run build`）自动生成，早于 `compile` 与 `test`，所以常规 `mvn test` / `verify` / `package` 无需额外步骤。
+
+> `-DskipNpm=true` 只适用于纯后端迭代：此时不会生成前端产物，打出的 jar 不含界面，依赖产物的测试（如 SPA 回落）会被跳过而非失败。
+
 ---
 
 ## 12. 阶段与已归档变更

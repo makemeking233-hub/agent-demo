@@ -40,9 +40,13 @@ node_modules/
 agent-web/frontend/node/
 # 注：package-lock.json 必须 commit (npm ci 要求 lockfile 存在) — 之前被错误忽略导致 CI 7s 失败
 
-# Vosk 语音模型构建产物（~40MB，模型源在 agent-web/frontend/public/vosk-model/，构建时拷入 static/，勿重复提交）
+# 前端构建产物：整个 static/ 由 Vite 拥有（vite.config.ts 的 outDir 指向此处且 emptyOutDir=true），
+# 每次 npm run build 都会按内容 hash 重写文件名，入库只会造成"快照陈旧 + 每次构建弄脏工作树"。
+# 源码在 agent-web/frontend/（含 public/ 下的 favicon.svg、manifest.webmanifest、PWA 图标、vosk 模型），
+# 产物由 maven generate-resources 阶段（frontend-maven-plugin）自动生成。
+agent-web/src/main/resources/static/
+# 下面两条是同一原则的历史条目，保留以防有人单独调整上面的规则
 agent-web/src/main/resources/static/vosk-model/
-# vosk-browser 运行时库构建产物（源在 agent-web/frontend/public/vosk-browser/）
 agent-web/src/main/resources/static/vosk-browser/
 
 # OpenSpec 生成的 Claude Code 工具文件（本项目用 DSH，工具已复制到 .dsh/）

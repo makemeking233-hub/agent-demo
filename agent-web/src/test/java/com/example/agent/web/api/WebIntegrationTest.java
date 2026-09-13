@@ -1,6 +1,7 @@
 package com.example.agent.web.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -88,6 +89,14 @@ class WebIntegrationTest {
 
     @Test
     void spaFallbackServesIndexHtml() {
+        // 前端产物不入库（stop-tracking-web-build-output），由 maven generate-resources 阶段的
+        // npm run build 生成。显式跳过前端构建（-DskipNpm）时产物缺失，此处应跳过而非报错，
+        // 避免给出"SPA 回落坏了"的错误信号。
+        assumeTrue(
+                frontendBuilt(),
+                "前端产物缺失（agent-web/src/main/resources/static/index.html）；"
+                        + "请用不带 -DskipNpm 的 mvn package/verify 触发前端构建");
+
         client.get()
                 .uri("/sessions/some-uuid")
                 .exchange()
@@ -95,6 +104,19 @@ class WebIntegrationTest {
                 .isOk()
                 .expectHeader()
                 .contentTypeCompatibleWith("text/html");
+    }
+
+    /** 前端构建产物是否已生成（判断 static/index.html 是否存在）。 */
+    private static boolean frontendBuilt() {
+        try {
+            var url =
+                    WebIntegrationTest.class
+                            .getClassLoader()
+                            .getResource("static/index.html");
+            return url != null;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Test
