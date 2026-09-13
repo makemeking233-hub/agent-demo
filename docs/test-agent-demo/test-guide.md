@@ -17,6 +17,7 @@
 | `2026-09-02-session-switch-selenium/` | web 会话切换功能 Selenium 自动化验证（真实会话列表 / 点击加载历史 / 切换更新） | 2026-09-02 | 5 | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-workspace-picker/` | add-workspace-picker-modal 工作区目录选择器测试（后端 fs API + 前端 Modal + Sidebar 集成） | 2026-09-04 | 51（28 Java + 23 vitest） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-workspace-picker-v2/` | polish-workspace-picker-dsh-style Modal 重写为 DSH 风格（左侧导航树 + history 栈 + 列头排序 + 底部路径框 + quick-access API） | 2026-09-04 | 14（4 Java + 10 vitest） | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-04-pwa/` | add-pwa-support 完整 PWA（manifest + Workbox SW + 离线 UI + HTTPS 自签证书） | 2026-09-04 | 13 vitest（manifest 4 + pwa-update 3 + offline-banner 6）+ Playwright 3 用例（配置已落地未跑） | ✅ 全绿 | ✅ | 已归档 |
 
 ---
 
@@ -59,6 +60,14 @@
 - **测试目标**：把 `WorkspacePickerModal` 从单栏条目录表重写为 DSH 资源管理器风格（顶部 ←/→/↑ + 面包屑；主区域左 200px 导航树 + 右文件列表带列头排序；底部"文件夹"路径框 + 工作区名称框）；新增后端 `GET /api/fs/quick-access` 接口支持左导航树。
 - **执行要点**：后端 `mvn -pl agent-web test`（FsControllerTest 新增 4 quick-access 用例，19/19 全绿）+ 前端 `npx vitest run`（82/82，新增 10：fs.test 4 + Modal 6）+ `mvn -pl agent-web verify` jacoco 门禁 BUILD SUCCESS（"All coverage checks have been met"）。
 - **关键发现**：User 选了"保留 name 输入框"+ "B + DSH 风格"路径；File System Access API 在我们场景下拿不到绝对路径，所以放弃 C 方案改回 A 方案 Modal 仿 DSH；history 栈纯前端 + 列头排序 useMemo + grid 布局是性能/视觉兼顾的选择；旧 beforeEach 缺 getQuickAccess 默认值导致首跑 16 失败，补充后通过；`listDir` mock 缺越界校验让"路径框非法"测试失败，补充 mock 后通过。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.8 `2026-09-04-pwa/` — add-pwa-support 完整 PWA 改造
+
+- **测试目标**：把 agent-demo Web 端升级为 Chrome/Edge 可安装的 PWA，涵盖 manifest 注册、Service Worker 运行时缓存（`/assets/*` CacheFirst + `/index.html` NetworkFirst + `/api/**` NetworkOnly）、离线 UI（Snackbar + Composer 禁用 + 路由级 fallback）、新版本检测（auto skipWaiting + 立即刷新）、HTTPS 自签证书支持。
+- **执行要点**：前端 95/95 vitest 全绿（13 既有 + 12 新增：manifest 4 + pwa-update 3 + offline-banner 6）；后端 153/153 mvn test 全绿（核心路径，1 skip = E2E）；Playwright + lighthouse-ci 配置文件已落地（本地无 Chrome GUI 跑不动）。
+- **关键发现**：`vite-plugin-pwa@0.20.5` peer 依赖只支持 Vite 3/4/5，升到 `1.3.0` 兼容 Vite 6；Vosk 模型 5.79MB 超 Workbox 默认 2MB precache 上限，加 `maximumFileSizeToCacheInBytes: 10MB` 解决；`SslCertificateGenerator` 用 keytool 子进程 + PKCS12 而非 sun.security.x509.* 反射；`Composer` 拆 `ComposerInner` + 外层 `OnlineProvider` 包裹让 7 个旧测试自动有 provider。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 

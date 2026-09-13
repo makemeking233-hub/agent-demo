@@ -1,0 +1,34 @@
+name: lighthouse-ci
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build agent-web (skip npm)
+        run: mvn -pl agent-web -am clean package -DskipNpm=true -DskipTests
+
+      - name: Start agent-web server
+        run: |
+          java -jar agent-web/target/agent-web.jar \
+            --spring.profiles.active=web \
+            --server.port=18080 &
+          sleep 30
+          curl -s http://localhost:18080/ > /dev/null || (echo "Server failed to start"; exit 1)
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          configPath: ./.lighthouserc.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+
+      - name: Stop agent-web server
+        if: always()
+        run: pkill -f agent-web.jar || true

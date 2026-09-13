@@ -99,5 +99,7 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/vitest.setup.ts',
     include: ['**/*.{test,spec}.{ts,tsx}'],
+    // add-pwa-support: 排除 Playwright e2e 测试（需单独跑 pnpm playwright test + Chrome 环境）
+    exclude: ['**/node_modules/**', 'tests/e2e/**'],
   },
 });
