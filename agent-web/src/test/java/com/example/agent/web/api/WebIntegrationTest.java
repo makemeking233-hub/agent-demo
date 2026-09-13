@@ -42,6 +42,20 @@ import reactor.core.publisher.Flux;
 @ActiveProfiles("web")
 class WebIntegrationTest {
 
+    /**
+     * 隔离数据目录（全局规则 §10：测试不得污染真实数据）。
+     *
+     * <p>本测试会启动完整 WebApplication 并调 {@code /api/chat/send}，产生**真实会话存档**。
+     * 不改的话会写进用户的 {@code ~/.agent-demo/sessions}——2026-09-13 实测这样污染出上百个
+     * 测试会话。`@SpringBootTest` 设不了环境变量，因此走系统属性，且必须在**类初始化**时设置
+     * （早于 Spring 上下文创建）。
+     */
+    static {
+        System.setProperty(
+                com.example.agent.web.stream.WebAgentRuntime.AGENT_DEMO_HOME_PROPERTY,
+                "target/test-data");
+    }
+
     @Autowired
     private WebTestClient client;
 

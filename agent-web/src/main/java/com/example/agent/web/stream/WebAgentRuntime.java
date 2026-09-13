@@ -115,20 +115,48 @@ public class WebAgentRuntime {
         this.agentDataDir = agentDataDir;
     }
 
-    /** 解析默认 agent 数据目录（{@code <user.home>/.agent-demo}，尊重 {@code AGENT_DEMO_HOME}）。 */
-    private static Path defaultAgentDataDir() {
-        String userHome =
-                System.getenv("AGENT_DEMO_HOME") != null
-                                && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                        ? System.getenv("AGENT_DEMO_HOME")
+    /**
+     * 覆盖数据目录的系统属性名（值为「用户主目录」语义，其下仍拼 {@code .agent-demo}）。
+     *
+     * <p>存在的理由是**让测试能隔离真实数据**：`@SpringBootTest` 无法设置环境变量，但可以在
+     * 测试类初始化时 {@code System.setProperty}。此前集成测试直接写进真实 {@code ~/.agent-demo}，
+     * 2026-09-13 实测污染出 173 个测试会话。
+     */
+    public static final String AGENT_DEMO_HOME_PROPERTY = "agent.demo.home";
+
+    /**
+     * 解析默认 agent 数据目录（{@code <home>/.agent-demo}）。
+     *
+     * <p>优先级：系统属性 {@link #AGENT_DEMO_HOME_PROPERTY} → 环境变量 {@code AGENT_DEMO_HOME}
+     * → {@code user.home}。系统属性排在环境变量之前，正是为了测试隔离（见上方常量说明）。
+     *
+     * @return 数据目录
+     */
+    static Path resolveDataDir() {
+        String override = System.getProperty(AGENT_DEMO_HOME_PROPERTY);
+        if (override == null || override.isBlank()) {
+            override = System.getenv("AGENT_DEMO_HOME");
+        }
+        String home =
+                override != null && !override.isBlank()
+                        ? override
                         : System.getProperty("user.home");
-        return Paths.get(userHome, ".agent-demo");
+        return Paths.get(home, ".agent-demo");
     }
 
-    /** 加载默认配置（{@code <user.home>/.agent-demo/config.yaml}）。 */
+    /** 解析默认 agent 数据目录（保持既有调用点语义）。 */
+    private static Path defaultAgentDataDir() {
+        return resolveDataDir();
+    }
+
+    /**
+     * 加载默认配置（{@code <数据目录>/config.yaml}）。
+     *
+     * <p>与 {@link #resolveDataDir()} 同源：数据目录被覆盖时配置也跟着走，否则测试会读到用户
+     * 真实的 {@code config.yaml}。
+     */
     private static AgentConfig loadConfig() {
-        return new ConfigLoader()
-                .load(Paths.get(System.getProperty("user.home"), ".agent-demo", "config.yaml"));
+        return new ConfigLoader().load(resolveDataDir().resolve("config.yaml"));
     }
 
     /**

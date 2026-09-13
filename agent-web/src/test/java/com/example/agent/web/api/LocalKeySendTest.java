@@ -30,6 +30,19 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 @ActiveProfiles("web")
 class LocalKeySendTest {
 
+    /**
+     * 隔离数据目录（全局规则 §10：测试不得污染真实数据）。
+     *
+     * <p>本测试启动完整 WebApplication 并调 {@code /api/chat/send}，会写入**真实会话存档**。
+     * 必须在类初始化时设置（早于 Spring 上下文创建）；`@SpringBootTest` 设不了环境变量，
+     * 所以走系统属性。
+     */
+    static {
+        System.setProperty(
+                com.example.agent.web.stream.WebAgentRuntime.AGENT_DEMO_HOME_PROPERTY,
+                "target/test-data");
+    }
+
     @Autowired
     private WebTestClient client;
 
