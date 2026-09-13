@@ -865,6 +865,13 @@ cost:
 - 会话重命名走侧车 `<id>.meta.json{title}`；列表摘要（`SessionController.derive`）**优先侧车标题**，否则回落首条消息派生的自动标题。归档/恢复时 `SessionStore` 连带搬移该侧车。
 - 会话运行时落盘目录与运行目录按工作区路由：`WebAgentRuntime.sessionsDirFor(workspace)` / `buildLoop(..., workingDirOverride)`。
 
+**会话统计**（add-session-stats-bar）：
+
+- 会话级累计 `SessionStats`：轮次 / 步数（工具调用次数）/ 输入输出 token / LLM 与工具耗时 / 首 token 延迟与样本数 / 缓存命中与未命中。
+- 派生：`avgTtftMs`（首 token 平均）、`tokPerSec`（分母为**纯生成耗时** `llmMillis - ttftMillis`）、`cacheHitRate`（provider 未返回缓存字段时为 `N/A`，不按 0 计）。
+- 采集点在 `AgentLoop`：每次 `streamChat` 记一段 LLM 耗时、首个文本 chunk 记 TTFT 样本，工具执行记步数与耗时，usage（含 DeepSeek `prompt_cache_hit_tokens`/`prompt_cache_miss_tokens`）累加。
+- 推送与查询：每轮结束于 `message_stop` 之前推送 SSE `turn_stats`；`GET /api/sessions/{id}/stats` 供首屏 / resume 回填。累计值落侧车 `<id>.meta.json{stats}`（与 `title` 共存，旧文件容错）。
+
 **JSONL schema**（每行一个 entry，JSON）：
 
 ```json
