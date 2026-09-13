@@ -1,5 +1,8 @@
-## ADDED Requirements
+# data-isolation Specification
 
+## Purpose
+TBD - created by archiving change isolate-test-data-dir. Update Purpose after archive.
+## Requirements
 ### Requirement: 测试可隔离数据目录
 
 系统 SHALL 支持通过系统属性覆盖 agent 数据目录，且该覆盖 SHALL 优先于环境变量与默认位置。
@@ -43,3 +46,4 @@
 
 - **WHEN** 集成测试设置数据目录覆盖
 - **THEN** 该设置在任何数据写入之前生效
+
