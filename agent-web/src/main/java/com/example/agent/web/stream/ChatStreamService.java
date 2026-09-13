@@ -139,9 +139,32 @@ public class ChatStreamService {
                     try {
                         loop.processTurn(new Message.User(content))
                                 .block(Duration.ofMinutes(30));
-                    } catch (Exception e) {
-                        log.warn("turn failed for stream {}: {}", streamId, e.toString());
-                        emit(meta, new SseEvent.Error("turn_failed", String.valueOf(e.getMessage())));
+                    } catch (Throwable t) {
+                        // JVM 级致命错误（OOM / StackOverflow）原样抛出，不降级为回合失败
+                        com.example.agent.core.Throwables.reraiseIfJvmFatal(t);
+                        // improve-failure-observability：这里**必须**捕获 Throwable。工具抛出的 Error
+                        // （如 NoClassDefFoundError）会被 Reactor 的 Exceptions.throwIfFatal 原样
+                        // rethrow，绕过 AgentLoop 的 doOnError / onErrorResume，只有订阅侧这个边界
+                        // 才兜得住。此前只 catch Exception，导致这类失败在日志里零记录，且只留下
+                        // 一行不含 sessionId 的 "turn failed for stream"。
+                        log.error(
+                                "turn failed stream={} session={} workspace={} model={} error={}: {}",
+                                streamId,
+                                meta.sessionId(),
+                                meta.workspace(),
+                                meta.model(),
+                                t.getClass().getName(),
+                                t.getMessage(),
+                                t);
+                        // 收口在途工具调用：补 TOOL< 与 history，避免留下悬挂 tool_calls（会让该会话
+                        // 此后每轮被上游 400）
+                        try {
+                            loop.closePendingToolCalls(
+                                    "回合异常中断: " + t.getClass().getSimpleName());
+                        } catch (Throwable ignored) {
+                            // 收口本身失败不应阻碍关流
+                        }
+                        emit(meta, new SseEvent.Error("turn_failed", String.valueOf(t.getMessage())));
                         stop(streamId, "error");
                     }
                 });

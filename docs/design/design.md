@@ -1048,6 +1048,25 @@ flowchart LR
 
 > 排查经验：遇到 `insufficient tool messages following tool_calls message` 时，直接按配对不变式扫会话存档即可定位——逐条记录维护一个「已发起未回答」的 id 集合，在遇到下一条 user/assistant 或文件末尾时若非空，那就是悬挂点。
 
+### 11.7 故障路径的可观测性（不可绕过的边界）
+
+§11.5 的 `LinkageError` 降级只覆盖了**工具交互**三处入口；而「错误被上报」这件事本身，原先也挂在会被绕过的接缝上：`AgentLoop.processTurn` 用 `.doOnError(e -> sink.onSystemEvent("system/error", ...))`，同样绕过所有 Reactor 错误算子——2026-09-13 事故时 `system/error` **一条都没落**。
+
+因此报错边界统一设在 **Reactor 之外**（订阅侧）：
+
+| 边界 | 位置 | 行为 |
+|------|------|------|
+| Web 回合 | `ChatStreamService.start` 的 executor 任务 | `catch (Throwable)` → `log.error` 带 `streamId/sessionId/workspace/model` → 收口在途工具调用 → SSE `error` → 关流 |
+| CLI 回合 | `ChatCommand` 的 REPL 循环 | `catch (Throwable)` → 收口 → `log.error` 加 stderr 提示，REPL 继续 |
+
+两者都先调 `Throwables.reraiseIfJvmFatal(t)`：`VirtualMachineError` 与 `ThreadDeath` 原样抛出（真致命），其余（含 `LinkageError`）降级上报。注意这**不同于** Reactor `Exceptions.throwIfFatal` 的语义——后者把 `LinkageError` 也当致命，正是要避免的那一侧。
+
+**工具调用收口**：`AgentLoop` 维护本轮在途调用集合（`executeOne` 进入时登记、出结果时移除），turn 边界与外部边界都会调 `closePendingToolCalls(reason)`——对残留项打 ERROR、补 `sink.onToolResult(err)` 使 `tools.log` 闭合、并把错误结果回流 history。这样即使一轮被 `Error` 或取消打断，也不会留下「有 `TOOL>` 无 `TOOL<`」或悬挂 `tool_calls`。
+
+**诊断入口**：`GET /api/diagnostics` 扫描会话存档的配对不变式，报告不完整会话与缺失 id（`SessionDiagnostics.scan` 为纯函数，CLI 侧将来可复用）。等价于把手写脚本的排查固化成一条请求。
+
+> 日志根固定为 `~/.agent-demo/logs`（见 `logging-design.md` §2.3），测试日志隔离到 `target/test-logs/`。
+
 ---
 
 ## 12. 测试策略

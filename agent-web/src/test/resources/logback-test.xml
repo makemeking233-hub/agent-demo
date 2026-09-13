@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  测试专用日志配置（improve-failure-observability）。
+
+  agent-web 的测试没有独立配置时会回落到 agent-core 主配置的 logback.xml，把单测堆栈写进运行时
+  日志 <user.home>/.agent-demo/logs/app.log（实测该文件被写入了 16 行 surefire/junit 痕迹）。
+
+  这里只写 target/test-logs/，与 agent-core 的 logback-test.xml 保持一致。
+-->
+<configuration>
+    <appender name="TEST_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>target/test-logs/test.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>target/test-logs/test.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>50MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder><pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - %msg%n</pattern></encoder>
+    </appender>
+    <appender name="TEST_STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder><pattern>%d{HH:mm:ss.SSS} %-5level %logger{20} - %msg%n</pattern></encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="TEST_FILE"/>
+        <appender-ref ref="TEST_STDERR"/>
+    </root>
+</configuration>

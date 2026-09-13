@@ -338,7 +338,8 @@ public final class AgentLoopFactory {
     public static String buildStorageSection(AgentConfig cfg, String userHome) {
         String logsDir = cfg.logging() != null && cfg.logging().dir() != null
                 ? cfg.logging().dir()
-                : Paths.get(System.getProperty("user.dir"), "logs").toString();
+                // 与 AgentConfig 缺省一致：固定 ~/.agent-demo/logs，不随工作目录漂移
+                : Paths.get(System.getProperty("user.home"), ".agent-demo", "logs").toString();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")

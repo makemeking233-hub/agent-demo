@@ -24,6 +24,9 @@ public final class SessionResumeLoader {
     /** 恢复结果：消息列表 + 累计 token。 */
     public record ResumeResult(List<Message> messages, int promptTokens, int completionTokens) {}
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(SessionResumeLoader.class);
+
     private static final String ORPHAN_CALL_NAME = "resumed_tool";
 
     private SessionResumeLoader() {}
@@ -36,7 +39,7 @@ public final class SessionResumeLoader {
      */
     public static ResumeResult load(Path sessionsDir) {
         List<SessionEntry> entries = SessionStore.loadLatest(sessionsDir);
-        return toMessages(entries);
+        return toMessages(entries, null);
     }
 
     /**
@@ -50,7 +53,7 @@ public final class SessionResumeLoader {
      */
     public static ResumeResult loadById(Path sessionsDir, String sessionId) {
         List<SessionEntry> entries = SessionStore.loadById(sessionsDir, sessionId);
-        return toMessages(entries);
+        return toMessages(entries, sessionId);
     }
 
     /**
@@ -64,11 +67,18 @@ public final class SessionResumeLoader {
      */
     public static ResumeResult loadArchivedById(Path sessionsDir, String sessionId) {
         List<SessionEntry> entries = SessionStore.loadArchivedById(sessionsDir, sessionId);
-        return toMessages(entries);
+        return toMessages(entries, sessionId);
     }
 
-    /** 把一组存档条目转换为消息列表 + 累计 token，并做孤儿 tool_result 骨架注入。 */
-    private static ResumeResult toMessages(List<SessionEntry> entries) {
+    /**
+     * 把存档条目转换为消息列表 + 累计 token，**不做任何修复**。
+     *
+     * <p>供诊断入口（{@link SessionDiagnostics}）观察存档的真实状态——修复过之后就看不到问题了。
+     *
+     * @param entries 存档条目
+     * @return 原始消息列表 + 累计 token
+     */
+    static ResumeResult toMessagesRaw(List<SessionEntry> entries) {
         if (entries.isEmpty()) return new ResumeResult(List.of(), 0, 0);
 
         List<Message> messages = new ArrayList<>();
@@ -99,13 +109,36 @@ public final class SessionResumeLoader {
                 }
             }
         }
+        return new ResumeResult(messages, prompt, completion);
+    }
+
+    /**
+     * 把存档条目转换为可用历史：先做正/反向配对修复，再返回。
+     *
+     * @param entries 存档条目
+     * @param sessionId 会话 id（仅用于日志关联；可为 null）
+     * @return 可直接继续对话的消息列表 + 累计 token
+     */
+    static ResumeResult toMessages(List<SessionEntry> entries, String sessionId) {
+        ResumeResult raw = toMessagesRaw(entries);
+        if (raw.messages().isEmpty()) return raw;
+
+        List<Message> messages = new ArrayList<>(raw.messages());
         // 正向配对修复（repair-dangling-tool-calls）：某轮在「assistant 已落盘、tool_result 未落盘」
         // 之间被打断时，存档会停在有 tool_calls 无 tool_result 的中间态，此后每轮重放都会 400。
-        // 这里补合成错误结果，使被污染的存档恢复后立即可用（不改写存档文件本身）。
+        // 修复时打可检索告警（improve-failure-observability）：否则"这个会话曾被修复过"完全不可见。
+        List<String> dangling =
+                com.example.agent.core.ToolCallPairing.danglingCallIds(messages);
+        if (!dangling.isEmpty()) {
+            log.warn(
+                    "会话存档存在 tool_calls/tool_result 不配对，已自动补合成错误结果：sessionId={} 缺失 toolCallId={}",
+                    sessionId,
+                    dangling);
+        }
         List<Message> paired = com.example.agent.core.ToolCallPairing.repair(messages);
         // 反向配对修复：为无前置 assistant.tool_calls 的 tool_result 注入合成骨架
         injectOrphanSkeletons(paired);
-        return new ResumeResult(paired, prompt, completion);
+        return new ResumeResult(paired, raw.promptTokens(), raw.completionTokens());
     }
 
     /**

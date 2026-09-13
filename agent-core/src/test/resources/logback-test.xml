@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  测试专用日志配置（improve-failure-observability）。
+
+  此前测试没有独立配置，回落到 src/main/resources/logback.xml，于是单测的堆栈被写进
+  运行时日志 <user.home>/.agent-demo/logs/app.log —— 实测该文件里有 78 行含 junit 临时目录，
+  其中 10 处异常堆栈全是跑测试写进去的，真实故障证据被淹。
+
+  这里只写 target/test-logs/（target/ 本就被版本控制忽略），并保留 WARN 镜像到 stderr
+  便于本地排查。
+-->
+<configuration>
+    <appender name="TEST_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>target/test-logs/test.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>target/test-logs/test.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>50MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder><pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{20} - %msg%n</pattern></encoder>
+    </appender>
+    <!-- 测试中 WARN+ 镜像 stderr：不写运行时日志，但失败原因仍可见 -->
+    <appender name="TEST_STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>WARN</level>
+        </filter>
+        <encoder><pattern>%d{HH:mm:ss.SSS} %-5level %logger{20} - %msg%n</pattern></encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="TEST_FILE"/>
+        <appender-ref ref="TEST_STDERR"/>
+    </root>
+</configuration>

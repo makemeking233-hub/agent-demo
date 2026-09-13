@@ -114,7 +114,10 @@ public record AgentConfig(
                 List.of(),
                 new Logging(
                         true,
-                        System.getProperty("user.dir") + "/logs/",
+                        // 日志根固定为 ~/.agent-demo/logs（improve-failure-observability）：
+                        // 此前是 ${user.dir}/logs，随进程工作目录漂移，且与 /api/logs 读取的
+                        // ~/.agent-demo/logs 不一致。
+                        System.getProperty("user.home") + "/.agent-demo/logs/",
                         30_000,
                         2_000,
                         30,

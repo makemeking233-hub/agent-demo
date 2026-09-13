@@ -586,6 +586,19 @@ public class SessionStore implements AutoCloseable {
     /**
      * 反序列化单个 JSONL 会话文件的所有条目（跳过无法解析的空白/非法行）。
      *
+    /**
+     * 直接读取指定存档文件（诊断用，improve-failure-observability）。
+     *
+     * @param file 会话 JSONL 文件
+     * @return entry 列表（按文件行序）；文件不可读时返回空 list
+     */
+    public static List<SessionEntry> loadFile(Path file) {
+        return readEntries(file);
+    }
+
+    /**
+     * 反序列化单个 JSONL 会话文件的所有条目（跳过无法解析的空白/非法行）。
+     *
      * @param file 会话 JSONL 文件
      * @return entry 列表（按文件行序）；文件不可读时返回空 list
      */

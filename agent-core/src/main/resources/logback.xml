@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${user.dir}/logs/app.log</file>
+        <!-- 日志根固定为 ~/.agent-demo/logs：与 InitCommand 约定、LogController 读取一致。
+             此前用 ${user.dir}/logs，日志位置随进程工作目录漂移（web 从仓库根启动写 logs/、
+             CLI 从模块目录启动写 agent-core/logs/），而 /api/logs 读的是 ~/.agent-demo/logs，
+             等于长期读一份再没人写过的旧目录。 -->
+        <file>${user.home}/.agent-demo/logs/app.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- 按天 + 大小轮转：app.log.2026-08-29.0.log ... -->
-            <fileNamePattern>${user.dir}/logs/app.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${user.home}/.agent-demo/logs/app.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>7</maxHistory>
             <totalSizeCap>100MB</totalSizeCap>

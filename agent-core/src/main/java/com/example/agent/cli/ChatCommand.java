@@ -273,7 +273,9 @@ public class ChatCommand implements Runnable {
         String logsDir =
                 cfg.logging() != null && cfg.logging().dir() != null
                         ? cfg.logging().dir()
-                        : Paths.get(System.getProperty("user.dir"), "logs").toString();
+                        // 与 AgentConfig 缺省一致：固定 ~/.agent-demo/logs，不随工作目录漂移
+                        : Paths.get(System.getProperty("user.home"), ".agent-demo", "logs")
+                                .toString();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")
@@ -332,10 +334,21 @@ public class ChatCommand implements Runnable {
                 TurnResult result = null;
                 try {
                     result = ctx.loop().processTurn(new Message.User(line)).block();
-                } catch (Exception e) {
-                    // 不让单次失败退出 REPL：打印错误让用户重试（/clear 清空历史）
-                    System.err.println("\n[error] " + friendlyError(e) + "\n");
-                    log.debug("REPL turn failed", e);
+                } catch (Throwable t) {
+                    // improve-failure-observability：必须捕获 Throwable。工具抛出的 Error
+                    // （如 NoClassDefFoundError）会被 Reactor 的 throwIfFatal 原样 rethrow，
+                    // 绕过 AgentLoop 的错误算子；只 catch Exception 会让 REPL 直接被搞死。
+                    com.example.agent.core.Throwables.reraiseIfJvmFatal(t);
+                    // 不让单次失败退出 REPL：收口在途工具调用、打印错误让用户重试（/clear 清空历史）
+                    try {
+                        ctx.loop()
+                                .closePendingToolCalls(
+                                        "回合异常中断: " + t.getClass().getSimpleName());
+                    } catch (Throwable ignored) {
+                        // 收口失败不应阻碍 REPL 继续
+                    }
+                    log.error("REPL turn failed: {}", t.getClass().getName(), t);
+                    System.err.println("\n[error] " + friendlyError(t) + "\n");
                 }
                 if (result != null) {
                     ctx.totalPrompt()[0] += result.totalPromptTokens();

@@ -41,6 +41,38 @@ public final class ToolCallPairing {
     private ToolCallPairing() {}
 
     /**
+     * 列出正向下悬挂的 {@code tool_call_id}（有 {@code tool_calls} 但在下一条非 tool 消息之前没有
+     * 对应结果），不修改入参。
+     *
+     * <p>供 {@link #repair} 与诊断入口（{@code SessionDiagnostics}）共用同一套判定，避免两处逻辑漂移。
+     *
+     * @param messages 待扫描的消息列表（可空）
+     * @return 悬挂的 id 列表（按出现顺序）；无悬挂时为空
+     */
+    public static List<String> danglingCallIds(List<Message> messages) {
+        if (messages == null || messages.isEmpty()) return List.of();
+        List<String> dangling = new ArrayList<>();
+        for (int i = 0; i < messages.size(); i++) {
+            if (!(messages.get(i) instanceof Message.Assistant a)
+                    || a.toolCalls() == null
+                    || a.toolCalls().isEmpty()) {
+                continue;
+            }
+            Set<String> answered = new HashSet<>();
+            int j = i + 1;
+            while (j < messages.size() && messages.get(j) instanceof Message.ToolResult tr) {
+                answered.add(tr.toolCallId());
+                j++;
+            }
+            for (ToolCall tc : a.toolCalls()) {
+                if (!answered.contains(tc.id())) dangling.add(tc.id());
+            }
+            i = j - 1;
+        }
+        return dangling;
+    }
+
+    /**
      * 为正向下悬挂的 {@code tool_calls} 补齐合成错误结果。
      *
      * <p>补丁插入位置是「该 assistant 已有结果之后、下一条非 tool 消息之前」——插到历史末尾是错的，

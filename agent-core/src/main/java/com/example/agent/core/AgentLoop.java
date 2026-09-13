@@ -351,6 +351,9 @@ public class AgentLoop {
      */
     public Mono<TurnResult> processTurn(Message.User userMsg) {
         resetTurnAccumulators();
+        // 安全网：若上一轮被 Error 打断且外部边界没来得及收口，这里先补掉，避免带着悬挂
+        // tool_calls 去发请求（那会被上游 400）。正常情况下为 0。
+        closePendingToolCalls("上一轮遗留");
         sink.onTurnStart(currentTurn);
         sink.onUser(userMsg);
         history.append(userMsg);
@@ -364,6 +367,8 @@ public class AgentLoop {
                         })
                 .doOnError(
                         e -> {
+                            // 先收口在途工具调用（补 TOOL< 与 history），再上报与结束回合
+                            closePendingToolCalls("回合执行异常: " + e.getClass().getSimpleName());
                             // 回合级异常广播 system/error（message 截断 500 字符）
                             sink.onSystemEvent(
                                     "system/error",
@@ -374,7 +379,9 @@ public class AgentLoop {
                                             truncate(e.getMessage())));
                             sink.onTurnEnd(new TurnResult("", 0, 0, 0, currentTurnDelta()));
                             currentTurn++;
-                        });
+                        })
+                // 取消 / 正常结束也兜一次（幂等）；Error 逃逸时本算子不会执行，由订阅侧边界负责
+                .doFinally(signal -> closePendingToolCalls("回合结束(" + signal + ")"));
     }
 
     /** 重置本轮统计累加器（add-session-stats-bar）。 */
@@ -624,6 +631,9 @@ public class AgentLoop {
                     List.of(ToolResult.<Object>error(call.id(), "工具不存在: " + call.name())));
         }
         sink.onToolCall(call);
+        // improve-failure-observability：登记在途调用。若本轮在此后被打断（含 Error 逃出
+        // 响应式链），turn 边界会统一收口，保证 tools.log 有 TOOL<、history 不留悬挂 tool_calls。
+        pendingToolCalls.add(call.id());
         long startNs = System.nanoTime();
         return Mono.fromCallable(
                         () ->
@@ -639,6 +649,7 @@ public class AgentLoop {
                     // 保证回流给模型的 tool_call_id 与 assistant tool_calls[].id 一致（否则 DeepSeek 400）
                     ToolResult<Object> typed = stampCallId(r, call.id());
                     long elapsed = (System.nanoTime() - startNs) / 1_000_000L;
+                    pendingToolCalls.remove(call.id());
                     sink.onToolResult(typed, elapsed);
                     recordToolExecution(elapsed);
                     return List.of(typed);
@@ -649,10 +660,59 @@ public class AgentLoop {
                             ToolResult<Object> err =
                                     ToolResult.error(call.id(), "工具执行失败: " + e.getMessage());
                             long elapsed = (System.nanoTime() - startNs) / 1_000_000L;
+                            pendingToolCalls.remove(call.id());
                             sink.onToolResult(err, elapsed);
                             recordToolExecution(elapsed);
                             return Mono.just(List.of(err));
                         });
+    }
+
+    // ---- 工具调用收口（improve-failure-observability）----
+
+    /**
+     * 本轮在途工具调用 id（已开始、尚未产生结果）。
+     *
+     * <p>用 {@link java.util.LinkedHashSet} 保持登记顺序，收口时按原顺序补结果。<b>只在 Reactor
+     * 事件线程与 turn 边界线程访问</b>，跨线程场景由 {@link #closePendingToolCalls} 的同步块保护。
+     */
+    private final java.util.LinkedHashSet<String> pendingToolCalls = new java.util.LinkedHashSet<>();
+
+    /**
+     * 收口本轮所有未完成的工具调用：打 ERROR 日志、补错误结果到 sink（使 {@code tools.log} 闭合）、
+     * 回流 history（避免留下「有 tool_calls 无 tool_result」的悬挂状态，那会让该会话此后每轮 400）。
+     *
+     * <p><b>为什么必须由 turn 边界负责</b>：工具抛出的 {@code Error}（如 {@code NoClassDefFoundError}）
+     * 会被 Reactor 的 {@code Exceptions.throwIfFatal} 原样 rethrow，绕过所有错误算子；此时
+     * {@code executeOne} 的 {@code onErrorResume} 不会执行，工具侧无法自我收口。只有在订阅侧
+     * （{@code ChatStreamService} / CLI REPL）捕获后再回调本方法才可靠。
+     *
+     * <p>幂等：无在途调用时直接返回 0；已收口的条目会被清出集合。
+     *
+     * @param reason 中断原因（进日志与错误结果文案）
+     * @return 本次收口的调用数
+     */
+    public int closePendingToolCalls(String reason) {
+        java.util.List<String> ids;
+        synchronized (pendingToolCalls) {
+            if (pendingToolCalls.isEmpty()) return 0;
+            ids = new java.util.ArrayList<>(pendingToolCalls);
+            pendingToolCalls.clear();
+        }
+        java.util.List<MessageHistory.ToolResultEnvelope> envelopes = new java.util.ArrayList<>();
+        for (String id : ids) {
+            log.error(
+                    "工具调用未完成 toolCallId={} reason={}（本轮未产生结果；已补错误结果以避免"
+                            + "会话记录出现悬挂 tool_calls）",
+                    id,
+                    reason);
+            String message = "[未完成] 工具调用被中断（" + reason + "），未返回结果。";
+            ToolResult<Object> err = ToolResult.error(id, message);
+            sink.onToolResult(err, 0L);
+            accSteps++;
+            envelopes.add(new MessageHistory.ToolResultEnvelope(id, message, true));
+        }
+        history.appendToolResults(envelopes);
+        return ids.size();
     }
 
     /** 记录一次工具执行（add-session-stats-bar）：步数 +1、工具耗时累加。 */

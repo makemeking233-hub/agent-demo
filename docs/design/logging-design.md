@@ -79,6 +79,15 @@ agent-demo 当前只有一份全局日志 `~/.agent-demo/logs/agent.log`（`logb
 
 Windows 上 `Files.setPosixFilePermissions` 抛 `UnsupportedOperationException` 时静默跳过（现有 `SessionStore` 已这样处理）。
 
+> **日志根一致性（improve-failure-observability）**：本节描述的 `~/.agent-demo/logs/` 是**设计位置**，
+> 但实现曾偏离——`logback.xml`、`AgentConfig`、`AgentLoopFactory`、`ChatCommand` 用的是
+> `${user.dir}/logs`，于是日志位置随进程工作目录漂移（web 从仓库根启动写 `logs/`、CLI 从模块目录
+> 启动写 `agent-core/logs/`），而 `LogController`（`/api/logs*`）读的是 `~/.agent-demo/logs/`
+> —— **查看接口读的是一份再没人写过的旧目录**。现已统一到本节的设计位置，`/api/logs*` 恢复正常。
+>
+> **测试日志隔离**：`src/test/resources/logback-test.xml` 把测试日志写到 `target/test-logs/`，
+> 不再污染运行时 `app.log`（此前该文件被写入大量 junit / surefire 堆栈，真实故障证据被淹）。
+
 ---
 
 ## 3. 四类日志的分工
