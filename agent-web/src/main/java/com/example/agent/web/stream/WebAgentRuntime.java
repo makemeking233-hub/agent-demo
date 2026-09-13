@@ -71,8 +71,9 @@ public class WebAgentRuntime {
     /** token 估算器（history 创建用）。 */
     private final TokenEstimator estimator;
 
-    /** 模型名（web 固定 deepseek-chat；v0.2 支持前端传参）。 */
-    private final String model;
+    // 注：模型名由 ChatStreamService 通过 createLoop(...) 参数注入，不再硬编码。
+    // 历史：v0.2 之前 this.model 写死 "deepseek-chat"，前端下拉切到 deepseek-v4-flash-vision-exp
+    // 后 UI 显示对了，但 LLM 仍用 deepseek-chat（"假象切换"）。v0.2 起改为 createLoop 接参。
 
     /** 已加载的配置。 */
     private final AgentConfig cfg;
@@ -110,7 +111,6 @@ public class WebAgentRuntime {
         this.provider = provider;
         this.tools = tools;
         this.estimator = estimator;
-        this.model = "deepseek-chat";
         this.cfg = cfg;
         this.agentDataDir = agentDataDir;
     }
@@ -173,8 +173,13 @@ public class WebAgentRuntime {
      * @return 装配好的 {@link AgentLoop}
      */
     public AgentLoop createLoop(
-            String streamId, String sessionId, SessionLogSink sink, PermissionConfirmer confirmer, AbortSignal abortSignal) {
-        return createLoop(streamId, sessionId, sink, confirmer, abortSignal, null);
+            String streamId,
+            String sessionId,
+            String model,
+            SessionLogSink sink,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal) {
+        return createLoop(streamId, sessionId, model, sink, confirmer, abortSignal, null);
     }
 
     /**
@@ -186,11 +191,12 @@ public class WebAgentRuntime {
     public AgentLoop createLoop(
             String streamId,
             String sessionId,
+            String model,
             SessionLogSink sink,
             PermissionConfirmer confirmer,
             AbortSignal abortSignal,
             PermissionMode mode) {
-        return createLoop(streamId, sessionId, sink, confirmer, abortSignal, mode, null);
+        return createLoop(streamId, sessionId, model, sink, confirmer, abortSignal, mode, null);
     }
 
     /**
@@ -202,6 +208,7 @@ public class WebAgentRuntime {
     public AgentLoop createLoop(
             String streamId,
             String sessionId,
+            String model,
             SessionLogSink sink,
             PermissionConfirmer confirmer,
             AbortSignal abortSignal,

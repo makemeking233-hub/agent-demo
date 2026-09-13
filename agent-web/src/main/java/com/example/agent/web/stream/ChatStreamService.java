@@ -126,7 +126,7 @@ public class ChatStreamService {
         // abort 信号: abort() 置 true, AgentLoop 工具执行会感知并中断。
         // v0.3 会话重进恢复：用复合 sink (SSE + 落盘)，使该会话持续写入 sessions/<id>.jsonl。
         SessionLogSink sessionSink = runtime.sinkFor(workspace, sessionId, adapter);
-        AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get, mode, workspace);
+        AgentLoop loop = runtime.createLoop(streamId, sessionId, model, sessionSink, confirmer, aborted::get, mode, workspace);
         // add-models-dropdown-v0：透传 reasoningEffort 到 AgentLoop volatile 字段
         if (reasoningEffort != null && !reasoningEffort.isBlank()) {
             loop.setReasoningEffort(reasoningEffort);

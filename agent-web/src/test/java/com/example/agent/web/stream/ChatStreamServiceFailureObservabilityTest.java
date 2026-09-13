@@ -45,7 +45,7 @@ class ChatStreamServiceFailureObservabilityTest {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
         // 裸 any()：create 的 workspace / sink 可能为 null
         when(runtime.sinkFor(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
-        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any()))
+        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(loop);
 
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());

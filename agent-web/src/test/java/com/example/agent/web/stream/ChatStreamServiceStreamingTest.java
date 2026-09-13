@@ -46,10 +46,11 @@ class ChatStreamServiceStreamingTest {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
         // 裸 any()：create 的 workspace / sink 可能为 null，带类型的 any() 不匹配 null。
         when(runtime.sinkFor(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
-        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any()))
+        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(2);
+                            // 参数顺序: streamId, sessionId, model, sessionSink, confirmer, abortSignal, mode, workspace
+                            SessionLogSink sink = inv.getArgument(3);
                             return AgentLoopFactory.buildLoop(
                                     AgentConfig.defaults(),
                                     provider,
