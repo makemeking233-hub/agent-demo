@@ -992,6 +992,35 @@ llm.streamChat(request)
 
 > 流式阶段的中断不受超时限制：Ctrl+C 经 §17.1 信号处理取消订阅，连接建立阶段同样生效。
 
+### 11.5 工具错误边界（LinkageError 降级）
+
+工具调用的错误隔离靠 `AgentLoop.executeOne` 的 `.onErrorResume(...)`：解析或执行失败时返回错误 `ToolResult`，不让单次失败打断整轮。但这条兜底**对 `Error` 无效**，原因是 Reactor 的 `Exceptions.throwIfFatal` 会把 `LinkageError` 原样重新抛出，而不是转成 `onError` 信号——下游任何 `onErrorResume` / `onErrorMap` 都看不到它。
+
+```java
+// Reactor 源码：LinkageError 直接 rethrow，不变成信号
+if (t instanceof VirtualMachineError) throw (VirtualMachineError) t;
+else if (t instanceof ThreadDeath)   throw (ThreadDeath) t;
+else if (t instanceof LinkageError)  throw (LinkageError) t;
+```
+
+后果：一个工具缺失一个类文件（`NoClassDefFoundError`）就会穿透整条响应式链，最终由 Netty 关闭连接，**撕掉整条 SSE 连接**。2026-09-13 16:10 的事故即此形态——缺失的 `EditFileTool$Input`（在 `inputClass()` 里惰性解析）打掉了整个 turn。
+
+因此 `AgentLoop` 在**把代码交给 Reactor 之前**做降级，覆盖工具交互三个入口：
+
+| 阶段 | 包裹内容 | 为什么需要 |
+|------|---------|-----------|
+| 入参解析 | `tool.parseArguments(json)` | `AbstractFileTool.parseArguments` 会调 `inputClass()`，类解析就发生在这里 |
+| 权限检查 | `resolvePermission(tool, input)` | `checkPermissions` 可能触发惰性类加载 |
+| 工具执行 | `tool.execute(input, ctx)` | 工具主体的类可能与入参类不同 |
+
+降级用专用异常 `ToolClassLoadingException`（`RuntimeException`），消息带工具名、阶段与缺失类，便于定位是哪个插件的问题。
+
+**只捕获 `LinkageError`**：`VirtualMachineError`（OOM / StackOverflow）与 `ThreadDeath` 是真致命信号，降级成工具错误会让进程带着已损坏的状态继续服务，比直接失败更危险。
+
+**已知残留**：工具**自己返回的 Mono 内部**再抛 `LinkageError` 不在覆盖范围内（那时已在我们交给 Reactor 的代码之外，Reactor 在算子内部就 rethrow 了）。要彻底覆盖只能让工具实现自行捕获，或把工具执行放进独立 ClassLoader / 进程。
+
+> 排查这类故障的经验：`NoClassDefFoundError` 指向的类**在源码里存在、编译产物里也成对存在**时，说明运行期 classpath 与当前构建不一致——常见于「应用实例运行期间对同一 `target/` 执行了 `clean` / `package`」。此时重启进程即可恢复，根因在构建流程而不在代码。
+
 ---
 
 ## 12. 测试策略

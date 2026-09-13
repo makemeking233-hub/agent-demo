@@ -620,7 +620,13 @@ public class AgentLoop {
         }
         sink.onToolCall(call);
         long startNs = System.nanoTime();
-        return Mono.fromCallable(() -> (Object) tool.parseArguments(call.argumentsJson()))
+        return Mono.fromCallable(
+                        () ->
+                                (Object)
+                                        invokeTool(
+                                                tool.name(),
+                                                STAGE_PARSE,
+                                                () -> tool.parseArguments(call.argumentsJson())))
                 // raw cast 隔离到 executeTool，主链保持强类型，onErrorResume 的 e 才能正确推断为 Throwable
                 .flatMap(input -> authorize(tool, call, input))
                 .map(r -> {
@@ -659,7 +665,51 @@ public class AgentLoop {
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Mono<ToolResult<Object>> executeTool(Tool tool, Object input) {
-        return (Mono<ToolResult<Object>>) (Mono) tool.execute(input, toolContext);
+        return invokeTool(
+                tool.name(),
+                STAGE_EXECUTE,
+                () -> (Mono<ToolResult<Object>>) (Mono) tool.execute(input, toolContext));
+    }
+
+    // ---- 工具错误边界（harden-tool-error-boundary）----
+
+    /** 失败阶段：入参反序列化（{@code AbstractFileTool.parseArguments} 会在这一步解析输入类）。 */
+    private static final String STAGE_PARSE = "入参解析";
+
+    /** 失败阶段：权限检查（{@code checkPermissions} 可能触发惰性类加载）。 */
+    private static final String STAGE_PERMISSION = "权限检查";
+
+    /** 失败阶段：工具主体调用。 */
+    private static final String STAGE_EXECUTE = "工具执行";
+
+    /**
+     * 工具交互边界：在代码交给 Reactor 之前，把 {@link LinkageError} 降级为普通异常。
+     *
+     * <p>为什么不能只靠 {@code onErrorResume}：{@link LinkageError} 属于 {@code Error}，
+     * Reactor 的 {@code Exceptions.throwIfFatal} 会把它**原样重新抛出**而不转成 {@code onError}
+     * 信号，于是所有下游错误算子都看不到它，错误直接穿透反应式链（2026-09-13 事故：缺失的
+     * {@code EditFileTool$Input} 撕掉了整条 SSE 连接）。只有在我们交给 Reactor 执行的那段代码
+     * **内部**捕获并换类型，才能让它变成正常的 {@code onError}。
+     *
+     * <p>只捕获 {@link LinkageError}：{@link VirtualMachineError}（OOM / StackOverflow）与
+     * {@code ThreadDeath} 是真致命信号，降级成工具错误会让进程带着损坏状态继续服务，比直接失败
+     * 更危险。
+     *
+     * @param toolName 工具名（进错误消息，便于定位是哪个插件）
+     * @param stage 失败阶段（{@link #STAGE_PARSE} / {@link #STAGE_PERMISSION} / {@link #STAGE_EXECUTE}）
+     * @param body 实际调用
+     * @param <T> 返回值类型
+     * @return body 的返回值
+     * @throws ToolClassLoadingException body 抛出 {@link LinkageError} 时
+     */
+    private static <T> T invokeTool(
+            String toolName, String stage, java.util.function.Supplier<T> body) {
+        try {
+            return body.get();
+        } catch (LinkageError e) {
+            log.warn("工具类加载失败 [{}] 于「{}」阶段", toolName, stage, e);
+            throw new ToolClassLoadingException(toolName, stage, e);
+        }
     }
 
     /**
@@ -690,7 +740,9 @@ public class AgentLoop {
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Mono<ToolResult<Object>> authorize(Tool tool, ToolCall call, Object input) {
-        PermissionDecision d = resolvePermission(tool, input);
+        // 权限检查同样可能在惰性类加载上抛 LinkageError（harden-tool-error-boundary）
+        PermissionDecision d =
+                invokeTool(tool.name(), STAGE_PERMISSION, () -> resolvePermission(tool, input));
         if (d.behavior() == PermissionDecision.Behavior.DENY) {
             return Mono.just(ToolResult.error(call.id(), "权限拒绝: " + tool.name()));
         }

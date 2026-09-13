@@ -480,6 +480,116 @@ class AgentLoopTest {
         assertEquals(true, hasErrorWithId, "parseArguments 失败产生的 error 也必须携带调用 id");
     }
 
+    // ---- harden-tool-error-boundary：工具类加载失败（LinkageError）不得撕掉整轮 ----
+
+    /** 构造「先要求调用 fake 工具、再正常结束」的两段假 provider。 */
+    private static LlmProvider providerAskingForFakeTool() {
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                (StreamChunk)
+                                        new StreamChunk.ToolCallStart("1", "fake", "{\"path\":\"x\"}"),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
+        return provider;
+    }
+
+    /** 构造 loop，注册一个入参解析即抛指定 Error 的假工具。 */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static AgentLoop loopWithToolWhoseParseThrows(Error toThrow, MessageHistory hist) {
+        Tool fakeTool =
+                new Tool() {
+                    @Override
+                    public String name() {
+                        return "fake";
+                    }
+
+                    @Override
+                    public String description() {
+                        return "fake tool";
+                    }
+
+                    @Override
+                    public java.util.Map<String, Object> inputSchema() {
+                        return java.util.Map.of();
+                    }
+
+                    @Override
+                    public String renderUse(Object input) {
+                        return "fake()";
+                    }
+
+                    @Override
+                    public String renderResult(Object output) {
+                        return String.valueOf(output);
+                    }
+
+                    @Override
+                    public Object parseArguments(String argumentsJson) {
+                        throw toThrow;
+                    }
+
+                    @Override
+                    public Mono<ToolResult<Object>> execute(Object input, ToolContext ctx) {
+                        return Mono.just(ToolResult.ok("ok", "<auto>"));
+                    }
+                };
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        doReturn(fakeTool).when(tools).getRaw("fake");
+        when(tools.list()).thenReturn(List.of());
+        return new AgentLoop(
+                providerAskingForFakeTool(),
+                tools,
+                hist,
+                new StreamingPrinter(),
+                25,
+                "deepseek-chat",
+                java.nio.file.Paths.get("."));
+    }
+
+    @Test
+    void linkageErrorInParseBecomesToolErrorNotFatal() {
+        // 回归（2026-09-13 16:10 事故）：EditFileTool$Input 缺失抛出的 NoClassDefFoundError 属
+        // LinkageError，Reactor 的 Exceptions.throwIfFatal 会把它**原样 rethrow**，绕过
+        // onErrorResume 并最终撕掉整条 SSE 连接。工具类加载失败必须降级为工具错误。
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                loopWithToolWhoseParseThrows(
+                        new NoClassDefFoundError(
+                                "com/example/agent/tools/file/EditFileTool$Input"),
+                        hist);
+
+        loop.processTurn(new Message.User("hi")).block(); // 不应抛出
+
+        boolean hasErrorWithId =
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult t
+                                                && t.isError()
+                                                && "1".equals(t.toolCallId()));
+        assertEquals(true, hasErrorWithId, "类加载失败必须降级为携带调用 id 的 error 工具结果");
+    }
+
+    @Test
+    void virtualMachineErrorStaysFatal() {
+        // 与上一条相反：VirtualMachineError 是真正该让进程失败的信号，不得降级成工具错误
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                loopWithToolWhoseParseThrows(new OutOfMemoryError("simulated"), hist);
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                OutOfMemoryError.class, () -> loop.processTurn(new Message.User("hi")).block());
+    }
+
     @Test
     void toolSuccessResultCarriesToolCallId() {
         // 工具成功结果若返回占位 toolCallId（如 "<auto>"），回流消息必须替换为真实调用 id，
