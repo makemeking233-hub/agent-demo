@@ -17,6 +17,9 @@ type Item =
       id: string;
       role: "user" | "assistant";
       text: string;
+      // add-reasoning-thinking-streaming: 推理过程（按 token 累加到当前消息）
+      thinking?: string;
+      reasoningTokens?: number;
       // assistant 消息项可携带内联工具调用（按到达顺序与文本交错展示）
       tools?: InlineTool[];
     }
@@ -253,6 +256,13 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
       // 函数式追加，避免闭包捕获陈旧 items 导致界面空白
       appendTextToLastAssistant(ev.content);
       voiceChat.onAssistantDelta(ev.content);
+    } else if (ev.type === "message_delta" && ev.delta_type === "thinking") {
+      // add-reasoning-thinking-streaming: 累加 thinking 到最后一条 assistant
+      appendThinkingToLastAssistant(ev.content);
+    } else if (ev.type === "message_stop") {
+    } else if (ev.type === "message_delta" && ev.delta_type === "thinking") {
+      // add-reasoning-thinking-streaming: 累加 thinking 到最后一条 assistant
+      appendThinkingToLastAssistant(ev.content);
     } else if (ev.type === "message_stop") {
       setBusy(false);
       setStreamId(null);
