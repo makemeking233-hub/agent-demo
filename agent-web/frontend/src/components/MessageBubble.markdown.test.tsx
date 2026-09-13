@@ -85,4 +85,32 @@ describe("MessageBubble 富 Markdown 渲染", () => {
       expect(a!.getAttribute("href")).toBe("https://example.com/path");
     });
   });
+
+  describe("代码块语法高亮", () => {
+    it("对带语言标记的代码块做高亮", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={"```java\npublic class A {}\n```"} />,
+      );
+
+      const code = container.querySelector("pre code");
+      expect(code).not.toBeNull();
+      expect(code!.className).toMatch(/hljs/);
+      // 真正的信号是 token span：关键字被包成 span 才算高亮成功
+      expect(code!.querySelectorAll("span").length).toBeGreaterThan(0);
+      expect(code!.querySelector("span.hljs-keyword")).not.toBeNull();
+    });
+
+    it("未注册语言降级为纯代码块且不抛错", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={"```brainfuck\n+++\n```"} />,
+      );
+
+      const code = container.querySelector("pre code");
+      expect(code).not.toBeNull();
+      expect(code!.textContent).toContain("+++");
+      // 降级判据是"没有 token span"，不是"没有 hljs 类"——
+      // rehype-highlight 对每个 pre>code 都会无条件加 hljs 类，需显式 no-highlight 才不加。
+      expect(code!.querySelectorAll("span")).toHaveLength(0);
+    });
+  });
 });

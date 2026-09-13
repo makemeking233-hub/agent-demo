@@ -10,3 +10,14 @@
  *
  * 声明前后 tsc 基线：28 -> 11。
  */
+
+/*
+ * highlight.js 的语言模块（lib/languages/*.js）不带 .d.ts，且其 exports map 也没有 types 条件，
+ * 在 strict 下逐个 import 会各报一条 TS7016。这里的通配声明给出它们的真实形状。
+ */
+declare module "highlight.js/lib/languages/*" {
+  import type { LanguageFn } from "lowlight";
+
+  const language: LanguageFn;
+  export default language;
+}

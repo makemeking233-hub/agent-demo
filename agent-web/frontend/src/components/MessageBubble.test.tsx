@@ -11,8 +11,14 @@ describe("MessageBubble", () => {
   });
 
   it("renders inline code from markdown", () => {
-    render(<MessageBubble role="assistant" text={"```js\nconst x=1;\n```"} />);
-    expect(screen.getByText(/const x=1/)).toBeInTheDocument();
+    const { container } = render(
+      <MessageBubble role="assistant" text={"```js\nconst x=1;\n```"} />,
+    );
+    // add-rich-markdown-rendering: 代码块现在带语法高亮，文本被拆进多个 token span，
+    // 整串 getByText 不再匹配；改为断言 code 元素的整体文本（内容必须一字不少）。
+    const code = container.querySelector("pre code");
+    expect(code).not.toBeNull();
+    expect(code!.textContent).toContain("const x=1;");
   });
 
   it("shows placeholder ellipsis when text empty", () => {
