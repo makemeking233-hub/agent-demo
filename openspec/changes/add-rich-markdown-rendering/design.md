@@ -66,13 +66,34 @@ flowchart TD
 
 **否决的更重方案**：MathJax —— 体积与启动开销都远大于 KaTeX，且不支持 SSR 友好的字符串渲染。
 
-### D3 代码高亮用 `rehype-highlight` + 显式语言子集
+### D3 代码高亮用 `rehype-highlight` 的**默认** `common` 语言集
 
-**选择**：`rehypePlugins={[[rehypeHighlight, { languages: {...} }]]}`，只注册项目实际会用到的语言（java / xml / json / yaml / bash / sql / python / javascript / typescript / tsx / css / markdown / diff / properties / docker）。
+**选择**：`rehypePlugins={[rehypeHighlight, ...]}`，**不传** `languages` 选项，用其默认的 `common`（34 个语言：bash / c / cpp / csharp / css / diff / go / graphql / ini / java / javascript / json / kotlin / less / lua / makefile / markdown / objectivec / perl / php / plaintext / python / r / ruby / rust / scss / shell / sql / swift / typescript / vbnet / wasm / xml / yaml + arduino）。
 
-**否决**：`highlight.js` 全量（解包 5.25 MB、全语言注册后主包显著膨胀）；`shiki`（着色最好，但依赖 wasm 与主题体系，复杂度与体积都上一个台阶）。
+**否决"自选语言子集"（原方案，2026-09-13 实测推翻）**：本设计最初打算只注册 14 个常用语言以控制体积。实测发现这个前提**不成立**：
 
-**保留观察**：`rehype-highlight` 仍是静态 import，会带来主 bundle 增量。任务 T5 要求**实测并记录**增量数字；若增量不可接受，再按 D2 的同一模式改造成懒加载。
+```text
+rehype-highlight/lib/index.js
+  import {common, createLowlight} from 'lowlight'     ← common 在模块顶层被静态 import
+lowlight/index.js
+  export {grammars as common} from './lib/common.js'  ← 34 个语言无条件进包
+内部实现：createLowlight(options.languages ?? common) ← 引用关系真实存在，Rollup 摇不掉
+```
+
+也就是说传不传 `languages`，`common` 的 34 个语言都在包里。自选子集不但不省体积，反而**净减功能**（go / rust / c / cpp / php / ruby 明明已在包内却不高亮），还额外需要一条 `highlight.js/lib/languages/*` 的通配类型声明来绕过 TS7016。
+
+实测两种写法的产物对比（同一份代码，仅差 `languages` 选项）：
+
+| 写法 | 主 bundle | gzip |
+|---|---:|---:|
+| 传 `languages`（14 个自选） | 612.87 kB | 188.57 kB |
+| 不传（默认 `common`，34 个） | **561.31 kB** | **173.61 kB** |
+
+**默认写法反而小了 51 kB**，且语言更多、代码更简单。故采纳默认写法。
+
+**已知缺口**：`common` 不含 `dockerfile` 与 `properties`（Maven / Spring 项目偶有 `application.properties`）。二者在本 change 之前同样没有高亮，故非回退；若后续要补，做法是 `import {common} from "lowlight"` 后 `{...common, dockerfile, properties}`，代价是 lowlight 提为直接依赖 + 恢复那条通配类型声明 + 约 10 kB。
+
+**否决的更重方案**：`highlight.js` 全量（解包 5.25 MB，190+ 语言）；`shiki`（着色最好，但依赖 wasm 与主题体系，复杂度与体积都上一个台阶）。
 
 ### D4 图片来源：远程直连 + 本地经新接口
 
@@ -158,6 +179,6 @@ flowchart TD
 ## Open Questions
 
 1. **KaTeX 字体是否要子集化**：当前方案是全量字体进 `dist/assets/`（约 1 MB），运行时按需下载、不进预缓存。若后续觉得构建产物过大，可只保留 latin 字体子集，但会牺牲符号覆盖度。
-2. **`rehype-highlight` 的主包增量到底多少**：D3 的选择需要在 T5 用真实数字验证，不预设结论。
+2. **主 bundle 增量的最终账**（T5 已实测，结论：接受）：基线 `index.js` 335,446 B → 561,310 B（**+226 kB**，gzip 173.61 kB）。构成拆解——`lowlight` + `common` 34 语言约 200 kB（**不可摇**，见 D3）、`remark-gfm` + `remark-math` 约 40 kB、其余为本 change 新增组件。KaTeX 已成功拆为独立懒加载块（`katex-*.js` 261.76 kB / gzip 77.92 kB，`katex-*.css` 30.25 kB），不计入主包。若后续认为首屏过重，把 `rehypeHighlight` 也改成 D2 同款懒加载即可回落约 200 kB，代价是代码块首帧无高亮。
 3. **`injectManifest.globPatterns` 是死配置**：`vite.config.ts` 声明了 `strategies: 'generateSW'`，该字段只在 `injectManifest` 策略下生效 —— 属既有问题，不属本 change 范围，但记录在此以免后续误解预缓存行为。
 4. **`/api/fs/raw` 是否要加 ETag / 磁盘缓存**：当前每次请求都读盘，本地场景可接受；若后续消息里图片变多再评估。

@@ -105,3 +105,13 @@
 .markdown del { color: var(--dsw-alias-text-muted); }
 
 .markdown a { color: var(--dsw-static-text-link); }
+
+/* ----- 公式：KaTeX 懒加载，未就绪/失败时显示 TeX 原文 ----- */
+.mathBlock {
+  overflow-x: auto;
+  margin: 8px 0;
+  text-align: center;
+}
+.mathInline {
+  display: inline-block;
+}

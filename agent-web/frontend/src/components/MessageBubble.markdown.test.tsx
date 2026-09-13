@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MessageBubble } from "./MessageBubble";
 
 /**
@@ -111,6 +111,43 @@ describe("MessageBubble 富 Markdown 渲染", () => {
       // 降级判据是"没有 token span"，不是"没有 hljs 类"——
       // rehype-highlight 对每个 pre>code 都会无条件加 hljs 类，需显式 no-highlight 才不加。
       expect(code!.querySelectorAll("span")).toHaveLength(0);
+    });
+  });
+
+  describe("数学公式", () => {
+    it("把块级公式渲染为 KaTeX", async () => {
+      const { container } = render(<MessageBubble role="assistant" text={"$$E = mc^2$$"} />);
+
+      await waitFor(() => {
+        expect(container.querySelector(".katex")).not.toBeNull();
+      });
+      // 定界符不该留在页面上
+      expect(container.textContent).not.toContain("$$");
+    });
+
+    it("把行内公式渲染为 KaTeX", async () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={"质能方程 $E = mc^2$ 成立"} />,
+      );
+
+      await waitFor(() => {
+        expect(container.querySelector(".katex")).not.toBeNull();
+      });
+      // 公式周围的普通文本不受影响
+      expect(container.textContent).toContain("质能方程");
+      expect(container.textContent).toContain("成立");
+    });
+
+    it("非法公式降级为原文且不中断其余渲染", async () => {
+      const text = ["$$\\frac{1}{$$", "", "| a | b |", "|---|---|", "| 1 | 2 |"].join("\n");
+      const { container } = render(<MessageBubble role="assistant" text={text} />);
+
+      // 关键：整条消息不白屏——同一消息里的表格照常渲染
+      expect(container.querySelector("table")).not.toBeNull();
+      // 公式处降级显示原始文本，而不是抛错炸掉整条消息
+      await waitFor(() => {
+        expect(container.textContent).toContain("frac");
+      });
     });
   });
 });

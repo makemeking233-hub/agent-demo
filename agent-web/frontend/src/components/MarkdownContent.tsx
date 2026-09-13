@@ -1,22 +1,11 @@
+import type { ComponentPropsWithoutRef } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
-// 按需注册的语言集（design.md D3）：不注册就是 highlight.js 全量 190+ 语言，观感收益为零。
-import bash from "highlight.js/lib/languages/bash";
-import css from "highlight.js/lib/languages/css";
-import diff from "highlight.js/lib/languages/diff";
-import dockerfile from "highlight.js/lib/languages/dockerfile";
-import java from "highlight.js/lib/languages/java";
-import javascript from "highlight.js/lib/languages/javascript";
-import json from "highlight.js/lib/languages/json";
-import markdown from "highlight.js/lib/languages/markdown";
-import properties from "highlight.js/lib/languages/properties";
-import python from "highlight.js/lib/languages/python";
-import sql from "highlight.js/lib/languages/sql";
-import typescript from "highlight.js/lib/languages/typescript";
-import xml from "highlight.js/lib/languages/xml";
-import yaml from "highlight.js/lib/languages/yaml";
+import remarkMath from "remark-math";
 import "highlight.js/styles/github-dark.css";
+import { rehypeMathPlaceholder } from "../lib/rehype-math-placeholder";
+import { MathNode } from "./MathNode";
 import styles from "./MarkdownContent.module.css";
 
 /**
@@ -26,46 +15,34 @@ import styles from "./MarkdownContent.module.css";
  *
  * <ul>
  *   <li>方言用 GFM（remark-gfm）：表格 / 删除线 / 任务列表 / 自动链接；
- *   <li>代码高亮用 rehype-highlight，只注册常用语言（`xml` 自带 html 别名，`typescript` 自带 tsx，
- *       `javascript` 自带 jsx），未注册语言自动降级为纯代码块；
+ *   <li>公式：remark-math 只负责解析，KaTeX 由 {@link MathNode} 懒加载（design.md D2）；
+ *   <li>代码高亮用 rehype-highlight 的**默认** `common` 语言集（34 个）。刻意不传 `languages`
+ *       自选子集——`lowlight` 的 `common` 被 rehype-highlight 顶层静态 import，传不传都会进包，
+ *       自选只会白白砍掉 go/rust/c/cpp 等语言（design.md D3，2026-09-13 实测纠正）；
  *   <li>**不挂 rehype-raw**——原始 HTML 一律按纯文本转义，这是本模块的安全底线；
  *   <li>表格外包 `.tableWrap` 横向滚动容器，宽表格不撑破气泡。
  * </ul>
  */
-const HIGHLIGHT_LANGUAGES = {
-  bash,
-  css,
-  diff,
-  dockerfile,
-  java,
-  javascript,
-  json,
-  markdown,
-  properties,
-  python,
-  sql,
-  typescript,
-  xml,
-  yaml,
-};
-
-/** 表格外包横向滚动容器，避免宽表格撑破气泡（markdown 样式见 MarkdownContent.module.css）。 */
-const markdownComponents: Components = {
-  table(props) {
-    return (
-      <div className={styles.tableWrap}>
-        <table>{props.children}</table>
-      </div>
-    );
-  },
-};
+const markdownComponents = {
+  /** 表格外包横向滚动容器，避免宽表格撑破气泡（样式见 MarkdownContent.module.css）。 */
+  table: (props: ComponentPropsWithoutRef<"table">) => (
+    <div className={styles.tableWrap}>
+      <table>{props.children}</table>
+    </div>
+  ),
+  // math-inline / math-block 是 rehype-math-placeholder 产出的自定义标签。
+  // react-markdown 运行时按 tagName 查表，能命中；但这两个标签不在 JSX.IntrinsicElements 里，
+  // 与 Components 的映射类型对不上，故在此收口处做一次类型断言。
+  "math-inline": (props: { tex?: string }) => <MathNode tex={props.tex ?? ""} display={false} />,
+  "math-block": (props: { tex?: string }) => <MathNode tex={props.tex ?? ""} display />,
+} as unknown as Components;
 
 export function MarkdownContent(props: { text: string }) {
   return (
     <div className={styles.markdown}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeHighlight, { languages: HIGHLIGHT_LANGUAGES }]]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeHighlight, rehypeMathPlaceholder]}
         components={markdownComponents}
       >
         {props.text}
