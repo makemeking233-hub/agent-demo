@@ -1,7 +1,9 @@
 package com.example.agent.session;
 
+import com.example.agent.stats.SessionStats;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -389,13 +391,9 @@ public class SessionStore implements AutoCloseable {
         if (title == null || title.isBlank()) return false;
         Path metaFile = sessionsDir.resolve(id + META_SUFFIX);
         try {
-            Path parent = metaFile.getParent();
-            if (parent != null) Files.createDirectories(parent);
-            Files.writeString(
-                    metaFile,
-                    STATIC_JSON.writeValueAsString(Map.of("title", title)),
-                    StandardCharsets.UTF_8);
-            return true;
+            ObjectNode node = readMetaNode(metaFile);
+            node.put("title", title);
+            return writeMetaNode(metaFile, node);
         } catch (Exception e) {
             log.warn("写入会话标题失败: id={}", id, e);
             return false;
@@ -414,12 +412,82 @@ public class SessionStore implements AutoCloseable {
         Path metaFile = sessionsDir.resolve(id + META_SUFFIX);
         if (!Files.isRegularFile(metaFile)) return null;
         try {
-            JsonNode node = STATIC_JSON.readTree(Files.readString(metaFile, StandardCharsets.UTF_8));
-            JsonNode t = node == null ? null : node.get("title");
+            JsonNode t = readMetaNode(metaFile).get("title");
             return (t == null || t.isNull()) ? null : t.asText(null);
         } catch (Exception e) {
             log.warn("读取会话标题失败: id={}", id, e);
             return null;
+        }
+    }
+
+    /**
+     * 写入会话累计统计到侧车 {@code <id>.meta.json{stats}}（add-session-stats-bar）。
+     *
+     * <p>与 {@code title} 共存（读改写，不覆盖其它字段）。{@code id} 非法 / 写失败返回 {@code false}。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @param id          会话 id
+     * @param stats       累计统计（不可空）
+     * @return 是否写入成功
+     */
+    public static boolean writeStats(Path sessionsDir, String id, SessionStats stats) {
+        if (sessionsDir == null || !isValidId(id) || stats == null) return false;
+        Path metaFile = sessionsDir.resolve(id + META_SUFFIX);
+        try {
+            ObjectNode node = readMetaNode(metaFile);
+            node.set("stats", STATIC_JSON.valueToTree(stats.toMap()));
+            return writeMetaNode(metaFile, node);
+        } catch (Exception e) {
+            log.warn("写入会话统计失败: id={}", id, e);
+            return false;
+        }
+    }
+
+    /**
+     * 读取会话累计统计；无侧车 / 无 {@code stats} 字段 / 读失败 返回 {@link SessionStats#empty()}。
+     *
+     * @param sessionsDir sessions 目录路径
+     * @param id          会话 id
+     * @return 累计统计（绝不返回 {@code null}）
+     */
+    public static SessionStats readStats(Path sessionsDir, String id) {
+        if (sessionsDir == null || !isValidId(id)) return SessionStats.empty();
+        Path metaFile = sessionsDir.resolve(id + META_SUFFIX);
+        if (!Files.isRegularFile(metaFile)) return SessionStats.empty();
+        try {
+            JsonNode statsNode = readMetaNode(metaFile).get("stats");
+            if (statsNode == null || statsNode.isNull()) return SessionStats.empty();
+            @SuppressWarnings("unchecked")
+            Map<String, Object> map = STATIC_JSON.convertValue(statsNode, Map.class);
+            return SessionStats.fromMap(map);
+        } catch (Exception e) {
+            log.warn("读取会话统计失败: id={}", id, e);
+            return SessionStats.empty();
+        }
+    }
+
+    /** 读侧车 JSON 为可写对象节点（不存在 / 解析失败 → 空对象）。 */
+    private static ObjectNode readMetaNode(Path metaFile) {
+        if (!Files.isRegularFile(metaFile)) return STATIC_JSON.createObjectNode();
+        try {
+            JsonNode node = STATIC_JSON.readTree(Files.readString(metaFile, StandardCharsets.UTF_8));
+            return (node instanceof ObjectNode o) ? o : STATIC_JSON.createObjectNode();
+        } catch (Exception e) {
+            return STATIC_JSON.createObjectNode();
+        }
+    }
+
+    /** 写侧车 JSON（建父目录 + UTF-8）。 */
+    private static boolean writeMetaNode(Path metaFile, ObjectNode node) {
+        try {
+            Path parent = metaFile.getParent();
+            if (parent != null) Files.createDirectories(parent);
+            Files.writeString(
+                    metaFile, STATIC_JSON.writeValueAsString(node), StandardCharsets.UTF_8);
+            return true;
+        } catch (Exception e) {
+            log.warn("写入会话侧车失败: {}", metaFile, e);
+            return false;
         }
     }
 

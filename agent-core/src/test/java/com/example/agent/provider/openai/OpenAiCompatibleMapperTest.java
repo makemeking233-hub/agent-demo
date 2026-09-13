@@ -208,5 +208,37 @@ class OpenAiCompatibleMapperTest {
         assertEquals(20, usage.completionTokens());
         assertEquals(15, usage.reasoningTokens());
     }
+
+    // ---- add-session-stats-bar：缓存命中/未命中字段 ----
+
+    @Test
+    void deepseekUsageIncludesCacheTokens() {
+        String sse =
+                "data: {\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20,"
+                    + "\"prompt_cache_hit_tokens\":80,\"prompt_cache_miss_tokens\":20}}";
+        Optional<StreamChunk> chunk = mapper.parseSseLine(sse);
+        assertTrue(chunk.isPresent());
+        StreamChunk.Usage usage = (StreamChunk.Usage) chunk.get();
+        assertEquals(100, usage.promptTokens());
+        assertEquals(Integer.valueOf(80), usage.cacheHitTokens());
+        assertEquals(Integer.valueOf(20), usage.cacheMissTokens());
+    }
+
+    @Test
+    void usageWithoutCacheFieldsLeavesThemNull() {
+        String sse = "data: {\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3}}";
+        Optional<StreamChunk> chunk = mapper.parseSseLine(sse);
+        assertTrue(chunk.isPresent());
+        StreamChunk.Usage usage = (StreamChunk.Usage) chunk.get();
+        assertEquals(null, usage.cacheHitTokens());
+        assertEquals(null, usage.cacheMissTokens());
+    }
+
+    @Test
+    void threeArgUsageConstructorLeavesCacheNull() {
+        StreamChunk.Usage usage = new StreamChunk.Usage(1, 2, 3);
+        assertEquals(null, usage.cacheHitTokens());
+        assertEquals(null, usage.cacheMissTokens());
+    }
 }
 

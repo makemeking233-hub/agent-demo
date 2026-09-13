@@ -326,6 +326,8 @@ SSE 7 种事件：`message_start` / `message_delta` / `tool_call_start` / `tool_
 
 **Web UI 工作区与会话重命名**（仿 DeepSeek Harness）：侧栏顶部有 「＋」新建工作区（填名称 + 目录路径，工作区为真实运行目录，其会话在该目录下运行、存档落 `workspaces/<name>/sessions/`）；每条会话行有「`...`」菜单（重命名 / 归档 / 恢复 / 删除）。重命名写入 `<id>.meta.json` 侧车，永久覆盖首条消息自动标题。端点：`GET/POST /api/workspaces`、`POST /api/sessions/{id}/rename`、`GET /api/sessions?workspace=`。
 
+**Web UI 会话统计状态栏**（仿 DeepSeek Harness）：输入框下方显示会话累计统计——`N 轮 · M 步 | LLM Xs · 工具调用 Ys | 首 token 平均 Zs · P tok/s | 缓存命中 Q% | 输入 R tok · 输出 S tok`。每轮结束经 SSE `turn_stats` 实时刷新，首屏 / resume 用 `GET /api/sessions/{id}/stats` 回填；不可用指标显示 `N/A`（如 provider 不返回缓存字段）。吞吐分母为纯生成耗时（不含首 token 延迟）。
+
 ---
 
 ## 11. 验证

@@ -215,5 +215,53 @@ class SessionStoreTest {
         assertTrue(SessionStore.restore(sessionsDir, "s-1"));
         assertEquals("我的项目", SessionStore.readTitle(sessionsDir, "s-1"));
     }
+
+    // ---- add-session-stats-bar：侧车统计 ----
+
+    @Test
+    void writeAndReadStats() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        var stats =
+                com.example.agent.stats.SessionStats.empty()
+                        .plus(new com.example.agent.stats.TurnDelta(2, 100, 50, 0, 1000, 300, 200, 1, 80, 20));
+
+        assertTrue(SessionStore.writeStats(sessionsDir, "s-1", stats));
+
+        var back = SessionStore.readStats(sessionsDir, "s-1");
+        assertEquals(1, back.turns());
+        assertEquals(2, back.steps());
+        assertEquals(100, back.tokensIn());
+        assertEquals(80, back.cacheHitTokens());
+        assertEquals(0.8, back.cacheHitRate(), 1e-9);
+    }
+
+    @Test
+    void statsAndTitleCoexist() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        SessionStore.writeTitle(sessionsDir, "s-1", "我的项目");
+        SessionStore.writeStats(sessionsDir, "s-1", com.example.agent.stats.SessionStats.empty());
+
+        // 写 stats 不覆盖 title；写 title 不覆盖 stats
+        assertEquals("我的项目", SessionStore.readTitle(sessionsDir, "s-1"));
+        assertEquals(0, SessionStore.readStats(sessionsDir, "s-1").turns());
+        SessionStore.writeTitle(sessionsDir, "s-1", "改名后");
+        assertEquals("改名后", SessionStore.readTitle(sessionsDir, "s-1"));
+        assertEquals(0, SessionStore.readStats(sessionsDir, "s-1").turns());
+    }
+
+    @Test
+    void readStatsDefaultsToEmptyForLegacyOrMissing() throws Exception {
+        Path sessionsDir = tmp.resolve("sessions");
+        Files.createDirectories(sessionsDir);
+        // 旧侧车（仅 title）→ stats 视为空
+        SessionStore.writeTitle(sessionsDir, "s-1", "旧会话");
+        assertEquals(0, SessionStore.readStats(sessionsDir, "s-1").turns());
+        // 无侧车
+        assertEquals(0, SessionStore.readStats(sessionsDir, "no-such").turns());
+        // 非法 id
+        assertEquals(0, SessionStore.readStats(sessionsDir, "../evil").turns());
+    }
 }
 

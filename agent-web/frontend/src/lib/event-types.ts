@@ -4,6 +4,7 @@ export type SseEventType =
   | 'tool_call_start'
   | 'tool_call_end'
   | 'permission_request'
+  | 'turn_stats'
   | 'message_stop'
   | 'error';
 
@@ -57,11 +58,26 @@ export interface ErrorEvent {
   message: string;
 }
 
+/** 回合统计（add-session-stats-bar）：每次回合结束时于 message_stop 前推送。 */
+export interface TurnStats {
+  type: 'turn_stats';
+  turns: number;
+  steps: number;
+  tokens_in: number;
+  tokens_out: number;
+  llm_ms: number;
+  tool_ms: number;
+  avg_ttft_ms: number | null;
+  tok_per_sec: number | null;
+  cache_hit_rate: number | null;
+}
+
 export type SseEvent =
   | MessageStart
   | MessageDelta
   | ToolCallStart
   | ToolCallEnd
   | PermissionRequest
+  | TurnStats
   | MessageStop
   | ErrorEvent;

@@ -112,7 +112,7 @@ export function App() {
             onCollapseToggle={setSidebarCollapsed}
           />
           <main className={styles.main}>
-            <ChatPanel currentSessionId={currentSessionId} />
+            <ChatPanel currentSessionId={currentSessionId} workspace={activeWorkspace} />
           </main>
         </div>
       </div>

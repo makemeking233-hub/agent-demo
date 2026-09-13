@@ -7,6 +7,8 @@ import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionMode;
 import com.example.agent.session.WorkspaceStore;
+import com.example.agent.stats.SessionStats;
+import com.example.agent.stats.TurnDelta;
 import com.example.agent.web.api.dto.SseEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
@@ -55,7 +57,8 @@ public class ChatStreamService {
      * @param sink SSE 发布 sink
      * @param loop 该会话的 AgentLoop（可空，调用 start 时装配）
      * @param sinkAdapter SSE 事件观察者（把 AgentLoop 回调转 SSE 事件）
-     * @param history 当前消息历史（可空，start 时装配）
+     * @param aborted 中断标记
+     * @param workspace 归属工作区（add-session-stats-bar：统计按工作区路由）
      */
     public record ActiveStream(
             String streamId,
@@ -65,7 +68,8 @@ public class ChatStreamService {
             Sinks.Many<ServerSentEvent<Object>> sink,
             AgentLoop loop,
             SseSessionLogSink sinkAdapter,
-            java.util.concurrent.atomic.AtomicBoolean aborted) {}
+            java.util.concurrent.atomic.AtomicBoolean aborted,
+            String workspace) {}
 
     public ActiveStream create(String sessionId, String model) {
         return create(sessionId, model, null);
@@ -112,7 +116,7 @@ public class ChatStreamService {
         AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get, mode, workspace);
         ActiveStream meta =
                 new ActiveStream(
-                        streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted);
+                        streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted, workspace);
         actives.put(streamId, meta);
         emit(meta, new SseEvent.MessageStart(streamId, sessionId, model, System.currentTimeMillis()));
         return meta;
@@ -203,6 +207,25 @@ public class ChatStreamService {
     public boolean submitDecision(String streamId, String permissionId, String decision) {
         if (actives.get(streamId) == null) return false;
         return permissionBridge.submitDecision(permissionId, decision);
+    }
+
+    /**
+     * 回合结束（add-session-stats-bar）：累加该会话统计 → 推送 {@code turn_stats} → 停止流。
+     *
+     * <p>在 {@code message_stop} 之前推送，携带会话累计值。
+     *
+     * @param streamId 流 id
+     * @param result   本轮结果（可空；空时只读当前累计值）
+     */
+    public void onTurnEnd(String streamId, TurnResult result) {
+        ActiveStream meta = actives.get(streamId);
+        if (meta != null) {
+            TurnDelta delta = result != null ? result.delta() : null;
+            SessionStats stats = runtime.accumulateStats(meta.workspace(), meta.sessionId(), delta);
+            // 防御：mock/异常路径可能返回 null，退化为空统计而非 NPE。
+            emit(meta, new SseEvent.TurnStats(stats != null ? stats : SessionStats.empty()));
+        }
+        stop(streamId, "stop");
     }
 
     /** 工作区是否存在（空/null = 默认为 true，走默认工作区）。 */

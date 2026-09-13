@@ -1,5 +1,6 @@
 package com.example.agent.web.api.dto;
 
+import com.example.agent.stats.SessionStats;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
@@ -55,6 +56,40 @@ public sealed interface SseEvent {
     record MessageStop(@JsonProperty("type") String type, @JsonProperty("finish_reason") String finishReason) implements SseEvent {
         public MessageStop(String finishReason) {
             this("message_stop", finishReason);
+        }
+    }
+
+    /**
+     * 回合统计（add-session-stats-bar）：每次回合结束时于 {@code message_stop} 之前推送，携带会话累计值。
+     *
+     * <p>派生指标（{@code avg_ttft_ms} / {@code tok_per_sec} / {@code cache_hit_rate}）不可用时为 {@code null}
+     * （前端显示 N/A）。
+     */
+    record TurnStats(
+            @JsonProperty("type") String type,
+            @JsonProperty("turns") long turns,
+            @JsonProperty("steps") long steps,
+            @JsonProperty("tokens_in") long tokensIn,
+            @JsonProperty("tokens_out") long tokensOut,
+            @JsonProperty("llm_ms") long llmMs,
+            @JsonProperty("tool_ms") long toolMs,
+            @JsonProperty("avg_ttft_ms") Double avgTtftMs,
+            @JsonProperty("tok_per_sec") Double tokPerSec,
+            @JsonProperty("cache_hit_rate") Double cacheHitRate)
+            implements SseEvent {
+
+        public TurnStats(SessionStats s) {
+            this(
+                    "turn_stats",
+                    s.turns(),
+                    s.steps(),
+                    s.tokensIn(),
+                    s.tokensOut(),
+                    s.llmMillis(),
+                    s.toolMillis(),
+                    s.avgTtftMs(),
+                    s.tokPerSec(),
+                    s.cacheHitRate());
         }
     }
 

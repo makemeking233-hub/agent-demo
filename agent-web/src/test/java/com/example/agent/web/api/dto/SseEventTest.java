@@ -47,4 +47,35 @@ class SseEventTest {
         String json = mapper.writeValueAsString(event);
         assertThat(json).contains("\"choices\":[\"yes\",\"no\",\"always\"]");
     }
+
+    // ---- add-session-stats-bar：turn_stats ----
+
+    @Test
+    void turnStatsTypeAndSerialization() throws Exception {
+        var stats =
+                com.example.agent.stats.SessionStats.empty()
+                        .plus(new com.example.agent.stats.TurnDelta(2, 100, 50, 0, 2000, 300, 500, 1, 80, 20));
+        var event = new SseEvent.TurnStats(stats);
+        assertThat(event.type()).isEqualTo("turn_stats");
+
+        String json = mapper.writeValueAsString(event);
+        assertThat(json).contains("\"type\":\"turn_stats\"");
+        assertThat(json).contains("\"turns\":1");
+        assertThat(json).contains("\"steps\":2");
+        assertThat(json).contains("\"tokens_in\":100");
+        assertThat(json).contains("\"tokens_out\":50");
+        assertThat(json).contains("\"llm_ms\":2000");
+        assertThat(json).contains("\"tool_ms\":300");
+        assertThat(json).contains("\"avg_ttft_ms\":500.0");
+        assertThat(json).contains("\"cache_hit_rate\":0.8");
+    }
+
+    @Test
+    void turnStatsNullDerivedSerializedAsNull() throws Exception {
+        var event = new SseEvent.TurnStats(com.example.agent.stats.SessionStats.empty());
+        String json = mapper.writeValueAsString(event);
+        assertThat(json).contains("\"avg_ttft_ms\":null");
+        assertThat(json).contains("\"tok_per_sec\":null");
+        assertThat(json).contains("\"cache_hit_rate\":null");
+    }
 }

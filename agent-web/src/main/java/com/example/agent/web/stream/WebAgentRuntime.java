@@ -18,6 +18,8 @@ import com.example.agent.render.StreamingPrinter;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
 import com.example.agent.session.WorkspaceStore;
+import com.example.agent.stats.SessionStats;
+import com.example.agent.stats.TurnDelta;
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.tools.ToolRegistry;
 import jakarta.annotation.PreDestroy;
@@ -83,6 +85,9 @@ public class WebAgentRuntime {
 
     /** 每会话的 {@link SessionStore}（用于关闭时 flush；与 SessionRecorder 一一对应）。 */
     private final Map<String, SessionStore> sessionStores = new ConcurrentHashMap<>();
+
+    /** 每会话累计统计缓存（key = {@code workspace:sessionId}；add-session-stats-bar）。 */
+    private final Map<String, SessionStats> sessionStats = new ConcurrentHashMap<>();
 
     @Autowired
     public WebAgentRuntime(LlmProvider provider, ToolRegistry tools, TokenEstimator estimator) {
@@ -320,6 +325,7 @@ public class WebAgentRuntime {
                 }
             }
             sessionStores.remove(mapKey);
+            sessionStats.remove(mapKey);
         }
         return ok;
     }
@@ -347,6 +353,42 @@ public class WebAgentRuntime {
     /** 某工作区的会话存储目录（add-workspaces-and-rename）。 */
     public Path sessionsDirFor(String workspace) {
         return WorkspaceStore.sessionsDirFor(agentDataDir, workspace);
+    }
+
+    /**
+     * 累加一轮统计并落盘侧车，返回新的会话累计统计（add-session-stats-bar）。
+     *
+     * <p>内存缓存优先（首次触达从磁盘回填），累加后写回 {@code <id>.meta.json{stats}}。
+     *
+     * @param workspace 工作区（可空 = 默认）
+     * @param sessionId 会话 id（空则返回 {@link SessionStats#empty()}）
+     * @param delta     本轮增量（可空 = 不累加，仅返回当前值）
+     * @return 累加后的累计统计
+     */
+    public SessionStats accumulateStats(String workspace, String sessionId, TurnDelta delta) {
+        if (sessionId == null || sessionId.isBlank()) return SessionStats.empty();
+        String k = key(workspace, sessionId);
+        SessionStats current =
+                sessionStats.computeIfAbsent(
+                        k, ignored -> SessionStore.readStats(sessionsDirFor(workspace), sessionId));
+        SessionStats updated = current.plus(delta);
+        SessionStore.writeStats(sessionsDirFor(workspace), sessionId, updated);
+        sessionStats.put(k, updated);
+        return updated;
+    }
+
+    /**
+     * 读取某会话的累计统计（内存优先，回落磁盘侧车）。
+     *
+     * @param workspace 工作区（可空 = 默认）
+     * @param sessionId 会话 id
+     * @return 累计统计（绝不 {@code null}）
+     */
+    public SessionStats statsFor(String workspace, String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return SessionStats.empty();
+        return sessionStats.computeIfAbsent(
+                key(workspace, sessionId),
+                ignored -> SessionStore.readStats(sessionsDirFor(workspace), sessionId));
     }
 
     /** 某工作区的运行目录（缺省工作区=项目根）。 */

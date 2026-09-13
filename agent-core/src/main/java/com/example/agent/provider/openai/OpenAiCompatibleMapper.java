@@ -257,13 +257,8 @@ public class OpenAiCompatibleMapper {
         @Override
         public Optional<StreamChunk> parse(JsonNode root) {
             StreamChunk.Usage usage = parseUsage(root);
-            return usage == null
-                    ? Optional.empty()
-                    : Optional.of(
-                    new StreamChunk.Usage(
-                            usage.promptTokens(),
-                            usage.completionTokens(),
-                            usage.reasoningTokens()));
+            // 直接透传解析出的 usage（含 add-session-stats-bar 的缓存字段），不再重建丢字段。
+            return usage == null ? Optional.empty() : Optional.of(usage);
         }
     }
 
@@ -293,10 +288,21 @@ public class OpenAiCompatibleMapper {
         if (!details.isMissingNode() && !details.isNull()) {
             reasoningTokens = details.path("reasoning_tokens").asInt(0);
         }
+        // add-session-stats-bar: DeepSeek 前缀缓存命中/未命中 token（缺失 → null = N/A）
+        Integer cacheHit = readNullableInt(u, "prompt_cache_hit_tokens");
+        Integer cacheMiss = readNullableInt(u, "prompt_cache_miss_tokens");
         return new StreamChunk.Usage(
                 u.path("prompt_tokens").asInt(0),
                 u.path("completion_tokens").asInt(0),
-                reasoningTokens);
+                reasoningTokens,
+                cacheHit,
+                cacheMiss);
+    }
+
+    /** 读可空整型字段：缺失 / 为 null 时返回 {@code null}（区分"未返回"与"返回 0"）。 */
+    private static Integer readNullableInt(JsonNode node, String field) {
+        JsonNode v = node.get(field);
+        return (v == null || v.isNull()) ? null : v.asInt();
     }
 
     /**

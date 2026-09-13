@@ -674,5 +674,81 @@ class AgentLoopTest {
         // 不验证 toRequest 内部（那是私有行为），但确认 setModel 不抛异常
         // 完整 model 流转验证留给集成测试
     }
+
+    // ---- add-session-stats-bar：本轮统计采集 ----
+
+    @Test
+    void turnDeltaCollectsStepsTokensAndCache() {
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                // 第一轮：触发一个不存在的工具（计 1 步）+ usage（含缓存字段），无文本 → 不产生 TTFT 样本
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.ToolCallStart("1", "ghost", null),
+                                new StreamChunk.ToolCallEnd("1", "ghost", "{}"),
+                                new StreamChunk.Usage(100, 10, 0, 80, 20),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                // 第二轮：纯文本结束（产生 TTFT 样本）+ usage
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(50, 5, 0, 40, 10))));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        when(tools.list()).thenReturn(List.of());
+
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        new MessageHistory(new TokenEstimator()),
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+
+        TurnResult r = loop.processTurn(new Message.User("hi")).block();
+        com.example.agent.stats.TurnDelta d = r.delta();
+        assertEquals(1, d.steps(), "工具不存在也算一步");
+        assertEquals(150, d.tokensIn());
+        assertEquals(15, d.tokensOut());
+        assertEquals(1, d.ttftSamples(), "只有含文本的那次 streamChat 产生 TTFT 样本");
+        assertEquals(Integer.valueOf(120), d.cacheHitTokens());
+        assertEquals(Integer.valueOf(30), d.cacheMissTokens());
+        assertEquals(1, r.toolCallCount());
+    }
+
+    @Test
+    void turnDeltaWithoutCacheFieldsLeavesThemNull() {
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("hi"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(7, 3, 0))));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        when(tools.list()).thenReturn(List.of());
+
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        new MessageHistory(new TokenEstimator()),
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+
+        TurnResult r = loop.processTurn(new Message.User("hi")).block();
+        assertEquals(null, r.delta().cacheHitTokens(), "provider 未返回缓存字段 → null(N/A)");
+        assertEquals(null, r.delta().cacheMissTokens());
+    }
 }
 
