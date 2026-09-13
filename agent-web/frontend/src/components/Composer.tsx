@@ -1,6 +1,7 @@
-import { Loader2, Mic, MicOff, Send, Square, Volume2, VolumeX } from "lucide-react";
+import { Loader2, Mic, MicOff, Send, Square, Volume2, VolumeX, WifiOff } from "lucide-react";
 import { KeyboardEvent, useState } from "react";
 import { type PermissionMode } from "../api/chat";
+import { OnlineProvider, useOnline } from "../hooks/useOnline";
 import styles from "./Composer.module.css";
 
 interface ComposerProps {
@@ -24,7 +25,18 @@ const PERMISSION_LABELS: Record<PermissionMode, string> = {
   full_access: "Full access",
 };
 
-export function Composer({
+export function Composer(props: ComposerProps) {
+  // Composer 自身用 OnlineProvider 包裹（add-pwa-support）：
+  // - App 根已包过，嵌套无害
+  // - 测试 render(<Composer />) 自动有 provider，不用每个测试单独包
+  return (
+    <OnlineProvider>
+      <ComposerInner {...props} />
+    </OnlineProvider>
+  );
+}
+
+function ComposerInner({
   busy,
   onSend,
   onAbort,
@@ -61,6 +73,8 @@ export function Composer({
 
   const trimmed = value.trim();
   const voiceActive = voiceState !== "idle";
+  const { isOnline } = useOnline();
+  const offline = !isOnline;
 
   return (
     <div className={styles.composer}>
@@ -80,14 +94,15 @@ export function Composer({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKey}
-          placeholder={placeholder}
-          disabled={busy}
+          placeholder={offline ? "网络已断开" : placeholder}
+          disabled={busy || offline}
         />
         {onVoiceToggle && (
           <button
             type="button"
             className={`${styles.button} ${voiceActive ? styles.voiceOn : ""}`}
             onClick={onVoiceToggle}
+            disabled={offline}
             aria-label={voiceActive ? "关闭自由语音" : "开启自由语音"}
             title={voiceActive ? "关闭自由语音" : "开启自由语音"}
           >
@@ -105,6 +120,7 @@ export function Composer({
             type="button"
             className={styles.button}
             onClick={onMuteToggle}
+            disabled={offline}
             aria-label={muted ? "开启朗读" : "静音朗读"}
             title={muted ? "开启朗读" : "静音朗读"}
           >
@@ -121,9 +137,10 @@ export function Composer({
             type="button"
             className={styles.button}
             onClick={submit}
-            disabled={!trimmed}
+            disabled={!trimmed || offline}
+            title={offline ? "网络已断开，无法发送" : undefined}
           >
-            <Send size={16} />
+            {offline ? <WifiOff size={16} /> : <Send size={16} />}
           </button>
         )}
       </div>
@@ -134,6 +151,7 @@ export function Composer({
             value={permissionMode}
             onChange={(e) => onPermissionModeChange?.(e.target.value as PermissionMode)}
             aria-label="权限模式"
+            disabled={offline}
           >
             {(Object.keys(PERMISSION_LABELS) as PermissionMode[]).map((m) => (
               <option key={m} value={m}>
@@ -143,7 +161,7 @@ export function Composer({
           </select>
         </span>
         <span>{trimmed.length} 字符</span>
-        <span>Ctrl+Enter 发送 / Shift+Enter 换行</span>
+        <span>{offline ? "网络已断开" : "Ctrl+Enter 发送 / Shift+Enter 换行"}</span>
       </div>
     </div>
   );

@@ -8,13 +8,13 @@
 
 ## 2. 前端组件
 
-- [ ] 2.1 新增 `frontend/src/hooks/useOnline.ts`：监听 `window.online/offline` 事件 + Context Provider；返回 `{ isOnline, retry }`
-- [ ] 2.2 新增 `frontend/src/components/OfflineBanner.tsx`：Snackbar 组件（顶部 6px 高度条 + "网络已断开" + 重试按钮），订阅 `useOnline` Context；`vitest` mock `navigator.onLine` 触发 online/offline 事件，断言渲染/隐藏
-- [ ] 2.3 新增 `frontend/src/hooks/usePwaUpdate.ts`：封装 `virtual:pwa-register`（vite-plugin-pwa 自动生成）+ `workbox-window` 的 `messageSkipWaiting`，返回 `{ needRefresh, update, offlineReady }`
-- [ ] 2.4 新增 `frontend/src/components/PwaUpdatePrompt.tsx`：Snackbar 组件（"检测到新版本 + 立即刷新"），订阅 `usePwaUpdate`；`vitest` mock `usePwaUpdate` 验证点击 `update()` 调 `messageSkipWaiting`
-- [ ] 2.5 新增 `frontend/src/components/OfflineFallback.tsx`：路由级 fallback（"网络已断开 + 重试"按钮），用 `useOnline` 决定渲染；`vitest` 覆盖
-- [ ] 2.6 改造 `frontend/src/App.tsx`：用 `<OnlineProvider>` 包裹整个 app + 在根节点挂载 `<OfflineBanner + PwaUpdatePrompt>`；`<Composer />` 订阅 `useOnline` 决定禁用发送按钮
-- [ ] 2.7 改造 `frontend/src/components/Composer.tsx`：订阅 `useOnline`，离线时禁用发送按钮 + 灰色提示
+- [x] 2.1 新增 `frontend/src/hooks/useOnline.ts`：监听 `window.online/offline` 事件 + Context Provider；返回 `{ isOnline, retry }`
+- [x] 2.2 新增 `frontend/src/components/OfflineBanner.tsx`：Snackbar 组件（顶部 6px 高度条 + "网络已断开" + 重试按钮），订阅 `useOnline` Context；`vitest` mock `navigator.onLine` 触发 online/offline 事件，断言渲染/隐藏
+- [x] 2.3 新增 `frontend/src/hooks/usePwaUpdate.ts`：封装 `virtual:pwa-register`（vite-plugin-pwa 自动生成）+ `workbox-window` 的 `messageSkipWaiting`，返回 `{ needRefresh, update, offlineReady }`
+- [x] 2.4 新增 `frontend/src/components/PwaUpdatePrompt.tsx`：Snackbar 组件（"检测到新版本 + 立即刷新"），订阅 `usePwaUpdate`；`vitest` mock `usePwaUpdate` 验证点击 `update()` 调 `messageSkipWaiting`
+- [x] 2.5 新增 `frontend/src/components/OfflineFallback.tsx`：路由级 fallback（"网络已断开 + 重试"按钮），用 `useOnline` 决定渲染；`vitest` 覆盖
+- [x] 2.6 改造 `frontend/src/App.tsx`：用 `<OnlineProvider>` 包裹整个 app + 在根节点挂载 `<OfflineBanner + PwaUpdatePrompt>`；`<Composer />` 订阅 `useOnline` 决定禁用发送按钮
+- [x] 2.7 改造 `frontend/src/components/Composer.tsx`：订阅 `useOnline`，离线时禁用发送按钮 + 灰色提示
 
 ## 3. 后端 HTTPS 支持
 

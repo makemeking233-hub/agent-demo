@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { ChatApi, type SessionSummary, type Workspace } from "./api/chat";
 import { ChatPanel } from "./components/ChatPanel";
+import { OfflineBanner } from "./components/OfflineBanner";
+import { PwaUpdatePrompt } from "./components/PwaUpdatePrompt";
 import { Sidebar, type SidebarSession } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
+import { OnlineProvider } from "./hooks/useOnline";
 import styles from "./App.module.css";
 
 function toSidebar(s: SessionSummary): SidebarSession {
@@ -81,34 +84,38 @@ export function App() {
   }
 
   return (
-    <div className={styles.app}>
-      <TopBar onOpenSettings={() => alert("设置 v0.2 接入")} />
-      <div
-        className={
-          sidebarCollapsed
-            ? `${styles.body} ${styles.bodyCollapsed}`
-            : styles.body
-        }
-      >
-        <Sidebar
-          sessions={sessions}
-          archived={archived}
-          workspaces={workspaces}
-          activeWorkspace={activeWorkspace}
-          currentSessionId={currentSessionId}
-          onSelect={setCurrentSessionId}
-          onNewSession={handleNewSession}
-          onWorkspaceChange={setActiveWorkspace}
-          onRename={handleRename}
-          onCreateWorkspace={handleCreateWorkspace}
-          onArchive={handleArchive}
-          onRestore={handleRestore}
-          onCollapseToggle={setSidebarCollapsed}
-        />
-        <main className={styles.main}>
-          <ChatPanel currentSessionId={currentSessionId} />
-        </main>
+    <OnlineProvider>
+      <OfflineBanner />
+      <PwaUpdatePrompt />
+      <div className={styles.app}>
+        <TopBar onOpenSettings={() => alert("设置 v0.2 接入")} />
+        <div
+          className={
+            sidebarCollapsed
+              ? `${styles.body} ${styles.bodyCollapsed}`
+              : styles.body
+          }
+        >
+          <Sidebar
+            sessions={sessions}
+            archived={archived}
+            workspaces={workspaces}
+            activeWorkspace={activeWorkspace}
+            currentSessionId={currentSessionId}
+            onSelect={setCurrentSessionId}
+            onNewSession={handleNewSession}
+            onWorkspaceChange={setActiveWorkspace}
+            onRename={handleRename}
+            onCreateWorkspace={handleCreateWorkspace}
+            onArchive={handleArchive}
+            onRestore={handleRestore}
+            onCollapseToggle={setSidebarCollapsed}
+          />
+          <main className={styles.main}>
+            <ChatPanel currentSessionId={currentSessionId} />
+          </main>
+        </div>
       </div>
-    </div>
+    </OnlineProvider>
   );
 }
