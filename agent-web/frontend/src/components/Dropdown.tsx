@@ -55,13 +55,34 @@ export function Dropdown({
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, [open]);
 
+  /**
+   * 打开菜单并把高亮项定位到**当前选中值**（无选中值则定位到第一项）。
+   *
+   * <p>ARIA APG 对 select-only combobox 的要求是：展开时当前选项获得视觉焦点。鼠标点击与键盘
+   * 打开必须走同一条路径——此前只有键盘分支设置 focusIndex，点击打开会把它留在 -1，于是
+   * 「点击打开后按一次 ↓」落到第一项而不是当前项的下一项。
+   */
+  const openMenu = () => {
+    setOpen(true);
+    setFocusIndex(value ? options.findIndex((o) => o.value === value) : 0);
+  };
+
+  /** trigger 的点击开关语义：已展开则收起，否则按 {@link openMenu} 展开。 */
+  const toggleMenu = () => {
+    if (disabled) return;
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    openMenu();
+  };
+
   // 键盘导航（trigger focus 时）
   const onTriggerKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
     if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
       e.preventDefault();
-      setOpen(true);
-      setFocusIndex(value ? options.findIndex((o) => o.value === value) : 0);
+      openMenu();
     }
   };
 
@@ -97,7 +118,7 @@ export function Dropdown({
       {trigger ? (
         <div
           className={styles.trigger}
-          onClick={() => !disabled && setOpen((o) => !o)}
+          onClick={toggleMenu}
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={ariaLabel}
@@ -110,7 +131,7 @@ export function Dropdown({
         <button
           type="button"
           className={styles.trigger}
-          onClick={() => setOpen((o) => !o)}
+          onClick={toggleMenu}
           disabled={disabled}
           aria-haspopup="listbox"
           aria-expanded={open}

@@ -55,10 +55,21 @@ describe("Dropdown", () => {
     render(<Dropdown options={options} value="medium" onChange={onChange} ariaLabel="effort" />);
     fireEvent.click(screen.getByRole("button", { name: "effort" }));
     const listbox = screen.getByRole("listbox");
-    // ArrowDown 移动焦点
+    // 展开时高亮定位到当前选中项（medium，索引 1）——鼠标点击与键盘打开走同一条路径。
+    // 因此一次 ↓ 即落到索引 2 的 high（此处原先写的是两次 ↓，其隐含前提是"展开时高亮第一项"，
+    // 与组件实际的键盘分支行为不一致）。
     fireEvent.keyDown(listbox, { key: "ArrowDown" });
-    fireEvent.keyDown(listbox, { key: "ArrowDown" });
-    // Enter 选中当前 focusIndex=2 (high)
+    fireEvent.keyDown(listbox, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("high");
+  });
+
+  it("ArrowUp 从第一项回绕到最后一项", () => {
+    const onChange = vi.fn();
+    render(<Dropdown options={options} value="low" onChange={onChange} ariaLabel="effort" />);
+    fireEvent.click(screen.getByRole("button", { name: "effort" }));
+    const listbox = screen.getByRole("listbox");
+    // low 是索引 0，一次 ↑ 回绕到索引 2 的 high
+    fireEvent.keyDown(listbox, { key: "ArrowUp" });
     fireEvent.keyDown(listbox, { key: "Enter" });
     expect(onChange).toHaveBeenCalledWith("high");
   });

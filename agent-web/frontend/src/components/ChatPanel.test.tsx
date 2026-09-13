@@ -27,6 +27,22 @@ describe("ChatPanel 会话重进恢复", () => {
   });
   afterEach(() => cleanup());
 
+  /**
+   * add-models-dropdown-v0 之后 ChatPanel 新增了 4 个必填 props（model / reasoningEffort /
+   * currentModelEntry / onReasoningEffortChange）。本文件只关心历史恢复与空态，与模型选择无关，
+   * 故统一给固定桩值，避免 4 处重复。
+   */
+  function renderPanel() {
+    return render(
+      <ChatPanel
+        model="deepseek-chat"
+        reasoningEffort="medium"
+        currentModelEntry={null}
+        onReasoningEffortChange={() => {}}
+      />,
+    );
+  }
+
   it("挂载时从 localStorage 恢复消息快照", () => {
     localStorage.setItem(
       KEY,
@@ -39,13 +55,13 @@ describe("ChatPanel 会话重进恢复", () => {
         ],
       }),
     );
-    render(<ChatPanel />);
+    renderPanel();
     expect(screen.getByText("恢复的用户消息")).toBeInTheDocument();
     expect(screen.getByText("恢复的助手回复")).toBeInTheDocument();
   });
 
   it("无持久化时显示空态", () => {
-    render(<ChatPanel />);
+    renderPanel();
     expect(screen.getByText(/开始对话/)).toBeInTheDocument();
   });
 
@@ -66,7 +82,7 @@ describe("ChatPanel 会话重进恢复", () => {
         }),
       }),
     );
-    render(<ChatPanel />);
+    renderPanel();
     // 回填是异步（mount 后 fetch history），用 waitFor 等待渲染。
     const { waitFor } = await import("@testing-library/react");
     await waitFor(() => expect(screen.getByText("服务端历史用户")).toBeInTheDocument());
@@ -76,7 +92,7 @@ describe("ChatPanel 会话重进恢复", () => {
   it("回填失败时不阻断（降级为空态）", async () => {
     localStorage.setItem(KEY, JSON.stringify({ v: 1, sessionId: "s-1", items: [] }));
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    render(<ChatPanel />);
+    renderPanel();
     const { waitFor } = await import("@testing-library/react");
     await waitFor(() => expect(screen.getByText(/开始对话/)).toBeInTheDocument());
   });
