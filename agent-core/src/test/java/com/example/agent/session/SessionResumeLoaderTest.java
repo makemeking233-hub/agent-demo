@@ -60,6 +60,38 @@ class SessionResumeLoaderTest {
     }
 
     @Test
+    void repairsDanglingToolCallsFromInterruptedTurn() throws Exception {
+        // 真实事故形状（会话 1789277081599）：assistant(EditFile) 之后直接是下一条 user。
+        // 工具抛 NoClassDefFoundError 打断整轮，tool_result 从未落盘；不修复的话该会话
+        // 每轮重放历史都会被上游 400（insufficient tool messages following tool_calls）。
+        Path sessionsDir =
+                writeSession(store -> {
+                    store.append(SessionEntry.user("存入长期记忆吧", null));
+                    store.append(
+                            SessionEntry.assistant(
+                                    "",
+                                    List.of(
+                                            new ToolCall(
+                                                    "call_edit",
+                                                    "EditFile",
+                                                    "{\"path\":\"MEMORY.md\"}")),
+                                    null));
+                    store.append(SessionEntry.user("怎么还是没有流式输出", null));
+                });
+
+        SessionResumeLoader.ResumeResult result = SessionResumeLoader.load(sessionsDir);
+        List<Message> msgs = result.messages();
+
+        assertEquals(4, msgs.size()); // user + assistant + 合成 tool_result + user
+        Message.ToolResult injected = (Message.ToolResult) msgs.get(2);
+        assertEquals("call_edit", injected.toolCallId());
+        assertTrue(injected.isError(), "合成结果必须标记为错误（不伪装成功）");
+        assertTrue(
+                msgs.get(3) instanceof Message.User,
+                "补的结果必须插在 assistant 与下一条 user 之间，否则配对仍被打破");
+    }
+
+    @Test
     void injectsOrphanSkeletonForOrphanToolResult() throws Exception {
         Path sessionsDir =
                 writeSession(store -> {

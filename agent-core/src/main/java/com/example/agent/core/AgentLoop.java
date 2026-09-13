@@ -501,7 +501,12 @@ public class AgentLoop {
         for (var t : tools.list()) {
             specs.add(new ToolSpec(t.name(), t.description(), t.inputSchema()));
         }
-        List<com.example.agent.core.Message> msgs = new ArrayList<>(history.all());
+        // 配对修复（repair-dangling-tool-calls）：某一轮若在「assistant(tool_calls) 已入 history、
+        // tool_result 尚未回流」之间被打断，内存历史就带着空洞；直接发出去会被上游 400
+        // （assistant 的 tool_calls 缺少对应 tool 消息）。这里对**将要发送的消息列表**补齐，
+        // 使同一进程内不必等重启也能继续对话（幂等，已配对时无改动）。
+        List<com.example.agent.core.Message> msgs =
+                ToolCallPairing.repair(history.all());
         sink.onContextSnapshot(buildSnapshot(specs));
         return new ChatRequest(
                 model != null ? model : DEFAULT_MODEL,

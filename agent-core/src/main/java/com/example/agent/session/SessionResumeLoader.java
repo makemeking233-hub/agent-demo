@@ -99,9 +99,13 @@ public final class SessionResumeLoader {
                 }
             }
         }
-        // 并行 tool_result 孤儿处理：为无前置 assistant.tool_calls 的 tool_result 注入合成骨架
-        injectOrphanSkeletons(messages);
-        return new ResumeResult(messages, prompt, completion);
+        // 正向配对修复（repair-dangling-tool-calls）：某轮在「assistant 已落盘、tool_result 未落盘」
+        // 之间被打断时，存档会停在有 tool_calls 无 tool_result 的中间态，此后每轮重放都会 400。
+        // 这里补合成错误结果，使被污染的存档恢复后立即可用（不改写存档文件本身）。
+        List<Message> paired = com.example.agent.core.ToolCallPairing.repair(messages);
+        // 反向配对修复：为无前置 assistant.tool_calls 的 tool_result 注入合成骨架
+        injectOrphanSkeletons(paired);
+        return new ResumeResult(paired, prompt, completion);
     }
 
     /**

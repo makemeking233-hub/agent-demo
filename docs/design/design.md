@@ -1021,6 +1021,33 @@ else if (t instanceof LinkageError)  throw (LinkageError) t;
 
 > 排查这类故障的经验：`NoClassDefFoundError` 指向的类**在源码里存在、编译产物里也成对存在**时，说明运行期 classpath 与当前构建不一致——常见于「应用实例运行期间对同一 `target/` 执行了 `clean` / `package`」。此时重启进程即可恢复，根因在构建流程而不在代码。
 
+### 11.6 消息配对不变式（tool_calls 与 tool 结果）
+
+会话历史必须同时满足两个配对不变式，缺任一条上游都会 400：
+
+```mermaid
+flowchart LR
+    A["assistant<br/>tool_calls=[c1,c2]"] --> T1["tool c1"]
+    T1 --> T2["tool c2"]
+    T2 --> N["下一条 user / assistant"]
+```
+
+- **正向**：assistant 的每个 `tool_calls[].id`，都要在其后、**下一条非 tool 消息之前**有对应的 tool 结果。
+- **反向**：任何 tool 结果都要有前置的 `assistant.tool_calls` 包含它的 id。
+
+反向由 `SessionResumeLoader.injectOrphanSkeletons` 处理（补合成 assistant 骨架）。正向由 `ToolCallPairing.repair` 处理（补合成**错误**结果），在两条路径上调用：
+
+| 路径 | 位置 | 作用 |
+|------|------|------|
+| 恢复存档 | `SessionResumeLoader.toMessages` | 被污染的存档恢复后立即可用，无需人工修文件 |
+| 构造请求 | `AgentLoop.toRequest` | 同一进程内被打断的轮次不会让下一轮也 400（不必等重启） |
+
+**正向为什么会被破坏**：assistant 消息按顺序约束**先入 history**，工具结果随后回流。若一轮在两者之间被打断（§11.5 的 `LinkageError` 逃逸就是典型），存档就停在「有 `tool_calls`、无 `tool_result`」的中间态——而历史是每轮重放的，于是**该会话永久不可用**，用户侧表现为"一直报错"。
+
+修复选择补合成结果而不是删掉 assistant：既满足协议，又如实告诉模型"这次调用没完成"（`isError=true`，文案写明未完成），模型会自行换策略重试；删掉则会让模型丢失自己刚做的决定。
+
+> 排查经验：遇到 `insufficient tool messages following tool_calls message` 时，直接按配对不变式扫会话存档即可定位——逐条记录维护一个「已发起未回答」的 id 集合，在遇到下一条 user/assistant 或文件末尾时若非空，那就是悬挂点。
+
 ---
 
 ## 12. 测试策略
