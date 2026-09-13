@@ -56,7 +56,7 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 - **commit 即里程碑**：每个 Task 完成后立即 commit，commit 信息遵循全局规则 §13 的中文 Conventional Commits 风格
 - **commit 即 push**：本地 commit 完成后**立即** push，不积压等待。
   - 迭代需求在**隔离分支**上作业（见 §2.7），此时 push 到**该分支**（`git push -u origin feat/<change-id>`），**不推 `main`**；
-  - 分支验证全绿并合并回 `main` 后，再把 `main` push 到 `origin/main`。
+  - 分支测试全绿、按 §2.7.5 门禁合并回 `main`、并在 `main` 上复验通过后，再把 `main` push 到 `origin/main`。
 - **里程碑 review 点**：每个里程碑（M0-M10）完成后停下，向用户汇报：
   - 已完成内容
   - 测试结果（`mvn test` 全绿）
@@ -165,6 +165,7 @@ openspec/
 | 接到新需求 | **必须先 `openspec-explore`** 澄清再动手；不允许直接进 `openspec-apply-change` 跳过设计 |
 | 接到新需求 | **必须先建分支/worktree 隔离**（见 §2.7），不允许直接在 `main` 上迭代 |
 | 改完一个 change | **必须 `openspec-archive-change`** 收尾；不允许留 `openspec/changes/<id>/` 未归档导致下次 session 看到一堆"已完成但未归档" |
+| change 测试全绿 | **必须按 §2.7.5 门禁合并回 `main`**（合并后要在 `main` 上复验一次）；不允许把已完成的 change 长期挂在分支上 |
 | archive 后 | delta spec 已合并到 `openspec/specs/`，下次 session 才能看到新行为 |
 | 提案 scope | 超过 20 行 → 拆 change（每个 change 一周内可完成） |
 | task 颗粒度 | 单 task > 4h → 拆 |
@@ -253,6 +254,7 @@ docs/test-agent-demo/
 ### 2.7 分支隔离（迭代需求默认）
 
 > **任何迭代需求（新功能 / 行为变更 / 重构 / 性能优化 / 修 bug）都必须先建分支或 git worktree 隔离，在新分支上迭代，完成并验证后再合并回 `main`。**
+> **合并回 `main` 的前提是「分支上测试全绿」**——测试没跑通的分支，一步也不许往 `main` 上并（门禁见 §2.7.5）。
 > **不允许直接在 `main` 上改代码后提交。** 走 OpenSpec 的 change 尤其必须如此。
 
 #### 2.7.1 为什么（2026-09-13 实测教训）
@@ -286,15 +288,18 @@ git push -u origin feat/<change-id>
 
 # 4. 验证：mvn -o -pl agent-core,agent-web verify + 前端 npx vitest run 全绿
 
-# 5. 合并回 main（能快进就快进；有冲突才 merge commit）
+# 5. 测试全绿后合并回 main（门禁见 §2.7.5；能快进就快进，有冲突才 merge commit）
 cd <主工作区>
 git merge feat/<change-id>
+# 合并后在 main 上再验证一次，通过才 push
 git push origin main
 
-# 6. 清理
+# 6. 清理（合并成功且 main 复验通过后才做）
 git worktree remove .worktrees/<change-id>
 git branch -d feat/<change-id>
 ```
+
+> 第 5 步不是「顺手并过去」，而是一道有门禁的操作——详情见 §2.7.5。
 
 #### 2.7.3 命名约定
 
@@ -311,13 +316,74 @@ git branch -d feat/<change-id>
 - **不修改、不提交、不删除其他 agent 的未提交文件**；发现文件被他人同时改动时先停下问用户。
 - 从分支合并/推送前，先确认 `main`（或分支）上的既有失败**不是自己造成的**——对照改动前的基线，必要时在干净 HEAD 上复现一次。
 
-#### 2.7.5 豁免
+#### 2.7.5 合并回主分支（**测试通过是前提**）
+
+> **worktree / 分支里的 change 改完 → 测试通过 → 合并回 `main`。**
+> **测试没通过的分支，一步也不许往 `main` 上并。** 「本地看着没问题」不算通过，必须有命令输出为证（见全局规则 §6「证据先于断言」）。
+
+##### 2.7.5.1 合并前门禁（逐条打勾，缺一不可）
+
+| # | 门禁项 | 判定方式 |
+|:--:|--------|---------|
+| 1 | 分支上质量门**全绿** | `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿；前端 `npx vitest run` 全绿；`npx tsc --noEmit` 错误数**不超过基线**（本项目基线 27 个既有错误） |
+| 2 | OpenSpec change 已归档 | `openspec/changes/<id>/` 已 archive，delta spec 已并入 `openspec/specs/`（§2.5.4）；`tasks.md` 无未勾选项 |
+| 3 | 分支工作区干净 | `git -C .worktrees/<id> status -sb` 无未提交改动；提交清单里没有他人文件（§2.7.4） |
+| 4 | **与 `main` 同步后重跑门禁 1** | `main` 可能已被并行 agent 推进：先在分支上 `git merge main`（或 `git rebase main`），**再跑一次门禁 1**。在旧的 `main` 上测绿 ≠ 在新的 `main` 上能绿 |
+| 5 | 既有失败已归因 | 门禁 1 若有红色：能在**合并前的干净 HEAD** 上复现 → 既有问题，记录后放行；不能复现 → 是自己弄坏的，**禁止合并** |
+
+##### 2.7.5.2 合并执行
+
+```bash
+# 在主工作区，先确认 main 干净（有他人未提交改动时先问用户，别硬合）
+cd E:/claude-projects/agent-demo
+git status -sb
+git rev-parse HEAD                      # 记下来，回退要用（快进合并没有 merge commit）
+
+# 合并：能快进就快进；需要保留 change 边界时用 --no-ff
+git merge feat/<change-id>
+
+# 合并后在 main 上再验证一次——这是最后一道闸
+cmd.exe /c "mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**"
+cd agent-web/frontend && npx vitest run && cd ../../..
+
+# 复验通过才 push
+git push origin main
+```
+
+**必须复验的理由**：`main` 上同时挂着别人的改动，分支上的绿只覆盖「分支 + 当时那个 main」的组合。合并后在 `main` 上再跑一次，才能把「谁的改动弄红的」这件事钉死在合并点上。
+
+##### 2.7.5.3 合并后清理（复验通过后立刻做）
+
+```bash
+git worktree remove .worktrees/<change-id>
+git branch -d feat/<change-id>
+git push origin --delete feat/<change-id>   # 若该分支已 push 过
+```
+
+清理**必须**在复验通过之后：复验没过时 worktree 还得留着修 bug。
+
+##### 2.7.5.4 失败回退
+
+| 时机 | 处置 |
+|------|------|
+| 合并后复验失败、**尚未 push** | `git reset --hard ORIG_HEAD` 回到合并前，回分支上修；修完重走门禁 |
+| 合并后复验失败、**已 push** | `git revert -m 1 <merge-commit>` 并 push（保留痕迹，不改写公共历史），再回分支上修 |
+| 快进合并后想撤销 | 快进没有 merge commit：`git reset --hard <2.7.5.2 里记下的 HEAD>`（已 push 时同样用 `revert`） |
+| 冲突无法在分支内干净解决 | 停下问用户，**不要**在主工作区里手工解冲突后合并 |
+
+##### 2.7.5.5 底线
+
+- 同一 change 连续 **3 次**合并到 `main` 后复验失败 → 停止合并，把证据（命令 + 输出 + 复现步骤）整理给用户，由用户决定是回退 `main` 还是继续。
+- **不许**为了「让合并看起来成功」而跳过门禁、注释掉失败的测试、放宽 jacoco 阈值、或把失败归给「环境问题」而不给出对照复现。
+- 合并是**单向**的：只允许 `分支 → main`。不允许在 `main` 上改完之后再往分支上并。
+
+#### 2.7.6 豁免
 
 | 场景 | 是否需分支 |
 |------|-----------|
 | 任何迭代需求（含走 OpenSpec 的 change） | **必须**（多 agent 并行时用 worktree） |
-| 纯文档 / typo / 注释微调 | 可豁免（仍建议顺手建分支） |
-| 紧急 hotfix | 可豁免，但需用户明确同意，修完立刻同步 `main` |
+| 纯文档 / typo / 注释微调 | 可豁免（仍建议顺手建分支）；**豁免的只是「建分支」，不是「测试」**——改了代码仍要跑门禁 |
+| 紧急 hotfix | 可豁免，但需用户明确同意，修完立刻同步 `main`，并在同一个任务内补跑门禁 1 |
 
 ---
 
@@ -332,10 +398,12 @@ git branch -d feat/<change-id>
 - **不引入 Lombok、spring-boot-starter-web、数据库**
 - **stdout 留给模型输出，日志主写文件，WARN+ 镜像 stderr**
 - **迭代需求一律走分支/worktree 隔离**（§2.7）：不在 `main` 上直接改；提交只用显式路径 `git add <path>`
+- **测试全绿才可合并回 `main`**（§2.7.5）：合并前跑门禁、合并后必须在 `main` 上复验一次，复验通过才 push
 
 ---
 
 > 修订记录：
+> - v0.1.5（2026-09-13）：新增 §2.7.5 合并回主分支（测试通过是前提）——5 条合并前门禁（含同步 main 后重跑、既有失败归因）、合并执行、合并后清理、失败回退表、3 次失败兜底；§2.7 引言加「测试全绿才可合并」；§2.7.2 第 5/6 步指向门禁；原 §2.7.5 豁免顺延为 §2.7.6；§2.2 与 §2.5.4 各加一条；§3 加一条
 > - v0.1.4（2026-09-13）：新增 §2.7 分支隔离（迭代需求默认）——分支/worktree 标准流程、命名约定、多 agent 并行的提交纪律（禁用 `git add -A`）、豁免清单；§2.2「commit 即 push」明确为推送当前分支；§2.5.4 强制门禁加一行；§3 加一条
 > - v0.1.3（2026-08-30）：§1 测试文档路径改为批次目录；新增 §2.6 测试文档组织规范（每次测试一个带时间戳子目录 + 四件套 test-design/test-cases/test-report/test-review）
 > - v0.1.2（2026-08-26）：§1 加 OpenSpec 路径索引；新增 §2.5 OpenSpec 迭代流程（默认）：四阶段（explore → propose → apply → archive）、目录布局、与 §2.1/§2.2/§3 的衔接、强制门禁、适用/豁免清单
