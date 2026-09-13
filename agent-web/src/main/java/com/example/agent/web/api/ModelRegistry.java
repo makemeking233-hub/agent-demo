@@ -6,7 +6,7 @@ import java.util.stream.Stream;
 import org.springframework.core.env.Environment;
 
 /**
- * 模型注册表（add-reasoning-thinking-streaming）。
+ * 模型注册表（add-reasoning-thinking-streaming + add-deepseek-v4-models）。
  *
  * <p>从 {@code agent.chat.supported-models} 配置读支持的模型列表（逗号分隔），用于：
  *
@@ -16,11 +16,13 @@ import org.springframework.core.env.Environment;
  *   <li>{@code /model} slash 命令切模型时校验
  * </ul>
  *
- * <p>默认列表：{@code deepseek-chat, deepseek-reasoner}。
+ * <p>默认列表：{@code deepseek-v4-flash, deepseek-reasoner, deepseek-v4-pro, deepseek-v4-flash-vision-exp}。
+ * DeepSeek 2026-07-24 停用 deepseek-chat/reasoner，统一升级到 V4 系列。
  */
 public final class ModelRegistry {
     /** 默认 supported-models 列表（兜底用） */
-    public static final String DEFAULT_MODELS = "deepseek-chat,deepseek-reasoner";
+    public static final String DEFAULT_MODELS =
+            "deepseek-v4-flash,deepseek-reasoner,deepseek-v4-pro,deepseek-v4-flash-vision-exp";
 
     private ModelRegistry() {}
 

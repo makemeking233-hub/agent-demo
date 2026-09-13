@@ -12,15 +12,15 @@ import org.springframework.mock.env.MockEnvironment;
 class ModelsControllerTest {
 
     @Test
-    void listsDeepseekChatWithEmptyReasoningEfforts() {
+    void listsDeepseekV4FlashWithEmptyReasoningEfforts() {
         MockEnvironment env = new MockEnvironment();
         ModelsController c = new ModelsController(env);
         ModelsResponse resp = c.list().block();
         assertThat(resp).isNotNull();
-        // 默认 supported-models = [deepseek-chat, deepseek-reasoner]
-        var chat = resp.models().stream().filter(m -> "deepseek-chat".equals(m.id())).findFirst().orElseThrow();
-        assertThat(chat.supportsReasoning()).isFalse();
-        assertThat(chat.reasoningEfforts()).isEmpty();
+        // 默认 supported-models = [deepseek-v4-flash, deepseek-reasoner, deepseek-v4-pro, deepseek-v4-flash-vision-exp]
+        var v4Flash = resp.models().stream().filter(m -> "deepseek-v4-flash".equals(m.id())).findFirst().orElseThrow();
+        assertThat(v4Flash.supportsReasoning()).isFalse();
+        assertThat(v4Flash.reasoningEfforts()).isEmpty();
     }
 
     @Test
@@ -45,5 +45,21 @@ class ModelsControllerTest {
             assertThat(m.supportsReasoning()).isTrue();
             assertThat(m.reasoningEfforts()).containsExactly("low", "medium", "high");
         });
+    }
+
+    @Test
+    void deepseekV4ProSupportsReasoning() {
+        // add-deepseek-v4-models: deepseek-v4-pro 触发 supportsReasoning=true
+        MockEnvironment env = new MockEnvironment();
+        env.setProperty("agent.chat.supported-models", "deepseek-v4-flash,deepseek-v4-pro");
+        ModelsController c = new ModelsController(env);
+        ModelsResponse resp = c.list().block();
+        assertThat(resp.models()).hasSize(2);
+        var v4Flash = resp.models().stream().filter(m -> m.id().equals("deepseek-v4-flash")).findFirst().orElseThrow();
+        assertThat(v4Flash.supportsReasoning()).isFalse();
+        assertThat(v4Flash.reasoningEfforts()).isEmpty();
+        var v4Pro = resp.models().stream().filter(m -> m.id().equals("deepseek-v4-pro")).findFirst().orElseThrow();
+        assertThat(v4Pro.supportsReasoning()).isTrue();
+        assertThat(v4Pro.reasoningEfforts()).containsExactly("low", "medium", "high");
     }
 }

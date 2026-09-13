@@ -31,12 +31,18 @@ agent:
     #   -Dagent.web.trusted-hosts=192.168.1.0/24   (整个 /24 子网)
     #   -Dagent.web.trusted-hosts=192.168.1.42     (单 IP)
     trusted-hosts: []
-  # add-reasoning-thinking-streaming: 支持的 LLM 模型列表（逗号分隔；与 ModelRegistry 一致）
-  # 默认包含 reasoning 模型（deepseek-reasoner）。ModelsController 返回此列表。
+  # add-reasoning-thinking-streaming + add-deepseek-v4-models: 支持的 LLM 模型列表
+  # （逗号分隔；与 ModelRegistry 一致）。ModelsController 返回此列表。
+  # add-deepseek-v4-models: DeepSeek 2026-07-24 停用 deepseek-chat/reasoner，
+  # 统一升级到 V4 系列:
+  #   - deepseek-v4-flash: 默认非推理模型（平替 deepseek-chat）
+  #   - deepseek-reasoner: 推理模型（沿用 V3 名字，DeepSeek 保留 alias）
+  #   - deepseek-v4-pro: 旗舰推理模型（平替 deepseek-reasoner）
+  #   - deepseek-v4-flash-vision-exp: 多模态预览版（2026-09 新发布）
   chat:
-    supported-models: deepseek-chat,deepseek-reasoner
+    supported-models: deepseek-v4-flash,deepseek-reasoner,deepseek-v4-pro,deepseek-v4-flash-vision-exp
     # 缺省模型（前端 SendRequest.model 缺省时用）
-    default-model: deepseek-chat
+    default-model: deepseek-v4-flash
   # auto-archive-stale-sessions: 超期会话自动归档
   session:
     auto-archive:

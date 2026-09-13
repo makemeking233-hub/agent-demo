@@ -37,7 +37,8 @@ public class ModelsController {
                                             || id.contains("o3")
                                             || id.contains("thinking")
                                             || id.contains("opus-4")
-                                            || id.contains("sonnet-4");
+                                            || id.contains("sonnet-4")
+                                            || id.contains("v4-pro");
                                     // add-models-dropdown-v0：supportsReasoning=true 时返回三档固定 effort；
                                     // 后续 change add-provider-catalog-abstract 升级为按 provider 动态化。
                                     List<String> efforts =
