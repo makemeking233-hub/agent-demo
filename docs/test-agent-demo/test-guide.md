@@ -22,6 +22,7 @@
 | `2026-09-04-true-streaming/` | add-true-streaming 真流式改造（Provider bodyToFlux + 跨帧行重组 + 正文逐 token 透传 + 复合 sink 转发 + 多流隔离） | 2026-09-04 | 20 新增改动（另 353 core + 158 web + 104 vitest 回归） | ⚠️ 用例全绿，jacoco 门禁既有欠账 | ✅ | 待归档 |
 | `2026-09-13-rich-markdown/` | add-rich-markdown-rendering 富 Markdown 渲染（GFM 表格 / 公式 / 代码高亮 / 图片 / 安全基线 / 流式时序 + 后端 GET /api/fs/raw） | 2026-09-13 | 45（21 后端 + 24 前端；另 182 web + 143 vitest 回归） | ✅ 本 change 用例全绿；前端套件 1 例失败继承自 main（已在干净 main 复现） | ✅ | 已归档 |
 | `2026-09-13-add-models-dropdown-v0/` | add-models-dropdown-v0 模型+思考强度下拉（AgentLoop 透传 + 三 Provider effort 适配 + Web 后端 reasoningEffort + CLI /effort + 前端 Dropdown/ModelSelect/ReasoningEffortSelect + localStorage 持久化） | 2026-09-13 | 17（10 Java 新增 + 7 vitest Dropdown；前端集成/localStorage 测试未写） | ✅ Java 全绿 / ⚠️ 前端 vitest 沙箱 npm ci 失败未跑 | ✅ | 已实施未归档 |
+| `2026-09-14-mermaid/` | add-mermaid-diagrams mermaid 围栏渲染成图（rehype 改写 + MermaidBlock 懒加载 + securityLevel strict + 闭合判定 + 失败兜底 + PWA 预缓存白名单） | 2026-09-14 | 8 新增（5 MermaidBlock + 3 markdown 分组；另 175 既有 vitest 回归） | ✅ 全绿 | ✅ | 已归档 |
 
 ---
 
@@ -114,6 +115,14 @@
 - **遗留**：前端集成 / localStorage 持久化测试未实施；沙箱 npm ci 失败导致 vitest 未跑；E2E 失败（`WebIntegrationTest` 404 / `UiLayoutE2ETest` 中文编码）已对照 main 基线确认非本 change 引起。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已实施未归档（branch `feat/add-models-dropdown-v0` 已 push，merge 后 archive）。
+
+### 2.12 `2026-09-14-mermaid/` — add-mermaid-diagrams mermaid 围栏渲染成图
+
+- **测试目标**：把 Web 对话区的 ```` ```mermaid ```` 围栏从「按代码块显示源码」改为「渲染成图」——覆盖 rehype 改写（`rehype-mermaid.ts` 把 `language-mermaid` 围栏换成 `<mermaid-block>` 自定义标签）、`MermaidBlock` 懒加载 mermaid 运行时 + `securityLevel: 'strict'` + 深色 + 闭合判定 + 失败兜底 + 源码去重、其他语言围栏不受影响、流式期间未闭合围栏不被接管、PWA 预缓存收敛（白名单方案）、浏览器实开证「真能出图」、无回归。
+- **执行要点**：worktree `feat/add-mermaid-diagrams` 隔离作业（§2.7）；前端 `npx vitest run` 全量 21 文件 / 183 用例全绿（本次新增 8：5 `MermaidBlock.test.tsx` + 3 `MessageBubble.markdown.test.tsx` mermaid 分组）；`npx tsc --noEmit` 错误数 7（与基线持平，未引入新 TS 错误）；Java 后端零改动 → 不重跑（tasks.md 6.1 给出依据，主工作区应用仍跑在 `target/classes`，重跑会触发 §2.7.1 的增量编译残留事故）；`npm run build` 实测主 JS bundle 567,592 B → 569,728 B（+2,136 B / +0.4%，证 mermaid 全懒加载），独立 `mermaid.core-*.js` 666.3 KB 含按需图型 chunk 63 个；PWA 预缓存：默认 glob 实测 70 entries / 11609.58 KiB（膨胀 ≈5 MB），白名单最终 8 / 6787.22 KiB、mermaid 相关 0 条；浏览器实开（tasks.md 5.3）覆盖合法图渲染、非法语法兜底、网络抓包证按需加载三层证据；delta spec 已并入 `openspec/specs/markdown-rendering/spec.md`（新增 8 个 Requirement：mermaid 围栏渲染 / 运行时按需加载 / 恒定深色 / 安全配置 / 仅闭合后渲染 / 失败兜底 / 容器与可访问性）与 `openspec/specs/web-ui/spec.md`（运行时缓存策略补充预缓存白名单方案），change 已 archive 到 `openspec/changes/archive/2026-09-13-add-mermaid-diagrams/`。
+- **关键发现**：（1）D5 设计错误被实测推翻——CommonMark 里未闭合 fenced code block 会延伸到文档结尾，**仍是合法 code 节点**，hast 层面与闭合的完全一样；正确做法是 `rehype-mermaid` 读 `file.value` 原文统计围栏标记行数，奇数则对最后一段不做接管、按代码块显示源码；已回写 design.md D5 并新增用例 TC-MD-MERMAID-03 固化。（2）D7 黑名单方案走不通——实测 63 个按需 chunk 命名五花八门（`chunk` / `diagram` / `elk` / `dagre` / `cytoscape.esm` / `arc` / `graph` / `*Diagram`），**没有共同前缀**；改为 `globPatterns` 白名单，安装体积从此有上界、与引了多少按需库无关；spec 与 design 已同步改正。（3）嵌套依赖副作用：`mermaid@12` 依赖 `katex@0.16.47`，项目根依赖 `katex@0.18.7`，npm 装嵌套副本 → 打包出两份 katex chunk（各 ~261 KB）；按文件名无法区分归属，权衡后**接受**不引入 npm overrides（强推会让 mermaid 跑在未测试过的版本上），记入 design.md Open Questions #4。（4）测试方法学的诚实交代：mermaid 在 jsdom 里**无法真实渲染**（依赖 `getBBox` / `getComputedTextLength` 等 SVG 测量 API），单测 `vi.mock("mermaid")` 只能证「调用契约 + 三条 UI 分支」；**「真能出图」必须另在浏览器实开验证**——已在 `MermaidBlock.tsx` Javadoc、`MermaidBlock.test.tsx` 注释、design.md D8 三处写明。（5）D4 不关 `htmlLabels` 的取舍：关掉它能让标签退化为纯 SVG `<text>`，但项目图示规范（`AGENTS.md §2.4`）恰恰鼓励在 flowchart 节点标签里用 `<br/>` 换行；`securityLevel: 'strict'` 下 mermaid 用 DOMPurify 消毒，换行标记保留、脚本剥离，是正确的那一档。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
 
 ---
 
