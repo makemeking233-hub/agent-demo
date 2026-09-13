@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChatApi, type SessionSummary, type Workspace } from "./api/chat";
+import { ChatApi, type ModelEntry, type SessionSummary, type Workspace } from "./api/chat";
 import { ChatPanel } from "./components/ChatPanel";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { PwaUpdatePrompt } from "./components/PwaUpdatePrompt";
@@ -19,8 +19,110 @@ export function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<string>("agent-demo");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>("1");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // add-models-dropdown-v0：模型/思考强度全局状态（App 持有，TopBar 和 ChatPanel 共享）
+  const [model, setModel] = useState<string>("deepseek-chat");
+  const [reasoningEffort, setReasoningEffort] = useState<string>("medium");
+  const [currentModelEntry, setCurrentModelEntry] = useState<ModelEntry | null>(null);
 
   const api = new ChatApi();
+
+  // 拉 supported-models 用于校验 localStorage 持久化的 model + reasoningEffort
+  useEffect(() => {
+    let cancelled = false;
+    let savedModel = "deepseek-chat";
+    let savedEffort = "medium";
+    try {
+      const raw = window.localStorage.getItem("agent-demo:model-selection");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { model?: string; reasoningEffort?: string };
+        if (typeof parsed.model === "string" && parsed.model.length > 0) savedModel = parsed.model;
+        if (typeof parsed.reasoningEffort === "string" && parsed.reasoningEffort.length > 0)
+          savedEffort = parsed.reasoningEffort;
+      }
+    } catch {
+      /* ignore */
+    }
+    api
+      .listModels()
+      .then((resp) => {
+        if (cancelled) return;
+        const valid = resp.models.find((m) => m.id === savedModel);
+        const finalModel = valid ? savedModel : "deepseek-chat";
+        const entry =
+          valid ?? resp.models.find((m) => m.id === "deepseek-chat") ?? resp.models[0] ?? null;
+        const finalEffort =
+          entry && entry.reasoningEfforts.includes(savedEffort)
+            ? savedEffort
+            : entry && entry.reasoningEfforts.length > 0
+              ? entry.reasoningEfforts[0]
+              : "medium";
+        setModel(finalModel);
+        setReasoningEffort(finalEffort);
+        setCurrentModelEntry(entry);
+        try {
+          window.localStorage.setItem(
+            "agent-demo:model-selection",
+            JSON.stringify({ model: finalModel, reasoningEffort: finalEffort })
+          );
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {
+        setModel(savedModel);
+        setReasoningEffort(savedEffort);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function handleModelChange(newModel: string) {
+    setModel(newModel);
+    api
+      .listModels()
+      .then((resp) => {
+        const entry = resp.models.find((m) => m.id === newModel) ?? null;
+        setCurrentModelEntry(entry);
+        const nextEffort =
+          entry && entry.reasoningEfforts.includes(reasoningEffort)
+            ? reasoningEffort
+            : entry && entry.reasoningEfforts.length > 0
+              ? entry.reasoningEfforts[0]
+              : reasoningEffort;
+        setReasoningEffort(nextEffort);
+        try {
+          window.localStorage.setItem(
+            "agent-demo:model-selection",
+            JSON.stringify({ model: newModel, reasoningEffort: nextEffort })
+          );
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {
+        try {
+          window.localStorage.setItem(
+            "agent-demo:model-selection",
+            JSON.stringify({ model: newModel, reasoningEffort })
+          );
+        } catch {
+          /* ignore */
+        }
+      });
+  }
+
+  function handleReasoningEffortChange(newEffort: string) {
+    setReasoningEffort(newEffort);
+    try {
+      window.localStorage.setItem(
+        "agent-demo:model-selection",
+        JSON.stringify({ model, reasoningEffort: newEffort })
+      );
+    } catch {
+      /* ignore */
+    }
+  }
 
   const refresh = () => {
     api.listWorkspaces().then(setWorkspaces).catch(() => setWorkspaces([]));
@@ -88,7 +190,12 @@ export function App() {
       <OfflineBanner />
       <PwaUpdatePrompt />
       <div className={styles.app}>
-        <TopBar onOpenSettings={() => alert("设置 v0.2 接入")} />
+        <TopBar
+          api={api}
+          model={model}
+          onModelChange={handleModelChange}
+          onOpenSettings={() => alert("设置 v0.2 接入")}
+        />
         <div
           className={
             sidebarCollapsed
@@ -112,7 +219,14 @@ export function App() {
             onCollapseToggle={setSidebarCollapsed}
           />
           <main className={styles.main}>
-            <ChatPanel currentSessionId={currentSessionId} workspace={activeWorkspace} />
+            <ChatPanel
+              currentSessionId={currentSessionId}
+              workspace={activeWorkspace}
+              model={model}
+              reasoningEffort={reasoningEffort}
+              currentModelEntry={currentModelEntry}
+              onReasoningEffortChange={handleReasoningEffortChange}
+            />
           </main>
         </div>
       </div>

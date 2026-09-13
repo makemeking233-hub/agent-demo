@@ -1,7 +1,8 @@
 import { Loader2, Mic, MicOff, Send, Square, Volume2, VolumeX, WifiOff } from "lucide-react";
 import { KeyboardEvent, useState } from "react";
-import { type PermissionMode } from "../api/chat";
+import { type ModelEntry, type PermissionMode } from "../api/chat";
 import { OnlineProvider, useOnline } from "../hooks/useOnline";
+import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 import styles from "./Composer.module.css";
 
 interface ComposerProps {
@@ -16,6 +17,12 @@ interface ComposerProps {
   muted?: boolean;
   onVoiceToggle?: () => void;
   onMuteToggle?: () => void;
+  /** add-models-dropdown-v0: 当前 model 条目（用于控制 ReasoningEffortSelect 是否渲染） */
+  model?: ModelEntry | null;
+  /** add-models-dropdown-v0: 当前思考强度（low / medium / high） */
+  reasoningEffort?: string;
+  /** add-models-dropdown-v0: 思考强度切换回调 */
+  onReasoningEffortChange?: (effort: string) => void;
 }
 
 const SLASH_COMMANDS = ["/help", "/clear", "/resume", "/history", "/quit"];
@@ -47,6 +54,9 @@ function ComposerInner({
   muted = false,
   onVoiceToggle,
   onMuteToggle,
+  model,
+  reasoningEffort,
+  onReasoningEffortChange,
 }: ComposerProps) {
   const [value, setValue] = useState("");
   const [showSlashHint, setShowSlashHint] = useState(false);
@@ -160,6 +170,17 @@ function ComposerInner({
             ))}
           </select>
         </span>
+        {/* add-models-dropdown-v0: 思考强度下拉（仅 supportsReasoning 模型显示） */}
+        {model && onReasoningEffortChange && reasoningEffort !== undefined && (
+          <span className={styles.effort}>
+            <ReasoningEffortSelect
+              model={model}
+              value={reasoningEffort}
+              onChange={onReasoningEffortChange}
+            />
+            <span className={styles.effortHint}>下次发送生效</span>
+          </span>
+        )}
         <span>{trimmed.length} 字符</span>
         <span>{offline ? "网络已断开" : "Ctrl+Enter 发送 / Shift+Enter 换行"}</span>
       </div>

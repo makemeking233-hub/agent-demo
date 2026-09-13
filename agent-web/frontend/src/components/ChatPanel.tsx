@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChatApi, type HistoryMessage, type PermissionMode, type SessionStats } from "../api/chat";
+import { ChatApi, type HistoryMessage, type ModelEntry, type PermissionMode, type SessionStats } from "../api/chat";
 import { SseClient } from "../lib/sse-client";
 import { SseEvent } from "../lib/event-types";
 import { createVoice } from "../lib/voice";
@@ -231,7 +231,15 @@ export function appendToolToTimeline(items: Item[], tool: InlineTool, id: string
   ];
 }
 
-export function ChatPanel(props: { currentSessionId?: string | null; workspace?: string }) {
+export function ChatPanel(props: {
+  currentSessionId?: string | null;
+  workspace?: string;
+  // add-models-dropdown-v0：model/reasoningEffort 由 App 持有并传入（避免 ChatPanel 与 TopBar 状态不同步）
+  model: string;
+  reasoningEffort: string;
+  currentModelEntry: ModelEntry | null;
+  onReasoningEffortChange: (effort: string) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [streamId, setStreamId] = useState<string | null>(null);
@@ -239,6 +247,8 @@ export function ChatPanel(props: { currentSessionId?: string | null; workspace?:
   const [stats, setStats] = useState<SessionStats | null>(null);
   // 权限模式（add-permission-mode-dropdown）：缺省 read_only；切换即调后端 setPermission；随 send 透传初始模式。
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("read_only");
+  // add-models-dropdown-v0：model/reasoningEffort/currentModelEntry 由 props 传入（App.tsx 持有，避免双 state 不同步）
+  const { model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
   // （React 闭包捕获的是函数创建时的值；SSE 异步到达时闭包里的 streamId 可能仍是 null → 权限提交被跳过）。
   const streamIdRef = useRef<string | null>(null);
@@ -366,7 +376,14 @@ export function ChatPanel(props: { currentSessionId?: string | null; workspace?:
     }
 
     try {
-      const resp = await api.send({ content, session_id: sessionIdRef.current ?? undefined, permission_mode: permissionMode });
+      const resp = await api.send({
+        content,
+        session_id: sessionIdRef.current ?? undefined,
+        permission_mode: permissionMode,
+        // add-models-dropdown-v0：透传 model + reasoningEffort 到后端
+        model,
+        reasoning_effort: reasoningEffort,
+      });
       setStreamId(resp.stream_id);
       streamIdRef.current = resp.stream_id;
       sessionIdRef.current = resp.session_id; // 记住会话，下轮复用 → 后端按 session_id 复用 history
@@ -526,6 +543,10 @@ export function ChatPanel(props: { currentSessionId?: string | null; workspace?:
         muted={muted}
         onVoiceToggle={handleVoiceToggle}
         onMuteToggle={handleMuteToggle}
+        // add-models-dropdown-v0：透传 model/effort
+        model={currentModelEntry}
+        reasoningEffort={reasoningEffort}
+        onReasoningEffortChange={onReasoningEffortChange}
       />
       {/* 底部统计状态栏（add-session-stats-bar） */}
       <StatsBar stats={stats} />
