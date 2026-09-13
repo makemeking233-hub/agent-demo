@@ -17,7 +17,12 @@ class ModelsControllerTest {
         ModelsController c = new ModelsController(env);
         ModelsResponse resp = c.list().block();
         assertThat(resp).isNotNull();
-        // 默认 supported-models = [deepseek-v4-flash, deepseek-reasoner, deepseek-v4-pro, deepseek-v4-flash-vision-exp]
+        // 默认 supported-models = [deepseek-v4-flash, deepseek-reasoner, deepseek-v4-pro]
+        // 注意：v0.1 移除 deepseek-v4-flash-vision-exp（OpenAiCompatibleMapper 不支持多模态 content，
+        // 调用会 PrematureCloseException；v0.2+ 加 image_url 支持后再启用）。
+        assertThat(resp.models()).hasSize(3);
+        assertThat(resp.models()).extracting("id")
+                .doesNotContain("deepseek-v4-flash-vision-exp");
         var v4Flash = resp.models().stream().filter(m -> "deepseek-v4-flash".equals(m.id())).findFirst().orElseThrow();
         assertThat(v4Flash.supportsReasoning()).isFalse();
         assertThat(v4Flash.reasoningEfforts()).isEmpty();
