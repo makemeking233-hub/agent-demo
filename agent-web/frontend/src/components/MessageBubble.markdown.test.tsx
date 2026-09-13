@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MessageBubble } from "./MessageBubble";
 
 /**
@@ -148,6 +148,62 @@ describe("MessageBubble 富 Markdown 渲染", () => {
       await waitFor(() => {
         expect(container.textContent).toContain("frac");
       });
+    });
+  });
+
+  describe("图片", () => {
+    it("远程图片直连", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text="![架构图](https://example.com/a.png)" />,
+      );
+
+      const img = container.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute("src")).toBe("https://example.com/a.png");
+      expect(img!.getAttribute("alt")).toBe("架构图");
+    });
+
+    it("Windows 绝对路径转 /api/fs/raw", () => {
+      const local = "C:\\Users\\me\\arch.png";
+      const { container } = render(
+        <MessageBubble role="assistant" text={`![图](${local})`} />,
+      );
+
+      const img = container.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute("src")).toBe("/api/fs/raw?path=" + encodeURIComponent(local));
+    });
+
+    it("含中文与空格的路径经 URI 编码后转 /api/fs/raw", () => {
+      const local = "C:\\Users\\me\\我的 文档\\a.png";
+      // CommonMark 的链接目标含空格时必须用尖括号形式
+      const { container } = render(
+        <MessageBubble role="assistant" text={`![图](<${local}>)`} />,
+      );
+
+      const img = container.querySelector("img");
+      expect(img).not.toBeNull();
+      expect(img!.getAttribute("src")).toBe("/api/fs/raw?path=" + encodeURIComponent(local));
+    });
+
+    it("加载失败时显示 alt 占位而非碎图", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text="![架构图](https://example.com/a.png)" />,
+      );
+
+      fireEvent.error(container.querySelector("img")!);
+
+      expect(container.querySelector("img")).toBeNull();
+      expect(container.textContent).toContain("架构图");
+    });
+
+    it("无法定位的相对路径直接降级为占位，不产生碎图", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text="![相对图](./arch.png)" />,
+      );
+
+      expect(container.querySelector("img")).toBeNull();
+      expect(container.textContent).toContain("相对图");
     });
   });
 });

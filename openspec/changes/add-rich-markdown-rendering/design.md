@@ -100,8 +100,14 @@ lowlight/index.js
 **选择**：
 
 - `http(s)://` 绝对 URL → 直接作为 `<img src>`。
-- 本地绝对路径（含 `file://`）→ 转成 `/api/fs/raw?path=<encodeURIComponent(path)>`。
-- 相对路径 → 视为相对于当前工作区解析后同上。
+- 本地绝对路径（Windows 盘符 / UNC / POSIX 绝对路径）与 `file://` → 转成 `/api/fs/raw?path=<encodeURIComponent(path)>`。
+- **相对路径 → 无法定位，直接降级为 alt 占位**（T6 实现时收窄，见下）。
+
+**为什么不解析相对路径**：前端没有"当前工作区绝对路径"的可靠上下文（`MessageBubble` 不持有工作区状态），把它解析成绝对路径需要把工作区一路透传到渲染层，属于额外改造。相对路径在本场景本就罕见（助手引用图片时给的是绝对路径或 URL），故收敛为"降级为占位"——用户看到 alt 文本，而不是碎图。
+
+**一个必须知道的反直觉细节**：`mdast-util-to-hast` 会把 markdown 链接目标**规范化成 URI**，因此 `C:\Users\me\a.png` 传到 `urlTransform` 时已经变成 `C:%5CUsers%5Cme%5Ca.png`（反斜杠被百分号编码）。所以判类型前**必须先解码**，否则 Windows 路径一条都识别不出来。远程 URL 不走解码，避免它的 `%20` 被还原成空格而失效。
+
+**为什么必须自己写 `urlTransform`**：react-markdown 默认的 `defaultUrlTransform` 只放行 `http(s)`/`mailto` 等少数协议，它按 `:` 与 `/` 的相对位置判断危险协议，**看不见反斜杠**，会把 `C:\...` 判成危险而清空成空串。
 
 **为什么不由前端直接读文件**：浏览器无法读任意本地路径（`file://` 在 http 页面被禁止），必须经后端。
 
