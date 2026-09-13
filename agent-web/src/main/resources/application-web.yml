@@ -38,9 +38,10 @@ agent:
   #   - deepseek-v4-flash: 默认非推理模型（平替 deepseek-chat）
   #   - deepseek-reasoner: 推理模型（沿用 V3 名字，DeepSeek 保留 alias）
   #   - deepseek-v4-pro: 旗舰推理模型（平替 deepseek-reasoner）
-  #   - deepseek-v4-flash-vision-exp: 多模态预览版（2026-09 新发布）
+  # 移除 deepseek-v4-flash-vision-exp：v0.1 OpenAiCompatibleMapper 不支持多模态
+  # content 字段（image_url），调用会 PrematureCloseException（v0.2 加支持）。
   chat:
-    supported-models: deepseek-v4-flash,deepseek-reasoner,deepseek-v4-pro,deepseek-v4-flash-vision-exp
+    supported-models: deepseek-v4-flash,deepseek-reasoner,deepseek-v4-pro
     # 缺省模型（前端 SendRequest.model 缺省时用）
     default-model: deepseek-v4-flash
   # auto-archive-stale-sessions: 超期会话自动归档

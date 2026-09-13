@@ -16,13 +16,15 @@ import org.springframework.core.env.Environment;
  *   <li>{@code /model} slash 命令切模型时校验
  * </ul>
  *
- * <p>默认列表：{@code deepseek-v4-flash, deepseek-reasoner, deepseek-v4-pro, deepseek-v4-flash-vision-exp}。
+ * <p>默认列表：{@code deepseek-v4-flash, deepseek-reasoner, deepseek-v4-pro}。
  * DeepSeek 2026-07-24 停用 deepseek-chat/reasoner，统一升级到 V4 系列。
+ * deepseek-v4-flash-vision-exp 暂不支持（v0.1 OpenAiCompatibleMapper 不支持多模态 content，
+ * 调用会触发 PrematureCloseException；v0.2+ 加 image_url 支持后再启用）。
  */
 public final class ModelRegistry {
     /** 默认 supported-models 列表（兜底用） */
     public static final String DEFAULT_MODELS =
-            "deepseek-v4-flash,deepseek-reasoner,deepseek-v4-pro,deepseek-v4-flash-vision-exp";
+            "deepseek-v4-flash,deepseek-reasoner,deepseek-v4-pro";
 
     private ModelRegistry() {}
 
