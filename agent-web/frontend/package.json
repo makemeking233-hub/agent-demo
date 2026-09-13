@@ -35,8 +35,12 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "katex": "^0.18.7",
     "lucide-react": "^1.37.0",
     "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "tailwindcss": "^4.3.3",
     "vosk-browser": "^0.0.8",
     "workbox-window": "^7.3.0"
