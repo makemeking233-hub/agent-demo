@@ -325,7 +325,7 @@ git branch -d feat/<change-id>
 
 | # | 门禁项 | 判定方式 |
 |:--:|--------|---------|
-| 1 | 分支上质量门**全绿** | `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿；前端 `npx vitest run` 全绿；`npx tsc --noEmit` 错误数**不超过基线**（本项目基线 27 个既有错误） |
+| 1 | 分支上质量门**全绿** | `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿；前端 `npx vitest run` 全绿；`npx tsc --noEmit` 错误数**不超过基线**（本项目基线 **7** 个既有错误，2026-09-13 补 `vite-env.d.ts` 后从 27 降下来，详见 §2.7.7） |
 | 2 | OpenSpec change 已归档 | `openspec/changes/<id>/` 已 archive，delta spec 已并入 `openspec/specs/`（§2.5.4）；`tasks.md` 无未勾选项 |
 | 3 | 分支工作区干净 | `git -C .worktrees/<id> status -sb` 无未提交改动；提交清单里没有他人文件（§2.7.4） |
 | 4 | **与 `main` 同步后重跑门禁 1** | `main` 可能已被并行 agent 推进：先在分支上 `git merge main`（或 `git rebase main`），**再跑一次门禁 1**。在旧的 `main` 上测绿 ≠ 在新的 `main` 上能绿 |
@@ -385,6 +385,20 @@ git push origin --delete feat/<change-id>   # 若该分支已 push 过
 | 纯文档 / typo / 注释微调 | 可豁免（仍建议顺手建分支）；**豁免的只是「建分支」，不是「测试」**——改了代码仍要跑门禁 |
 | 紧急 hotfix | 可豁免，但需用户明确同意，修完立刻同步 `main`，并在同一个任务内补跑门禁 1 |
 
+#### 2.7.7 tsc 基线的构成与维护
+
+`npx tsc --noEmit` 的错误数是门禁项之一，**当前基线 7**。这个数字在 2026-09-13 从 27 降到 7，原因必须记下来，否则后人会误判：
+
+| 原错误数 | 来源 | 性质 |
+|:--:|---|---|
+| 16 | `TS2307 Cannot find module '*.module.css'`——全项目每个 CSS module import 各一条 | **假报错**，Vite 构建期正常处理 |
+| 1 | `TS2339 Property 'env' does not exist on type 'ImportMeta'` | **假报错**，同一个根因 |
+| 7 | `src/api/fs.test.ts` 的 `global`（4 条）、`Sidebar.tsx` 回调类型、`useVoiceChat.test.ts` 的 Mock 签名、`vite.config.ts(97)` 的 test 字段重载 | 真正的既有问题 |
+
+根因是项目缺 `agent-web/frontend/src/vite-env.d.ts`。补上 `/// <reference types="vite/client" />` 与 `/// <reference types="vite-plugin-pwa/client" />` 后，前 17 条一次消失。
+
+**新增组件时注意**：补了该文件之后，"新加一个 `.module.css` 就多一条 TS2307"这条规律**不再成立**。若基线数字再变，先确认是不是又出现了同类假报错，而不要直接认定是自己写错了。
+
 ---
 
 ## 3. 关键决策摘要（供后续 Agent 快速对齐）
@@ -403,6 +417,7 @@ git push origin --delete feat/<change-id>   # 若该分支已 push 过
 ---
 
 > 修订记录：
+> - v0.1.6（2026-09-13）：§2.7.5.1 门禁 1 的 tsc 基线由 27 更正为 **7**；新增 §2.7.7 说明基线的构成与维护（17 条假报错来自缺失的 `vite-env.d.ts`，剩余 7 条才是真既有问题）
 > - v0.1.5（2026-09-13）：新增 §2.7.5 合并回主分支（测试通过是前提）——5 条合并前门禁（含同步 main 后重跑、既有失败归因）、合并执行、合并后清理、失败回退表、3 次失败兜底；§2.7 引言加「测试全绿才可合并」；§2.7.2 第 5/6 步指向门禁；原 §2.7.5 豁免顺延为 §2.7.6；§2.2 与 §2.5.4 各加一条；§3 加一条
 > - v0.1.4（2026-09-13）：新增 §2.7 分支隔离（迭代需求默认）——分支/worktree 标准流程、命名约定、多 agent 并行的提交纪律（禁用 `git add -A`）、豁免清单；§2.2「commit 即 push」明确为推送当前分支；§2.5.4 强制门禁加一行；§3 加一条
 > - v0.1.3（2026-08-30）：§1 测试文档路径改为批次目录；新增 §2.6 测试文档组织规范（每次测试一个带时间戳子目录 + 四件套 test-design/test-cases/test-report/test-review）
