@@ -7,6 +7,7 @@ import "highlight.js/styles/github-dark.css";
 import { markdownUrlTransform } from "../lib/image-src";
 import { rehypeMathPlaceholder } from "../lib/rehype-math-placeholder";
 import { MarkdownImage } from "./MarkdownImage";
+import { MarkdownLink } from "./MarkdownLink";
 import { MathNode } from "./MathNode";
 import styles from "./MarkdownContent.module.css";
 
@@ -33,6 +34,7 @@ const markdownComponents = {
     </div>
   ),
   img: MarkdownImage,
+  a: MarkdownLink,
   // math-inline / math-block 是 rehype-math-placeholder 产出的自定义标签。
   // react-markdown 运行时按 tagName 查表，能命中；但这两个标签不在 JSX.IntrinsicElements 里，
   // 与 Components 的映射类型对不上，故在此收口处做一次类型断言。

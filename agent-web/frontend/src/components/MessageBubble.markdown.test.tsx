@@ -206,4 +206,47 @@ describe("MessageBubble 富 Markdown 渲染", () => {
       expect(container.textContent).toContain("相对图");
     });
   });
+
+  describe("安全基线", () => {
+    it("原始 script 标签不注入 DOM、不执行", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={"<script>alert(1)</script>"} />,
+      );
+
+      // 标签被当成纯文本展示（不含任何可执行元素）
+      expect(container.querySelector("script")).toBeNull();
+      expect(container.textContent).toContain("<script>alert(1)</script>");
+    });
+
+    it("原始 HTML 的事件属性不产生可执行元素", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={'<img src=x onerror="alert(1)">'} />,
+      );
+
+      expect(container.querySelector("img")).toBeNull();
+      expect(container.textContent).toContain("onerror");
+    });
+
+    it("javascript: 协议不产生可点击链接", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text="[点我](javascript:alert(1))" />,
+      );
+
+      // 连 <a> 都不该有：空的 href="" 仍是可点击元素，点下去会整页重载
+      expect(container.querySelector("a")).toBeNull();
+      expect(container.textContent).toContain("点我");
+    });
+
+    it("外链带 target 与 rel 安全属性", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text="[文档](https://example.com)" />,
+      );
+
+      const a = container.querySelector("a");
+      expect(a).not.toBeNull();
+      expect(a!.getAttribute("href")).toBe("https://example.com");
+      expect(a!.getAttribute("target")).toBe("_blank");
+      expect(a!.getAttribute("rel")).toBe("noopener noreferrer");
+    });
+  });
 });

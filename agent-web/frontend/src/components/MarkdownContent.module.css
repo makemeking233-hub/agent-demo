@@ -106,6 +106,9 @@
 
 .markdown a { color: var(--dsw-static-text-link); }
 
+/* 危险协议被拦掉的链接：降级为纯文本，不给任何可点击外观 */
+.linkDisabled { color: var(--dsw-alias-text-muted); }
+
 /* ----- 公式：KaTeX 懒加载，未就绪/失败时显示 TeX 原文 ----- */
 .mathBlock {
   overflow-x: auto;

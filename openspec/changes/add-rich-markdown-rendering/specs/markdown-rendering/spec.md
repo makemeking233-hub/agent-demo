@@ -97,7 +97,7 @@
 #### Scenario: 危险协议不成为可点击链接
 
 - **WHEN** 消息包含 `[点我](javascript:alert(1))`
-- **THEN** 该处不渲染为可点击的 `<a href="javascript:...">`
+- **THEN** 该处不渲染 `<a>` 元素（连 `href=""` 的空链接也不留，而只显示可点击外观被去掉的纯文本）
 - **AND** 页面不执行任何脚本
 
 ### Requirement: 原始 HTML 不渲染
