@@ -8,6 +8,9 @@
 .vscode/
 *.iml
 
+# Git worktrees（隔离开发工作区，勿提交内容）
+.worktrees/
+
 # Build output
 target/
 
