@@ -3,6 +3,7 @@ package com.example.agent.web;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * agent-web 独立入口 (OpenSpec add-web-ui-v0-1 / D2).
@@ -19,6 +20,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * <p>激活方式: {@code mvn -pl agent-web spring-boot:run -Dspring.profiles.active=web}
  */
 @SpringBootApplication(scanBasePackages = "com.example.agent")
+// auto-archive-stale-sessions：开启定时能力，供 SessionAutoArchiveService 周期整理超期会话
+@EnableScheduling
 public class WebApplication {
 
     public static void main(String[] args) {

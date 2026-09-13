@@ -21,7 +21,10 @@ import org.springframework.test.web.reactive.server.WebTestClient;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "agent.provider.api-key=sk-real-from-local-yml",
-            "agent.web.trusted-hosts=0.0.0.0,::0,127.0.0.1,::1"
+            "agent.web.trusted-hosts=0.0.0.0,::0,127.0.0.1,::1",
+            // 关掉自动归档：本测试会启动完整上下文，否则 ApplicationReadyEvent 会去改动
+            // <user.home>/.agent-demo/sessions 下的**真实**会话存档
+            "agent.session.auto-archive.enabled=false"
         })
 @AutoConfigureWebTestClient
 @ActiveProfiles("web")

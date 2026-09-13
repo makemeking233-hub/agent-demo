@@ -193,4 +193,54 @@ describe("Sidebar 会话管理", () => {
     });
     expect(screen.getByText("8分钟")).toBeInTheDocument();
   });
+
+  // ---- auto-archive-stale-sessions：归档视图按时间分档分组 ----
+
+  it("归档视图按时间分档分组，空档不显示且档间由近到远", () => {
+    const archived: SidebarSession[] = [
+      { id: "r", title: "刚归档的", preview: "", workspace: "agent-demo", time: 1, bucket: "recent" },
+      { id: "w", title: "一周前", preview: "", workspace: "agent-demo", time: 2, bucket: "last_week" },
+      { id: "e", title: "很久以前", preview: "", workspace: "agent-demo", time: 3, bucket: "earlier" },
+    ];
+    renderSidebar({ archived });
+
+    fireEvent.click(screen.getByLabelText("归档"));
+
+    expect(screen.getByText("最近归档")).toBeInTheDocument();
+    expect(screen.getByText("上周")).toBeInTheDocument();
+    expect(screen.getByText("更早")).toBeInTheDocument();
+    // 该档没有任何归档会话 → 不显示标题
+    expect(screen.queryByText("本月")).toBeNull();
+
+    const html = document.body.innerHTML;
+    expect(html.indexOf("最近归档")).toBeLessThan(html.indexOf("上周"));
+    expect(html.indexOf("上周")).toBeLessThan(html.indexOf("更早"));
+  });
+
+  it("归档项缺分档字段时归入「更早」，不丢项", () => {
+    // 旧数据 / 后端未返回该字段时的兜底
+    const archived: SidebarSession[] = [
+      { id: "x", title: "无分档字段", preview: "", workspace: "agent-demo", time: 1 },
+    ];
+    renderSidebar({ archived });
+
+    fireEvent.click(screen.getByLabelText("归档"));
+
+    expect(screen.getByText("更早")).toBeInTheDocument();
+    expect(screen.getByText("无分档字段")).toBeInTheDocument();
+  });
+
+  it("普通视图仍按工作区分组（不误用分档）", () => {
+    renderSidebar({
+      sessions: [
+        { id: "a", title: "会话A", preview: "", workspace: "agent-demo", time: 1, bucket: "last_week" },
+        { id: "b", title: "会话B", preview: "", workspace: "other-ws", time: 2 },
+      ],
+    });
+
+    expect(screen.getByText("agent-demo")).toBeInTheDocument();
+    expect(screen.getByText("other-ws")).toBeInTheDocument();
+    // 普通视图不应出现分档标题
+    expect(screen.queryByText("上周")).toBeNull();
+  });
 });

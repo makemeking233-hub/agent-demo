@@ -37,3 +37,12 @@ agent:
     supported-models: deepseek-chat,deepseek-reasoner
     # 缺省模型（前端 SendRequest.model 缺省时用）
     default-model: deepseek-chat
+  # auto-archive-stale-sessions: 超期会话自动归档
+  session:
+    auto-archive:
+      # 开关；false 时启动与定时都不做任何归档
+      enabled: true
+      # 保留期（天）：最后活动时间早于此值的会话被自动归档（按文件 mtime 判定）
+      after-days: 7
+      # 调度间隔（毫秒），默认 6 小时；启动后先执行一次，之后按此间隔重复
+      interval-ms: 21600000

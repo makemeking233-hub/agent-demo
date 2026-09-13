@@ -1,6 +1,7 @@
 package com.example.agent.web.api;
 
 import com.example.agent.core.Message;
+import com.example.agent.session.SessionAgeBucket;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
 import com.example.agent.web.api.dto.RenameRequest;
@@ -180,6 +181,7 @@ public class SessionController {
     private List<SessionSummaryDto> buildArchivedSummaries(String workspace) {
         Path sessionsDir = runtime.sessionsDirFor(workspace);
         Path archiveDir = sessionsDir.resolve(".archive");
+        long now = System.currentTimeMillis();
         List<SessionSummaryDto> out = new ArrayList<>();
         for (String id : SessionStore.listArchived(sessionsDir)) {
             Derived d =
@@ -187,8 +189,16 @@ public class SessionController {
                             SessionResumeLoader.loadArchivedById(sessionsDir, id).messages(),
                             id,
                             archiveDir);
+            long lastModified = mtime(archiveDir.resolve(id + ".jsonl"));
             out.add(new SessionSummaryDto(
-                    id, d.title(), d.preview(), workspaceName(workspace), mtime(archiveDir.resolve(id + ".jsonl"))));
+                    id,
+                    d.title(),
+                    d.preview(),
+                    workspaceName(workspace),
+                    lastModified,
+                    // auto-archive-stale-sessions：分档在后端算，保证"7 天阈值"与"7–14 天档"
+                    // 同源一致；前端只按该字段分组渲染
+                    SessionAgeBucket.of(lastModified, now).key()));
         }
         return out;
     }

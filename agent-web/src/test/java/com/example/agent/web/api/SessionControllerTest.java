@@ -146,6 +146,32 @@ class SessionControllerTest {
     }
 
     @Test
+    void archivedListCarriesTimeBucket() throws Exception {
+        // auto-archive-stale-sessions：归档列表项带时间分档，供前端分组展示。
+        writeSession("s-recent", SessionEntry.user("刚聊完就手动归档", null));
+        controller.archive("s-recent");
+        // 把归档文件的 mtime 推到 10 天前 → 应落在「上周」档
+        Files.setLastModifiedTime(
+                tmp.resolve("sessions").resolve(".archive").resolve("s-recent.jsonl"),
+                java.nio.file.attribute.FileTime.fromMillis(
+                        System.currentTimeMillis() - java.time.Duration.ofDays(10).toMillis()));
+
+        var archived = controller.list(true, null).getBody();
+        assertThat(archived).isNotNull();
+        var item =
+                archived.stream()
+                        .filter(s -> "s-recent".equals(s.id()))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(item.bucket()).isEqualTo("last_week");
+
+        // 普通列表不需要分档字段
+        var live = controller.list(false, null).getBody();
+        assertThat(live).isNotNull();
+        assertThat(live).allSatisfy(s -> assertThat(s.bucket()).isNull());
+    }
+
+    @Test
     void archiveUnknownReturns404() {
         assertThat(controller.archive("nope").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }

@@ -58,6 +58,11 @@ export interface SessionSummary {
   preview: string;
   workspace: string;
   time: number;
+  /**
+   * 时间分档（auto-archive-stale-sessions）：仅归档列表返回。
+   * `recent` | `last_week` | `within_month` | `earlier`（见后端 `SessionAgeBucket`）。
+   */
+  bucket?: string;
 }
 
 /** 工作区（add-workspaces-and-rename）。 */

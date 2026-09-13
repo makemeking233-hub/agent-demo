@@ -296,6 +296,19 @@ public class ChatStreamService {
         return actives.get(streamId);
     }
 
+    /**
+     * 指定会话是否存在活动流（auto-archive-stale-sessions）。
+     *
+     * <p>供自动归档跳过进行中的会话：这类会话随时会继续写入，把存档文件搬走会破坏后续写入。
+     *
+     * @param sessionId 会话 id（{@code null} 视为不活动）
+     * @return 是否存在归属该会话的未结束流
+     */
+    public boolean isSessionActive(String sessionId) {
+        if (sessionId == null) return false;
+        return actives.values().stream().anyMatch(s -> sessionId.equals(s.sessionId()));
+    }
+
     @PreDestroy
     public void shutdown() {
         actives.forEach((id, meta) -> meta.sink().tryEmitComplete());

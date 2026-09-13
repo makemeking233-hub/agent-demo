@@ -33,7 +33,10 @@ import reactor.core.publisher.Flux;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
             "DEEPSEEK_API_KEY=sk-test-fake",
-            "agent.web.trusted-hosts=0.0.0.0,::0,127.0.0.1,::1"
+            "agent.web.trusted-hosts=0.0.0.0,::0,127.0.0.1,::1",
+            // 关掉自动归档：本测试会启动完整 WebApplication 上下文，ApplicationReadyEvent 一触发
+            // 就会去整理 <user.home>/.agent-demo/sessions —— 那是**真实**会话目录，跑测试不应改动它
+            "agent.session.auto-archive.enabled=false"
         })
 @AutoConfigureWebTestClient
 @ActiveProfiles("web")

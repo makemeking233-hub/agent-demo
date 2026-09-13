@@ -597,6 +597,67 @@ public class SessionStore implements AutoCloseable {
     }
 
     /**
+     * 会话文件条目（auto-archive-stale-sessions）：按文件列出时同时给出最后活动时间与大小。
+     *
+     * @param id 会话 id
+     * @param lastModifiedMillis 最后活动时间（文件 mtime，即最后一条记录写入时间）
+     * @param sizeBytes 文件字节数
+     */
+    public record SessionFile(String id, long lastModifiedMillis, long sizeBytes) {}
+
+    /**
+     * 列出会话目录下的会话文件（含 mtime 与大小），按最后活动时间降序。
+     *
+     * <p>供自动归档判定"是否超过保留期"，以及归档列表的分档展示使用。
+     *
+     * @param sessionsDir sessions 目录
+     * @return 会话文件列表；目录不存在/异常返回空
+     */
+    public static List<SessionFile> listSessionFiles(Path sessionsDir) {
+        return listFilesIn(sessionsDir);
+    }
+
+    /**
+     * 列出归档目录（{@code sessions/.archive/}）下的会话文件，按最后活动时间降序。
+     *
+     * @param sessionsDir sessions 目录
+     * @return 归档会话文件列表；无归档/异常返回空
+     */
+    public static List<SessionFile> listArchivedFiles(Path sessionsDir) {
+        if (sessionsDir == null) return List.of();
+        return listFilesIn(sessionsDir.resolve(".archive"));
+    }
+
+    /** 列出目录下的 {@code *.jsonl}（含 mtime/大小），按 mtime 降序；单个文件读属性失败则跳过。 */
+    private static List<SessionFile> listFilesIn(Path dir) {
+        if (dir == null || !Files.isDirectory(dir)) return List.of();
+        try (var stream = Files.list(dir)) {
+            return stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".jsonl"))
+                    .map(
+                            p -> {
+                                try {
+                                    String name = p.getFileName().toString();
+                                    return new SessionFile(
+                                            name.substring(0, name.length() - ".jsonl".length()),
+                                            Files.getLastModifiedTime(p).toMillis(),
+                                            Files.size(p));
+                                } catch (IOException e) {
+                                    return null;
+                                }
+                            })
+                    .filter(java.util.Objects::nonNull)
+                    .sorted(
+                            java.util.Comparator.comparingLong(SessionFile::lastModifiedMillis)
+                                    .reversed())
+                    .toList();
+        } catch (IOException e) {
+            log.warn("列出会话文件失败: dir={}", dir, e);
+            return List.of();
+        }
+    }
+
+    /**
      * 反序列化单个 JSONL 会话文件的所有条目（跳过无法解析的空白/非法行）。
      *
      * @param file 会话 JSONL 文件

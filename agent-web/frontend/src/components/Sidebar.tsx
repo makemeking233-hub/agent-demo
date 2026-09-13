@@ -22,6 +22,29 @@ export interface SidebarSession {
   preview: string;
   workspace: string;
   time: number;
+  /** 时间分档（auto-archive-stale-sessions）：仅归档列表有值。 */
+  bucket?: string;
+}
+
+/**
+ * 归档视图的时间分档标题（auto-archive-stale-sessions）。
+ *
+ * <p>键与后端 `SessionAgeBucket` 一致；分档在**后端**计算，保证"7 天保留期"与"7–14 天档"
+ * 同源一致，前端只负责按字段分组渲染。
+ */
+const BUCKET_LABELS: Record<string, string> = {
+  recent: "最近归档",
+  last_week: "上周",
+  within_month: "本月",
+  earlier: "更早",
+};
+
+/** 分档展示顺序（近 → 远）。 */
+const BUCKET_ORDER = ["recent", "last_week", "within_month", "earlier"];
+
+/** 归档会话的分组键：无分档字段（旧数据/异常）时归入「更早」，保证不丢项。 */
+export function bucketKeyOf(session: SidebarSession): string {
+  return session.bucket && BUCKET_LABELS[session.bucket] ? session.bucket : "earlier";
 }
 
 export interface SidebarWorkspace {
@@ -104,12 +127,24 @@ export function Sidebar(props: SidebarProps) {
     );
   }
 
-  /** 按工作区分组（保持传入顺序，传入方已按 mtime 降序）。 */
+  /**
+   * 分组：**归档视图按时间分档**（auto-archive-stale-sessions），普通视图按工作区。
+   *
+   * <p>归档视图的分档键用后端返回的 `bucket`，保证与后端保留期阈值同源；档内保持传入顺序
+   * （传入方已按 mtime 降序），档间按近→远固定排序。
+   */
   const groups = new Map<string, SidebarSession[]>();
-  for (const s of (archiveView ? props.archived : props.sessions)) {
-    if (!groups.has(s.workspace)) groups.set(s.workspace, []);
-    groups.get(s.workspace)!.push(s);
+  for (const s of archiveView ? props.archived : props.sessions) {
+    const key = archiveView ? bucketKeyOf(s) : s.workspace;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(s);
   }
+  /** 分组标题：归档视图显示分档中文名，普通视图显示工作区名。 */
+  const groupEntries = Array.from(groups.entries()).sort((a, b) => {
+    if (!archiveView) return 0; // 普通视图保持传入顺序
+    return BUCKET_ORDER.indexOf(a[0]) - BUCKET_ORDER.indexOf(b[0]);
+  });
+  const groupLabel = (key: string) => (archiveView ? (BUCKET_LABELS[key] ?? key) : key);
 
   function toggleExpand(workspace: string) {
     const next = new Set(expanded);
@@ -202,7 +237,7 @@ export function Sidebar(props: SidebarProps) {
       )}
 
       <div className={styles.list}>
-        {Array.from(groups.entries()).map(([workspace, list]) => {
+        {groupEntries.map(([workspace, list]) => {
           const isExpanded = expanded.has(workspace);
           const visibleList = isExpanded ? list : list.slice(0, DEFAULT_VISIBLE);
           const hiddenCount = list.length - visibleList.length;
@@ -210,7 +245,7 @@ export function Sidebar(props: SidebarProps) {
             <div key={workspace} className={styles.group}>
               <div className={styles.workspaceHeader}>
                 <Folder size={12} />
-                <span>{workspace}</span>
+                <span>{groupLabel(workspace)}</span>
               </div>
               {visibleList.map((s) => (
                 <div

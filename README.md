@@ -330,6 +330,17 @@ SSE 7 种事件：`message_start` / `message_delta` / `tool_call_start` / `tool_
 
 **Web UI 工具调用内联排布**：工具调用卡片按**调用发生的位置**插在助手回复的时间线里（该迭代的文本之后、下一次迭代之前），而不是统一堆在回复末尾；刷新会话后与服务端历史重建结果一致（同一次调用只渲染一张卡，含真实工具名与执行结果）。实现见 `ChatPanel.tsx` 的 `appendTextToTimeline` / `appendToolToTimeline` / `mapHistoryToItems`。
 
+**超期会话自动归档**：最后活动时间（会话文件 mtime）超过保留期的会话会被自动移入 `.archive/`（软删除、可恢复）。应用启动后立即整理一次，之后每 6 小时一次；正在对话的会话会跳过。归档视图按时间分档分组：**最近归档**（不足 7 天）/ **上周**（7–14 天）/ **本月**（14–30 天）/ **更早**（30 天以上）——分档在后端按相对天数计算，与保留期阈值同源。
+
+```yaml
+agent:
+  session:
+    auto-archive:
+      enabled: true        # 关闭后启动与定时都不动作
+      after-days: 7        # 保留期（天）
+      interval-ms: 21600000 # 调度间隔（毫秒），默认 6 小时
+```
+
 ---
 
 ## 11. 验证
