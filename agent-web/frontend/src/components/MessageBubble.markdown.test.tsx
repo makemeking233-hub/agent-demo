@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+
+// mermaid 在 jsdom 里无法真实渲染（依赖 getBBox 等未实现的 SVG 测量 API），
+// 本文件只关心「围栏有没有被图组件接管」，故 mock 掉它以保持确定性。
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn().mockResolvedValue({ svg: "<svg></svg>" }),
+  },
+}));
+
 import { MessageBubble } from "./MessageBubble";
 
 /**
@@ -294,6 +304,36 @@ describe("MessageBubble 富 Markdown 渲染", () => {
       expect(container.querySelector("pre code")).not.toBeNull();
       expect(container.textContent).toContain("第 39 段落文字。");
       expect(container.textContent).toContain("一致性");
+    });
+  });
+
+  describe("mermaid 图", () => {
+    it("mermaid 围栏交给图组件接管，不再渲染为代码块", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={"```mermaid\nflowchart TD\n  A --> B\n```"} />,
+      );
+
+      expect(container.querySelector("[data-mermaid-block]")).not.toBeNull();
+      // 不再是被高亮处理过的代码块
+      expect(container.querySelector("pre code.hljs")).toBeNull();
+    });
+
+    it("其他语言的围栏仍按代码块渲染", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={"```java\npublic class A {}\n```"} />,
+      );
+
+      expect(container.querySelector("[data-mermaid-block]")).toBeNull();
+      expect(container.querySelector("pre code")).not.toBeNull();
+    });
+
+    it("未闭合的 mermaid 围栏不被接管", () => {
+      const { container } = render(
+        <MessageBubble role="assistant" text={"```mermaid\nflowchart TD\n  A --> B"} />,
+      );
+
+      // 围栏未闭合时在 markdown 层面就不是 code 节点，自然不产生图块
+      expect(container.querySelector("[data-mermaid-block]")).toBeNull();
     });
   });
 });

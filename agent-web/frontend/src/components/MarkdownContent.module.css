@@ -119,6 +119,25 @@
   display: inline-block;
 }
 
+/* ----- mermaid 图：容器横向滚动，宽图不撑破气泡 ----- */
+.mermaidBlock { margin: 8px 0; }
+.mermaidWrap {
+  overflow-x: auto;
+  max-width: 100%;
+  text-align: center;
+}
+.mermaidWrap svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 渲染失败的提示行；其下方的源码块复用 .markdown pre 的既有样式 */
+.mermaidError {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-text-muted);
+  font-size: 13px;
+}
+
 /* ----- 图片加载失败 / 地址无法定位时的 alt 占位 ----- */
 .imageFallback {
   display: inline-block;
