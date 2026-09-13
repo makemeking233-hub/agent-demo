@@ -9,9 +9,10 @@ export type VoiceState = "idle" | "loading" | "listening" | "sending";
  * 朗读结束到重新开麦之间的静音余量（毫秒）。
  *
  * <p>覆盖扬声器混响尾巴与"onend 早于音频真正播完"的情况：TTS 的 onend 触发时房间里往往还有
- * 余音，立刻开麦会被识别到。用户反馈 400ms 仍能听到回声，放宽到 700ms。
+ * 余音，立刻开麦会被识别到。improve-voice-accuracy T1.1：700ms 仍能听到扬声器尾巴，放宽到 1500ms
+ * 覆盖笔记本自带麦+喇叭的物理混响。
  */
-export const ECHO_GUARD_MS = 700;
+export const ECHO_GUARD_MS = 1500;
 
 export interface UseVoiceOptions {
   /** 异步获取 STT 实例（Vosk 需先加载模型，故用工厂 + 缓存）。 */

@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_ECHO_WINDOW_MS,
+  ECHO_OVERLAP_THRESHOLD,
   MAX_CHUNK_CHARS,
   MIN_CHUNK_CHARS,
   createVoice,
   looksLikeEcho,
   sanitizeForSpeech,
 } from "./voice";
+import { ECHO_GUARD_MS } from "./useVoiceChat";
 
 let synth: {
   speak: ReturnType<typeof vi.fn>;
@@ -159,6 +162,20 @@ describe("looksLikeEcho（第三道回声保险）", () => {
 
   it("标点与空白不影响判定", () => {
     expect(looksLikeEcho("再正常不过了，那接下来想干点啥？", SPOKEN)).toBe(true);
+  });
+
+  // improve-voice-accuracy T1.4：阈值从 0.6 提到 0.75（更严，避免近音词跌破阈值被漏判）
+  it("回声防护常量符合改善版（T1.1-1.3）", () => {
+    expect(ECHO_GUARD_MS).toBe(1500); // 700 → 1500，覆盖扬声器混响尾巴
+    expect(ECHO_OVERLAP_THRESHOLD).toBe(0.75); // 0.6 → 0.75，更严的判定
+    expect(DEFAULT_ECHO_WINDOW_MS).toBe(6000); // 10000 → 6000，6 秒足够覆盖真实回声窗口
+  });
+
+  // 边界值 0.74 vs 0.75：构造 heard 让命中字符比例 ≥ 0.75（验证阈值提到 0.75 后仍判为回声）
+  // 注：heard 必须 ≥ ECHO_MIN_CHARS (=6) 才会走重合率判定，否则直接 false
+  it("高重合（≥ 0.75）→ 判为回声", () => {
+    // "哈哈好嘞小白" 8 字符，全部命中 SPOKEN 里的字符 → 8/8 = 1.0
+    expect(looksLikeEcho("哈哈好嘞小白", SPOKEN)).toBe(true);
   });
 });
 

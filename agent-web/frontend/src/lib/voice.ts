@@ -66,8 +66,9 @@ const IDLE_POLL_MS = 100;
 /** 等待播放结束的最长时限：浏览器不触发 onend 时不能把麦克风永久锁死。 */
 export const DEFAULT_IDLE_TIMEOUT_MS = 15000;
 
-/** 回声判定默认回看窗口：朗读结束后这段时间内收到、且与刚说过内容高度重合的识别结果按回声丢弃。 */
-export const DEFAULT_ECHO_WINDOW_MS = 10000;
+/** 回声判定默认回看窗口：朗读结束后这段时间内收到、且与刚说过内容高度重合的识别结果按回声丢弃。
+ * improve-voice-accuracy T1.3：10000ms 过长会混入无关历史，缩到 6000ms 足够覆盖真实回声窗口。 */
+export const DEFAULT_ECHO_WINDOW_MS = 6000;
 
 /** 保留最近多少条朗读文本用于回声比对。 */
 const SPOKEN_LOG_MAX = 8;
@@ -140,8 +141,9 @@ function normalizeForCompare(s: string): string {
 /** 判定回声时，识别结果至少要有这么多实义字符（太短不作为判据）。 */
 export const ECHO_MIN_CHARS = 6;
 
-/** 判定回声的重合率阈值：识别结果中落到「刚说过的话」里的字符占比。 */
-export const ECHO_OVERLAP_THRESHOLD = 0.6;
+/** 判定回声的重合率阈值：识别结果中落到「刚说过的话」里的字符占比。
+ * improve-voice-accuracy T1.2：0.6 偏松（近音词如"邪念"vs"斜眼"易跌破阈值被漏判），提到 0.75。 */
+export const ECHO_OVERLAP_THRESHOLD = 0.75;
 
 /**
  * 判断一段识别结果是否疑似**把我们自己刚朗读的内容又听了回来**。
