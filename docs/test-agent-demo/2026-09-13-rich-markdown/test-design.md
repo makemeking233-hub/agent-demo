@@ -77,7 +77,7 @@
 
 | 项 | 改动前 | 改动后 |
 |---|---:|---:|
-| 后端 Java 测试 | 既有 158（含 `FsControllerTest` 既有 15） | **178**（+15 `FsControllerRawTest` + 5 `FsControllerRawHttpTest`） |
+| 后端 Java 测试 | 既有 182（含 `FsControllerTest` 既有 15） | **203**（+16 `FsControllerRawTest` + 5 `FsControllerRawHttpTest`） |
 | 前端测试文件 | 18 | 19（新增 `MessageBubble.markdown.test.tsx`） |
 | 前端用例数 | 143 | **167**（+24 富 Markdown） |
 | `npx tsc --noEmit` 错误数 | 27 | **7**（补 `vite-env.d.ts` 后，与本 change 无关） |
@@ -129,7 +129,7 @@
 
 ## 7. DoD（Definition of Done）
 
-- [x] 后端 `mvn -pl agent-web -am test` 全绿（178 用例，含新增 15 + 5）
+- [x] 后端 `mvn -pl agent-web -am test` 全绿（203 用例，含新增 16 + 5）
 - [x] 前端 `npx vitest run` 全绿（167 用例 / 19 文件，含新增 24）
 - [x] `npx tsc --noEmit` 错误数 ≤ 7（与基线持平，未引入新错误）
 - [x] `npm run build` 产出新 hash 的 `index-*.js` / `index-*.css`，KaTeX 字体进 `static/assets/`

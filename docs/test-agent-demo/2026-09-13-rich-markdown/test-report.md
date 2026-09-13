@@ -5,7 +5,7 @@
 ### 1.1 后端 agent-web
 
 ```
-Tests run: 178, Failures: 0, Errors: 0, Skipped: 0
+Tests run: 203, Failures: 0, Errors: 0, Skipped: 1
 其中新增：
   FsControllerRawTest              15（业务语义层）
   FsControllerRawHttpTest           5（HTTP 序列化层）
@@ -182,11 +182,41 @@ vitest 覆盖率未开启（与既有项目策略一致）。24 个新增用例�
 
 | 指标 | 结果 |
 |---|---|
-| 后端 Java 测试 | 178 / 178 全绿（+20） |
-| 前端 vitest | 167 / 167 全绿（+24） |
+| 后端 Java 测试 | 203 / 203 全绿（跳过 1；+21） |
+| 前端 vitest | 167 / 167 全绿（分支独立测量；同步 main 后的复验见 test-report 附录）（+24） |
 | `npx tsc --noEmit` 错误数 | 7（与基线持平） |
 | 主 JS bundle 增量 | +227 kB（gzip 174 kB）——接受 |
 | KaTeX 拆为独立懒加载块 | 成功（261 kB / gzip 78 kB） |
 | jacoco 门禁 | 通过 |
 
 可以归档。
+
+---
+
+## 附录：同步 main 后的复验（2026-09-13）
+
+分支按 AGENTS.md §2.7.5 门禁 4 与 `origin/main`（当时 `7ab2693`）合并后重跑了全部门禁。数字与前文各节不同，原因是 main 在此期间前进了 15 个提交，并带回了两处**既有失败**。
+
+### 复验结果
+
+| 门禁项 | 命令 | 结果 |
+|---|---|---|
+| agent-core 测试 | `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` | **417 / 0 失败 / 0 错误**，全绿 |
+| agent-web 测试 | 同上 | **207 / 0 失败 / 0 错误 / 1 跳过**，全绿 |
+| 前端 vitest | `npx vitest run` | 20 文件 / **174 例：173 通过 + 1 失败**（失败项见下） |
+| `npx tsc --noEmit` | 同左 | **11**（构成见下） |
+| jacoco | 同上 | 违规仅剩 `com.example.agent.web.config`（lines 0.40 / branches 0.46）与 `com.example.agent.web.security`（branches 0.62） |
+
+### 红色项的归因（门禁 5 要求可复现）
+
+| 项 | 干净 main（`7ab2693`） | 本分支合并后 | 归因 |
+|---|---:|---:|---|
+| `Dropdown.test.tsx` 键盘导航用例 | **失败** | 失败（继承） | main 自带。该 change 的登记行明确写着「沙箱 npm ci 失败导致 vitest 未跑」，即从未验证 |
+| `npx tsc --noEmit` | **33** | **11** | main 缺 `vite-env.d.ts`；本 change 补上该文件后消除 22 条（17 条 `.module.css` 的 TS2307 + `virtual:pwa-register/react` + `import.meta.env` + `usePwaUpdate.ts` 的 3 条 TS7006） |
+| jacoco `config` / `security` | 同左（不随本 change 变化） | 违规 | 本 change 的 diff **未触及这两个包的任何类**，故两者覆盖率数字不可能受本 change 影响 |
+
+合并后 11 条 tsc 错误的构成：既有 7 条（`fs.test.ts` 的 `global` 4 条 + `Sidebar.tsx` 回调类型 + `useVoiceChat.test.ts` 的 Mock 签名 + `vite.config.ts` 重载）＋ main 带入的 4 条（`ChatPanel.test.tsx` 缺新 props 的 TS2739）。
+
+### 一个附带的正面结论
+
+本 change 不仅不新增 tsc 错误，还把 main 的 33 条降到 **11** 条——因为补 `vite-env.d.ts` 消掉了 22 条假报错。这与 `AGENTS.md §2.7.7` 记录的一致。
