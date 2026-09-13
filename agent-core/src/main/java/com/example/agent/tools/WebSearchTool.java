@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.List;
@@ -136,12 +137,10 @@ public class WebSearchTool implements Tool<WebSearchTool.Input, String> {
                                 provider.search(query, effectiveMax, Duration.ofMillis(timeoutMs));
                         return ToolResult.<String>ok(renderText(result));
                     } catch (Exception e) {
-                        return ToolResult.<String>error(
-                                "web_search 失败: "
-                                        + e.getMessage()
-                                        + "（请检查搜索 provider 的 API key 配置与网络连接）");
+                        return ToolResult.<String>error("web_search 失败: " + e.getMessage());
                     }
-                });
+                })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     /** 把结构化结果渲染为可读文本（每条 标题/URL/摘要/日期）。 */
