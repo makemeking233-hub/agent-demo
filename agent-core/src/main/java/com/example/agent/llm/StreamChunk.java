@@ -12,8 +12,9 @@ import java.util.Map;
  *
  * <ul>
  *   <li>{@link TextDelta} - 增量文本
+ *   <li>{@link ThinkingDelta} - 推理过程增量（add-reasoning-thinking-streaming）
  *   <li>{@link ToolCallStart} / {@link ToolCallDelta} / {@link ToolCallEnd} - 工具调用流
- *   <li>{@link Usage} - token 计量
+ *   <li>{@link Usage} - token 计量（含 reasoningTokens 单独计费）
  *   <li>{@link Finished} - 流结束（含 finish_reason + usage）
  *   <li>{@link Error} - 流错误
  * </ul>
@@ -23,6 +24,7 @@ import java.util.Map;
  */
 public sealed interface StreamChunk
         permits StreamChunk.TextDelta,
+                StreamChunk.ThinkingDelta,
                 StreamChunk.ToolCallStart,
                 StreamChunk.ToolCallDelta,
                 StreamChunk.ToolCallEnd,
@@ -43,6 +45,11 @@ public sealed interface StreamChunk
          * @see TextDelta
          */
         default void visitTextDelta(TextDelta c) {}
+
+        /**
+         * @see ThinkingDelta
+         */
+        default void visitThinkingDelta(ThinkingDelta c) {}
 
         /**
          * @see ToolCallStart
@@ -83,6 +90,24 @@ public sealed interface StreamChunk
         }
     }
 
+    /**
+     * 推理过程增量 chunk（add-reasoning-thinking-streaming）。
+     *
+     * <p>由 provider 在解析上游 reasoning 字段后产出：
+     *
+     * <ul>
+     *   <li>DeepSeek {@code deepseek-reasoner}：{@code choices[].delta.reasoning_content}
+     *   <li>Anthropic extended thinking：{@code content[].type="thinking"}.text
+     *   <li>OpenAI o1：不暴露内容（仅 {@code reasoning_tokens} 计数）
+     * </ul>
+     */
+    record ThinkingDelta(String text) implements StreamChunk {
+        @Override
+        public void accept(StreamChunkVisitor v) {
+            v.visitThinkingDelta(this);
+        }
+    }
+
     /** 工具调用开始（携带 id + name + 首个参数增量，增量可为空） */
     record ToolCallStart(String id, String name, String argumentsDelta) implements StreamChunk {
         @Override
@@ -107,8 +132,14 @@ public sealed interface StreamChunk
         }
     }
 
-    /** token 计量（prompt + completion） */
-    record Usage(int promptTokens, int completionTokens) implements StreamChunk {
+    /**
+     * token 计量（add-reasoning-thinking-streaming 增 {@code reasoningTokens} 单独计费）。
+     *
+     * @param promptTokens     prompt 段 token 数
+     * @param completionTokens completion 段 token 数（不含 reasoning）
+     * @param reasoningTokens  reasoning 段 token 数（与 completion 独立计费，与上游 DeepSeek / OpenAI / Anthropic 对齐）
+     */
+    record Usage(int promptTokens, int completionTokens, int reasoningTokens) implements StreamChunk {
         @Override
         public void accept(StreamChunkVisitor v) {
             v.visitUsage(this);

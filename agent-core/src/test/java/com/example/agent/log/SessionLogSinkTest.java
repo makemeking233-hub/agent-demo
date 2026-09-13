@@ -62,3 +62,4 @@ class SessionLogSinkTest {
         assertEquals(800, s.estTokens());
     }
 }
+

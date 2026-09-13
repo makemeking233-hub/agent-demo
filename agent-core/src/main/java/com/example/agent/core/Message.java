@@ -55,8 +55,23 @@ public sealed interface Message
         }
     }
 
-    /** 模型回复（含可选 tool_calls） */
-    record Assistant(String content, List<ToolCall> toolCalls) implements Message {
+    /**
+     * 模型回复（含可选 tool_calls）。
+     *
+     * <p>add-reasoning-thinking-streaming 增 {@code reasoning} 列表（v0.1 恒为空，v0.2 deepseek-reasoner 接入后
+     * 累积 provider 推过来的 {@code ThinkingDelta.text} 增量）和 {@code reasoningTokens} 单独计费字段。
+     */
+    record Assistant(
+            String content,
+            List<ToolCall> toolCalls,
+            List<String> reasoning,
+            int reasoningTokens)
+            implements Message {
+        /** 兼容 v0.1 调用方的便捷构造（reasoning 留空 + reasoningTokens = 0）。 */
+        public Assistant(String content, List<ToolCall> toolCalls) {
+            this(content, toolCalls, List.of(), 0);
+        }
+
         @Override
         public String role() {
             return "assistant";

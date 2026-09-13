@@ -56,7 +56,7 @@ class AgentLoopObservabilityTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("你好"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(5, 8))));
+                                        FinishReason.STOP, new StreamChunk.Usage(5, 8, 0))));
 
         ToolRegistry tools = new ToolRegistry();
         tools.register(new com.example.agent.tools.file.ReadFileTool());
@@ -142,3 +142,4 @@ class AgentLoopObservabilityTest {
                 IllegalStateException.class, () -> loop.processTurn(new Message.User("hi")).block());
     }
 }
+

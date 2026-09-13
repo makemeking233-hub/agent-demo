@@ -218,7 +218,10 @@ public class OpenAiCompatibleMapper {
             return usage == null
                     ? Optional.empty()
                     : Optional.of(
-                    new StreamChunk.Usage(usage.promptTokens(), usage.completionTokens()));
+                    new StreamChunk.Usage(
+                            usage.promptTokens(),
+                            usage.completionTokens(),
+                            usage.reasoningTokens()));
         }
     }
 
@@ -241,8 +244,17 @@ public class OpenAiCompatibleMapper {
     private static StreamChunk.Usage parseUsage(JsonNode root) {
         if (!root.has("usage") || root.get("usage").isNull()) return null;
         JsonNode u = root.get("usage");
+        // add-reasoning-thinking-streaming: 解析 OpenAI o1 的 reasoning_tokens 字段
+        // 路径：usage.completion_tokens_details.reasoning_tokens
+        int reasoningTokens = 0;
+        JsonNode details = u.path("completion_tokens_details");
+        if (!details.isMissingNode() && !details.isNull()) {
+            reasoningTokens = details.path("reasoning_tokens").asInt(0);
+        }
         return new StreamChunk.Usage(
-                u.path("prompt_tokens").asInt(0), u.path("completion_tokens").asInt(0));
+                u.path("prompt_tokens").asInt(0),
+                u.path("completion_tokens").asInt(0),
+                reasoningTokens);
     }
 
     /**

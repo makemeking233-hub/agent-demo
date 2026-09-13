@@ -99,7 +99,7 @@ class AgentLoopToolContextTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("ok"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(5, 8))));
+                                        FinishReason.STOP, new StreamChunk.Usage(5, 8, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         doReturn(fakeTool).when(tools).getRaw("fake");
@@ -140,7 +140,7 @@ class AgentLoopToolContextTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("reply"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(5, 5))));
+                                        FinishReason.STOP, new StreamChunk.Usage(5, 5, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         when(tools.list()).thenReturn(List.of());
@@ -165,3 +165,4 @@ class AgentLoopToolContextTest {
         assertEquals(2, hist2.size(), "hist2 接收第二轮 turn 的写入");
     }
 }
+

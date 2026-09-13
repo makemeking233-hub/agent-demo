@@ -113,3 +113,4 @@ class ObservabilityE2ETest extends E2ETestBase {
                 "快照 toolNames 应含 ReadFile");
     }
 }
+

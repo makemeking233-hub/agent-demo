@@ -55,3 +55,4 @@ class SkillsPluginTest {
         assertEquals(0, pm.collectTools().size());
     }
 }
+

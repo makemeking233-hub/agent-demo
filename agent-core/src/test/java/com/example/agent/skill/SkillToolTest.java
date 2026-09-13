@@ -37,3 +37,4 @@ class SkillToolTest {
         assertEquals(PermissionDecision.allow(), tool.checkPermissions("{}", null));
     }
 }
+

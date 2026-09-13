@@ -98,3 +98,4 @@ class McpClientTest {
         assertEquals("42", result.text());
     }
 }
+

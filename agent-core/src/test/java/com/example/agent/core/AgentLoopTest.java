@@ -81,7 +81,7 @@ class AgentLoopTest {
                                 new StreamChunk.TextDelta("你好，"),
                                 new StreamChunk.TextDelta("有什么可以帮你的？"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(5, 8))));
+                                        FinishReason.STOP, new StreamChunk.Usage(5, 8, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         when(tools.list()).thenReturn(List.of());
@@ -155,7 +155,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("ok"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         when(tools.list()).thenReturn(List.of());
@@ -188,7 +188,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("ok"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         when(tools.list()).thenReturn(List.of());
@@ -264,7 +264,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         doReturn(fakeTool).when(tools).getRaw("fake");
@@ -319,7 +319,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = new ToolRegistry();
         tools.register(new com.example.agent.tools.file.ReadFileTool());
@@ -369,7 +369,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = new ToolRegistry();
         tools.register(new com.example.agent.tools.file.ReadFileTool());
@@ -452,7 +452,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         doReturn(fakeTool).when(tools).getRaw("fake");
@@ -535,7 +535,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         doReturn(fakeTool).when(tools).getRaw("fake");
@@ -621,7 +621,7 @@ class AgentLoopTest {
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
                                 new StreamChunk.Finished(
-                                        FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         ToolRegistry tools = mock(ToolRegistry.class);
         doReturn(fakeTool).when(tools).getRaw("fake");
@@ -675,3 +675,4 @@ class AgentLoopTest {
         // 完整 model 流转验证留给集成测试
     }
 }
+

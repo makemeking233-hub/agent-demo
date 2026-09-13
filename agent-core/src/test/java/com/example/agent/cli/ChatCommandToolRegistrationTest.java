@@ -27,3 +27,4 @@ class ChatCommandToolRegistrationTest {
         assertTrue(tools.list().size() >= 5, "运行时应有 Read/Write/Edit/Ls/Shell 五个工具");
     }
 }
+

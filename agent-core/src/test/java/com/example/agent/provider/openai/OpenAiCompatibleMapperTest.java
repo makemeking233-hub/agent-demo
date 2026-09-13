@@ -113,3 +113,4 @@ class OpenAiCompatibleMapperTest {
         assertTrue(mapper.parseSseLine(sse).isEmpty());
     }
 }
+

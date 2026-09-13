@@ -127,3 +127,4 @@ class WorkspaceStoreTest {
         assertFalse(WorkspaceStore.exists(agentDataDir(), "nope"));
     }
 }
+

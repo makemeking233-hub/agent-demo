@@ -38,3 +38,4 @@ class MemoryIndexTest {
         assertTrue(content.contains("[Test](test.md)"));
     }
 }
+

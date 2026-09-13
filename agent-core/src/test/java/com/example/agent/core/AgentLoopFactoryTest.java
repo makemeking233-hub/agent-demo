@@ -196,3 +196,4 @@ class AgentLoopFactoryTest {
         assertThat(loop.toolContext().workingDirectory()).isEqualTo(Paths.get(System.getProperty("user.dir")));
     }
 }
+

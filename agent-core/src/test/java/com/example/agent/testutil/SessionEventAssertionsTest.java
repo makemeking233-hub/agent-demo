@@ -59,3 +59,4 @@ class SessionEventAssertionsTest {
         assertTrue(true);
     }
 }
+

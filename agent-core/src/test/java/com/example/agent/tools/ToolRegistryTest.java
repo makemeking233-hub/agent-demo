@@ -40,3 +40,4 @@ class ToolRegistryTest {
         assertEquals(true, names.contains("EditFile"));
     }
 }
+

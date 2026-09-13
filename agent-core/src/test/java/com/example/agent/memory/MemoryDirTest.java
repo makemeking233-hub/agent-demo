@@ -36,3 +36,4 @@ class MemoryDirTest {
         assertTrue(truncated.getBytes().length <= 25000 + 100, "应接近 25KB 截断");
     }
 }
+

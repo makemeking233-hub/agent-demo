@@ -45,3 +45,4 @@ class RedactorTest {
         assertEquals(null, Redactor.redact(null));
     }
 }
+

@@ -38,3 +38,4 @@ class BashAdapterTest {
         assertFalse(a.isDenylisted("echo hello"));
     }
 }
+

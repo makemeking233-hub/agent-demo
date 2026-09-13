@@ -100,3 +100,4 @@ class MessageHistoryTest {
         assertEquals(0, hist.consecutiveCompactFailures());
     }
 }
+

@@ -77,3 +77,4 @@ class ReplStreamingE2ETest extends E2ETestBase {
                                         WireMock.equalTo("true"))));
     }
 }
+

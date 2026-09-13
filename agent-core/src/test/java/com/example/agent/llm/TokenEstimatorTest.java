@@ -31,3 +31,4 @@ class TokenEstimatorTest {
         assertEquals(0, estimator.estimate(null));
     }
 }
+

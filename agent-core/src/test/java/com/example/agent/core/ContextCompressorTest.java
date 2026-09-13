@@ -60,3 +60,4 @@ class ContextCompressorTest {
         StepVerifier.create(comp.compactIfNeeded(hist)).expectNextCount(1).verifyComplete();
     }
 }
+

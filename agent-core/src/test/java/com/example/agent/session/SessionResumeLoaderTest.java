@@ -124,3 +124,4 @@ class SessionResumeLoaderTest {
         assertEquals(0, result.promptTokens());
     }
 }
+

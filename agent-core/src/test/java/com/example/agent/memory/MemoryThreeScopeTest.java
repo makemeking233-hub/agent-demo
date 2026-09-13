@@ -58,3 +58,4 @@ class MemoryThreeScopeTest {
         assertFalse(user.dir().equals(proj.dir()), "USER 与 PROJECT 路径必须区分");
     }
 }
+

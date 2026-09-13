@@ -50,3 +50,4 @@ class ChatCommandFriendlyErrorTest {
         assertTrue(out.contains("something weird"), "fallback returns raw: " + out);
     }
 }
+

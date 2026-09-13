@@ -64,3 +64,4 @@ class SessionRetentionCleanerTest {
         new SessionRetentionCleaner(tmp.resolve("nope"), 30, 50).clean();
     }
 }
+

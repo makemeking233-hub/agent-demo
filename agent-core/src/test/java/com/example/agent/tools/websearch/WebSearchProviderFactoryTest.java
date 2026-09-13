@@ -77,3 +77,4 @@ class WebSearchProviderFactoryTest {
                         provider, base.search().maxResults(), base.search().timeoutMs()));
     }
 }
+

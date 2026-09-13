@@ -102,3 +102,4 @@ class AcceptanceTestSuite {
         assertTrue(truncated.contains("truncated"));
     }
 }
+

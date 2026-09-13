@@ -34,3 +34,4 @@ class MemoryPluginTest {
         assertTrue(pm.collectSystemPromptFragment().contains("USER"));
     }
 }
+

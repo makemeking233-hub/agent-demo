@@ -101,3 +101,4 @@ class ContextCompressorObservabilityTest {
                 "errorClass", errorClass);
     }
 }
+

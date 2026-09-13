@@ -92,3 +92,4 @@ class SystemPromptBuilderTest {
         assertTrue(prompt.contains("agent-demo"));
     }
 }
+

@@ -90,3 +90,4 @@ class WorktreeManagerTest {
         assertNull(bad.create("x", null));
     }
 }
+

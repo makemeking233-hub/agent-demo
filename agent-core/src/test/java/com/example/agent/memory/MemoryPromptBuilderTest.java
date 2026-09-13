@@ -83,3 +83,4 @@ class MemoryPromptBuilderTest {
         assertFalse(prompt.contains("LOCAL Scope ("));
     }
 }
+

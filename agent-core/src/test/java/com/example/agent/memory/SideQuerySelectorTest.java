@@ -100,3 +100,4 @@ class SideQuerySelectorTest {
         assertTrue(result.size() <= 2);
     }
 }
+

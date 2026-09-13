@@ -100,3 +100,4 @@ class DeepSeekWebSearchProviderTest {
                 IllegalStateException.class, () -> p.search("测试", 5, Duration.ofSeconds(5)));
     }
 }
+

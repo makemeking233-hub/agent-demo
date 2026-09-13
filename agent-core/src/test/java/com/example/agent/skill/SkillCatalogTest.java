@@ -75,3 +75,4 @@ class SkillCatalogTest {
         assertEquals(projDir, skills.get(0).dir().toString());
     }
 }
+

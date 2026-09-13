@@ -216,3 +216,4 @@ class SessionStoreTest {
         assertEquals("我的项目", SessionStore.readTitle(sessionsDir, "s-1"));
     }
 }
+

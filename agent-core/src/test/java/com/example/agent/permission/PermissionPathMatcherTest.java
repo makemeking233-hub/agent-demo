@@ -64,3 +64,4 @@ class PermissionPathMatcherTest {
         assertFalse(matcher.matches(null));
     }
 }
+

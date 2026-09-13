@@ -59,3 +59,4 @@ class PermissionModeTest {
         assertEquals(PermissionDecision.Behavior.ALLOW, m.defaultDecision(ToolCategory.OTHER, false).behavior());
     }
 }
+

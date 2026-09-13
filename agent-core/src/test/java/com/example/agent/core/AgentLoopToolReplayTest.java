@@ -57,7 +57,7 @@ class AgentLoopToolReplayTest {
                 .thenReturn(
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
-                                new StreamChunk.Finished(FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                new StreamChunk.Finished(FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         // fake tool：成功返回
         @SuppressWarnings({"rawtypes", "unchecked"})
@@ -167,3 +167,4 @@ class AgentLoopToolReplayTest {
                                         "tool 消息 tool_call_id=[" + id + "] 应在 assistant.tool_calls 中找到"));
     }
 }
+

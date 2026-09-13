@@ -165,3 +165,4 @@ class PermissionManagerTest {
                 mgr.decide("WriteFile", outside, ctxIn(ws)).behavior());
     }
 }
+

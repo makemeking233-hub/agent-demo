@@ -23,3 +23,4 @@ class CmdAdapterTest {
         assertTrue(new CmdAdapter().isDenylisted("rmdir /s /q C:\\foo"));
     }
 }
+

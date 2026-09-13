@@ -90,3 +90,4 @@ public final class SessionEventAssertions {
 
     private SessionEventAssertions() {}
 }
+

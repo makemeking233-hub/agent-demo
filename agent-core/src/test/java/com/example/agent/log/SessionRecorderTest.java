@@ -38,3 +38,4 @@ class SessionRecorderTest {
         verify(logger).onPermissionDecision(Map.of("decision", "deny"));
     }
 }
+

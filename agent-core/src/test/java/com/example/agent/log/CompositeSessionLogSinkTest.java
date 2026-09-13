@@ -114,3 +114,4 @@ class CompositeSessionLogSinkTest {
         new CompositeSessionLogSink((List<SessionLogSink>) null).onUser(new Message.User("x"));
     }
 }
+

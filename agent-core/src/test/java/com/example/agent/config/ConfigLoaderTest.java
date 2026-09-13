@@ -61,3 +61,4 @@ class ConfigLoaderTest {
         assertEquals(60000, cfg.search().timeoutMs());
     }
 }
+

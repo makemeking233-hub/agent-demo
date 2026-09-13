@@ -69,3 +69,4 @@ class McpPluginTest {
                 "应含 srvB.echo");
     }
 }
+

@@ -52,7 +52,7 @@ class AgentLoopToolPairingTest {
                 .thenReturn(
                         Flux.just(
                                 new StreamChunk.TextDelta("done"),
-                                new StreamChunk.Finished(FinishReason.STOP, new StreamChunk.Usage(1, 1))));
+                                new StreamChunk.Finished(FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
 
         // ok tool 成功
         @SuppressWarnings({"rawtypes", "unchecked"})
@@ -131,3 +131,4 @@ class AgentLoopToolPairingTest {
         }
     }
 }
+

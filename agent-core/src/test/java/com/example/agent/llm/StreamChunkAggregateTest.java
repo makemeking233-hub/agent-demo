@@ -66,3 +66,4 @@ class StreamChunkAggregateTest {
         assertEquals("{\"path\":\"/tmp/a.txt\"}", calls.get(0).argumentsJson());
     }
 }
+

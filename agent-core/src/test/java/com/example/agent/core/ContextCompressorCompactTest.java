@@ -66,3 +66,4 @@ class ContextCompressorCompactTest {
         org.junit.jupiter.api.Assertions.assertEquals(1, hist.consecutiveCompactFailures());
     }
 }
+

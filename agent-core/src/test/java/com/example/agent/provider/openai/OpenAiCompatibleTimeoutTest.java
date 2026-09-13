@@ -101,3 +101,4 @@ class OpenAiCompatibleTimeoutTest {
         twoArg.streamChat(req).collectList().block();
     }
 }
+

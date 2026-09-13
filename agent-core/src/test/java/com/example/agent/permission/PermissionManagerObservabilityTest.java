@@ -100,3 +100,4 @@ class PermissionManagerObservabilityTest {
         assertTrue(sink.decisions.get(0).contains("decision=ask"));
     }
 }
+

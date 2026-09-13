@@ -84,3 +84,4 @@ class SessionReplayTest {
         assertEquals("hi", hist.all().get(0).content());
     }
 }
+
