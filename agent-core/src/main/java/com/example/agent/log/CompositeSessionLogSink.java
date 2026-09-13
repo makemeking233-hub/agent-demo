@@ -65,6 +65,23 @@ public final class CompositeSessionLogSink implements SessionLogSink {
         fold(s -> s.onAssistant(assistant, thinking));
     }
 
+    /**
+     * 转发 thinking 增量（add-true-streaming 修复）。
+     *
+     * <p>此前漏转发：web 路径在有落盘录制器时返回的是复合 sink，导致 {@code onThinkingDelta}
+     * 被接口默认实现吞掉，thinking 根本没到 SSE。
+     */
+    @Override
+    public void onThinkingDelta(String text) {
+        fold(s -> s.onThinkingDelta(text));
+    }
+
+    /** 转发正文增量（add-true-streaming）：让 SSE 端逐 token 推送而不是整段最后推。 */
+    @Override
+    public void onTextDelta(String text) {
+        fold(s -> s.onTextDelta(text));
+    }
+
     @Override
     public void onToolCall(ToolCall call) {
         fold(s -> s.onToolCall(call));

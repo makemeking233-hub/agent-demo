@@ -19,6 +19,7 @@
 | `2026-09-04-workspace-picker-v2/` | polish-workspace-picker-dsh-style Modal 重写为 DSH 风格（左侧导航树 + history 栈 + 列头排序 + 底部路径框 + quick-access API） | 2026-09-04 | 14（4 Java + 10 vitest） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-pwa/` | add-pwa-support 完整 PWA（manifest + Workbox SW + 离线 UI + HTTPS 自签证书） | 2026-09-04 | 13 vitest（manifest 4 + pwa-update 3 + offline-banner 6）+ Playwright 3 用例（配置已落地未跑） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-reasoning-thinking/` | add-reasoning-thinking-streaming 推理过程流式（DeepSeek / OpenAI o1 / Anthropic 三 provider reasoning 解析 + SSE thinking 透传 + 折叠 UI） | 2026-09-04 | 30（21 Java + 9 vitest） | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-04-true-streaming/` | add-true-streaming 真流式改造（Provider bodyToFlux + 跨帧行重组 + 正文逐 token 透传 + 复合 sink 转发 + 多流隔离） | 2026-09-04 | 20 新增改动（另 353 core + 158 web + 104 vitest 回归） | ⚠️ 用例全绿，jacoco 门禁既有欠账 | ✅ | 待归档 |
 
 ---
 

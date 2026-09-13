@@ -450,13 +450,17 @@ public class AgentLoop {
     }
 
     /**
-     * 单 chunk 路由：根据 chunk 类型分发到 {@link StreamingPrinter}。 Finished / Usage 不打印。
+     * 单 chunk 路由：根据 chunk 类型分发到 {@link StreamingPrinter} 与 {@link SessionLogSink}。
+     * Finished / Usage 不打印。
      *
      * @param chunk 流式 chunk
      */
     private void printChunk(StreamChunk chunk) {
         if (chunk instanceof StreamChunk.TextDelta t) {
             printer.onTextDelta(t.text());
+            // add-true-streaming: 正文也逐 token 转发到 sink。此前只在整轮 collectList() 完成后
+            // 由 sink.onAssistant 一次性推出全文，前端看起来仍是"一坨出来"。
+            sink.onTextDelta(t.text());
         } else if (chunk instanceof StreamChunk.ThinkingDelta tk) {
             // add-reasoning-thinking-streaming: thinking 实时转发到 sink（落 thinking.log）
             sink.onThinkingDelta(tk.text());

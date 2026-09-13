@@ -47,6 +47,38 @@ class CompositeSessionLogSinkTest {
         public void onPermissionDecision(Map<String, Object> payload) {
             calls.add("onPermissionDecision:" + payload);
         }
+
+        @Override
+        public void onThinkingDelta(String text) {
+            calls.add("onThinkingDelta:" + text);
+        }
+
+        @Override
+        public void onTextDelta(String text) {
+            calls.add("onTextDelta:" + text);
+        }
+    }
+
+    /**
+     * add-true-streaming：增量回调必须转发。
+     *
+     * <p>web 路径在有落盘录制器时返回的是复合 sink；此前 {@code onThinkingDelta} 没被转发，
+     * 被接口默认实现吞掉，thinking / 正文增量都到不了 SSE。
+     */
+    @Test
+    void forwardsIncrementalDeltas() {
+        RecordingSink a = new RecordingSink();
+        RecordingSink b = new RecordingSink();
+        CompositeSessionLogSink sink = new CompositeSessionLogSink(a, b);
+
+        sink.onThinkingDelta("想");
+        sink.onTextDelta("你");
+        sink.onTextDelta("好");
+
+        for (RecordingSink r : List.of(a, b)) {
+            assertEquals(
+                    List.of("onThinkingDelta:想", "onTextDelta:你", "onTextDelta:好"), r.calls);
+        }
     }
 
     @Test

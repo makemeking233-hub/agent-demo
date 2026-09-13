@@ -54,6 +54,17 @@ public interface SessionLogSink {
     default void onThinkingDelta(String text) {}
 
     /**
+     * assistant 正文增量逐 token 推送（add-true-streaming）。
+     *
+     * <p>与 {@link #onThinkingDelta(String)} 对称：模型还在生成时就把每个 {@code TextDelta} 实时
+     * 吐给观察者，而不是等整轮 {@code collectList()} 完成后由 {@link #onAssistant} 一次性给出全文。
+     * 实现类若已在增量阶段推送过正文，应在 {@link #onAssistant} 中避免重复推送同一段文本。
+     *
+     * @param text 增量文本
+     */
+    default void onTextDelta(String text) {}
+
+    /**
      * 单个工具调用（拿到完整入参后）。
      *
      * @param call 工具调用描述
