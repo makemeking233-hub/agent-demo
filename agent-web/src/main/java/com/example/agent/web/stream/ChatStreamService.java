@@ -79,16 +79,29 @@ public class ChatStreamService {
         return create(sessionId, model, mode, null);
     }
 
+    public ActiveStream create(String sessionId, String model, PermissionMode mode, String workspace) {
+        return create(sessionId, model, mode, workspace, null);
+    }
+
     /**
-     * 创建一条活动流（带初始权限模式 + 工作区，add-workspaces-and-rename）。
+     * 创建一条活动流（带初始权限模式 + 工作区 + 思考强度，add-models-dropdown-v0）。
+     *
+     * <p>新增 {@code reasoningEffort} 参数透传到 {@code AgentLoop.setReasoningEffort(...)}：
+     * {@code null} = 不切换（沿用 Provider 内部默认）。
      *
      * @param sessionId 会话 id
      * @param model 模型名
      * @param mode 初始权限模式（{@code null} 用缺省 {@link PermissionMode#READ_ONLY}）
      * @param workspace 归属工作区（{@code null} 用默认工作区）
+     * @param reasoningEffort 思考强度（{@code low} / {@code medium} / {@code high}；{@code null} = 沿用 Provider 默认）
      * @return 活动流元数据
      */
-    public ActiveStream create(String sessionId, String model, PermissionMode mode, String workspace) {
+    public ActiveStream create(
+            String sessionId,
+            String model,
+            PermissionMode mode,
+            String workspace,
+            String reasoningEffort) {
         String streamId = UUID.randomUUID().toString();
         // replay().all(): 延迟订阅者(客户端 turn 完成后再连)能收到全部事件 + complete,
         // 支撑 spec §resume/Last-Event-ID 与测试中 send→stream 的先后时序。
@@ -114,6 +127,10 @@ public class ChatStreamService {
         // v0.3 会话重进恢复：用复合 sink (SSE + 落盘)，使该会话持续写入 sessions/<id>.jsonl。
         SessionLogSink sessionSink = runtime.sinkFor(workspace, sessionId, adapter);
         AgentLoop loop = runtime.createLoop(streamId, sessionId, sessionSink, confirmer, aborted::get, mode, workspace);
+        // add-models-dropdown-v0：透传 reasoningEffort 到 AgentLoop volatile 字段
+        if (reasoningEffort != null && !reasoningEffort.isBlank()) {
+            loop.setReasoningEffort(reasoningEffort);
+        }
         ActiveStream meta =
                 new ActiveStream(
                         streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted, workspace);
