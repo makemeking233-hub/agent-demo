@@ -18,6 +18,7 @@
 | `2026-09-04-workspace-picker/` | add-workspace-picker-modal 工作区目录选择器测试（后端 fs API + 前端 Modal + Sidebar 集成） | 2026-09-04 | 51（28 Java + 23 vitest） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-workspace-picker-v2/` | polish-workspace-picker-dsh-style Modal 重写为 DSH 风格（左侧导航树 + history 栈 + 列头排序 + 底部路径框 + quick-access API） | 2026-09-04 | 14（4 Java + 10 vitest） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-04-pwa/` | add-pwa-support 完整 PWA（manifest + Workbox SW + 离线 UI + HTTPS 自签证书） | 2026-09-04 | 13 vitest（manifest 4 + pwa-update 3 + offline-banner 6）+ Playwright 3 用例（配置已落地未跑） | ✅ 全绿 | ✅ | 已归档 |
+| `2026-09-04-reasoning-thinking/` | add-reasoning-thinking-streaming 推理过程流式（DeepSeek / OpenAI o1 / Anthropic 三 provider reasoning 解析 + SSE thinking 透传 + 折叠 UI） | 2026-09-04 | 30（21 Java + 9 vitest） | ✅ 全绿 | ✅ | 已归档 |
 
 ---
 
@@ -60,6 +61,14 @@
 - **测试目标**：把 `WorkspacePickerModal` 从单栏条目录表重写为 DSH 资源管理器风格（顶部 ←/→/↑ + 面包屑；主区域左 200px 导航树 + 右文件列表带列头排序；底部"文件夹"路径框 + 工作区名称框）；新增后端 `GET /api/fs/quick-access` 接口支持左导航树。
 - **执行要点**：后端 `mvn -pl agent-web test`（FsControllerTest 新增 4 quick-access 用例，19/19 全绿）+ 前端 `npx vitest run`（82/82，新增 10：fs.test 4 + Modal 6）+ `mvn -pl agent-web verify` jacoco 门禁 BUILD SUCCESS（"All coverage checks have been met"）。
 - **关键发现**：User 选了"保留 name 输入框"+ "B + DSH 风格"路径；File System Access API 在我们场景下拿不到绝对路径，所以放弃 C 方案改回 A 方案 Modal 仿 DSH；history 栈纯前端 + 列头排序 useMemo + grid 布局是性能/视觉兼顾的选择；旧 beforeEach 缺 getQuickAccess 默认值导致首跑 16 失败，补充后通过；`listDir` mock 缺越界校验让"路径框非法"测试失败，补充 mock 后通过。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.9 `2026-09-04-reasoning-thinking/` — add-reasoning-thinking-streaming 推理过程流式
+
+- **测试目标**：把 `deepseek-reasoner` / `OpenAI o1` / `Anthropic Claude extended thinking` 等 reasoning model 的推理过程真正流到前端：后端 SSE 增 `message_delta.delta_type="thinking"`、前端 `<ThinkingCollapse />` 折叠展示、thinking 进 history + 单独计费。
+- **执行要点**：后端 agent-core 343/343 全绿（+21 新测试：StreamChunkThinkingDelta 5 + DeepSeek reasoning 2 + OpenAi o1 7 + Anthropic 7）；后端 agent-web 153/153 全绿（无回归）；前端 16/16 / 104/104 全绿（+9 新测试：ThinkingCollapse 5 + MessageBubble.thinking 4）。
+- **关键发现**：`StreamChunk` sealed 新增 `ThinkingDelta` record（permit 第 8 种）共享 visitor 模式，老 visitor 通过默认空方法兼容；`SseSessionLogSink` 已有 `MessageDelta("thinking", ...)` 透传逻辑（v0.1 spec 就绪），AgentLoop 改后自动激活；`Message.Assistant` 4-arg 兼容 2-arg 老调用（reasoning=List.of(), tokens=0），无破坏性。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
