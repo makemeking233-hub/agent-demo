@@ -11,7 +11,7 @@ Service Worker SHALL 对以下路径应用对应缓存策略：
 | `/api/**` | NetworkOnly | — | 永不缓存（避免 stale token / 路径） |
 | `https://fonts.*` | CacheFirst | `google-fonts-v1` | Google Fonts 缓存 |
 
-此外，**按需加载的大体积代码分割产物 SHALL 被排除出预缓存清单**（通过 `globIgnores`），只在真正用到时从网络取，再由上表 `/assets/*` 的 CacheFirst 规则缓存。首个适用对象是 mermaid 的图解 chunk —— mermaid 12 把各图型拆成按需 chunk，若被预缓存收进去，PWA 安装/更新的下载量会从数 MB 级涨到十几 MB 级，而其中绝大多数图型用户可能永远用不到。
+此外，预缓存清单 SHALL 采用**白名单**（`globPatterns`）而非默认的通配 glob，只收录"必须离线可用"的顶层资源。原因是按需库会产出大量命名各异的 chunk（mermaid 12 一次构建产出 63 个，名字含 `chunk` / `diagram` / `elk` / `dagre` / `cytoscape.esm` / `*Diagram` 等，**没有共同前缀**），黑名单模式既长又脆；白名单则让安装体积有上界，与引了多少按需库无关。未被收录的资源仍走 `/assets/*` 的 CacheFirst 运行时缓存，只是不参与"安装即全量下载"。**新增需要离线可用的顶层资源时必须显式加入白名单。**
 
 #### Scenario: 静态资源 CacheFirst
 

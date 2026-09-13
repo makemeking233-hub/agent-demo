@@ -78,17 +78,29 @@ node_modules/mermaid/dist/
 
 **理由**：图消失会让用户以为"模型什么都没写"；只显示提示则看不到源码、无法判断是语法问题还是渲染问题。两者都给，才既知情又有据可查。
 
-### D7 **必须**把 mermaid 的 chunk 排除出 PWA 预缓存
+### D7 **必须**收敛 PWA 预缓存：改用白名单而非默认 glob
 
 **这是本 change 最容易被漏掉的一点。**
 
-`vite-plugin-pwa` 的 `generateSW` 模式下，`globPatterns` 默认为 `**/*.{js,css,html}`，且 `maximumFileSizeToCacheInBytes` 已被调到 10 MB（为 vosk 让路）。引入 mermaid 后，构建会产出**几十个图解 chunk**，它们会**全部**被收进预缓存清单 —— 预缓存从当前的 `7 entries (6529.56 KiB)` 涨到十几 MB，而其中绝大多数图型用户可能永远用不到，且每次 SW 更新都要重新下载。
+`vite-plugin-pwa` 的 `generateSW` 模式下，`globPatterns` 默认为 `**/*.{js,css,html}`。**实测**（不是推断）：引入 mermaid 后构建产出 63 个图解 chunk，全部被收进预缓存 ——
 
-**选择**：在 `workbox.globIgnores` 中排除 mermaid 的 chunk 产物路径。
+| | 条目 | 总量 |
+|---|---:|---:|
+| 引入 mermaid 前 | 7 | 6529.56 KiB |
+| 引入后（默认 glob） | **70** | **11609.58 KiB** |
+| 改用白名单后 | 8 | 6787.22 KiB |
 
-**为什么不用"调小 maximumFileSizeToCacheInBytes"**：那是全局开关，会连带影响其他资源；`globIgnores` 精确指向目标，语义也更清楚。
+也就是每次 PWA 安装或更新要多下约 **5 MB**，而其中绝大多数图型用户可能永远用不到。
 
-**排除后仍然好用**：被排除的 chunk 走既有的 `/assets/*` → CacheFirst（30 天）规则，首次用到时取一次、之后就命中缓存，只是不再参与"安装即全量下载"。
+**选择**：把 `workbox.globPatterns` 从默认通配改为**白名单**，只列"必须离线可用"的顶层资源（`index.html`、`index-*.js/css`、`katex-*.js/css`、`vosk-*.js`、`workbox-window*.js`）。
+
+**为什么不用 `globIgnores` 拉黑 mermaid 的 chunk**：实测那 63 个 chunk 的名字五花八门（`chunk` / `diagram` / `elk` / `dagre` / `cytoscape.esm` / `arc` / `graph` / `*Diagram` …），**没有共同前缀**，黑名单会又长又脆且随 mermaid 版本失效。白名单让安装体积有上界、与引了多少按需库无关。
+
+**代价（必须记住）**：新增需要离线可用的顶层资源时，**必须往白名单里加一条**，否则它只会在运行时按 `/assets/*` 的 CacheFirst 缓存，离线首次打开会缺。已在 `vite.config.ts` 的注释与 spec 里写明。
+
+**排除后仍然好用**：未收录的资源走既有的 `/assets/*` → CacheFirst（30 天）规则，首次用到时取一次、之后命中缓存，只是不再参与"安装即全量下载"。
+
+**一个附带的实测发现**：`mermaid@12` 依赖 `katex@0.16.47`，而本项目用 `katex@0.18.7`，npm 因此装了一份嵌套副本，打包出**两个** katex chunk（各约 261 KB）。白名单里的 `katex-*.js` 会把两份都收进预缓存（第 8 条即由此而来，比基线多 258 KiB，约占 4%，而预缓存被 vosk 的 5.8 MB 主导）。按文件名无法区分哪份属于谁，权衡后选择接受：消除重复需要把 katex 降到 0.16 或强制 override（后者会让 mermaid 跑在它未测试过的版本上），风险大于收益。记在 Open Questions 里。
 
 ### D8 测试策略：mock mermaid 契约 + 真实渲染靠浏览器
 
@@ -122,6 +134,7 @@ node_modules/mermaid/dist/
 
 ## Open Questions
 
-1. **mermaid 的 chunk 会不会被 `globIgnores` 漏掉某个路径模式**：要在构建后扫 `sw.js` 的实际清单确认，不预设。
+1. **白名单会不会漏掉将来必须离线可用的资源**：这是白名单方案的固有代价（见 D7）。已在 `vite.config.ts` 注释、spec 与这里三处写明"新增离线资源必须加一条"。本次已扫 `sw.js` 实测确认：预缓存 8 entries / 6787 KiB，其中 mermaid 相关 0 条。
 2. **是否需要限制单张图的源码长度**（防止超长图阻塞主线程）：本次不设硬限制，先观察；若实际出现卡顿再加阈值与提示。
 3. **图渲染是否要加"复制源码"入口**：本次不做，若后续有人需要再评估。
+4. **项目里现在有两份 katex**（根依赖 0.18.7 + mermaid 嵌套的 0.16.47，各约 261 KB，见 D7 末尾）：消除它要么把根依赖降到 0.16（放弃新版本）、要么用 npm `overrides` 强推到 0.18（让 mermaid 跑在它未测试过的版本上）。两者风险都大于"多 261 KB 懒加载产物"的代价，故本次接受并记录，留待后续评估。
