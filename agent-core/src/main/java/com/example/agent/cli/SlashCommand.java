@@ -20,17 +20,23 @@ import java.util.function.Consumer;
 public class SlashCommand {
     /** v0.2 支持的 slash 命令清单（用于 help 输出与补全） */
     private static final List<String> COMMANDS =
-            List.of("/help", "/clear", "/quit", "/history", "/resume", "/model");
+            List.of("/help", "/clear", "/quit", "/history", "/resume", "/model", "/effort");
 
     /** v0.2 支持的 model 列表（DeepSeek 系） */
     private static final List<String> SUPPORTED_MODELS =
             List.of("deepseek-chat", "deepseek-reasoner");
+
+    /** add-models-dropdown-v0：合法的 reasoningEffort 白名单 */
+    private static final List<String> SUPPORTED_EFFORTS = List.of("low", "medium", "high");
 
     /** 成本配置（v0.2 从 AgentConfig.cost 注入；null 时用 DeepSeek-chat 默认 2/8） */
     private AgentConfig.Cost cost = new AgentConfig.Cost(2.0, 8.0, 4.0, 5.0);
 
     /** Worktree 管理器（/worktree 用；null 时 /worktree 退化为提示信息） */
     private WorktreeManager worktreeManager;
+
+    /** add-models-dropdown-v0：/effort 回调（ChatCommand 启动时注入；null 时 /effort 退化为提示信息） */
+    private Consumer<String> onEffort;
 
     /**
      * 注入成本配置（ChatCommand 启动时调；v0.3+ 可 per-model 覆盖）。
@@ -48,6 +54,15 @@ public class SlashCommand {
      */
     public void setWorktreeManager(WorktreeManager manager) {
         this.worktreeManager = manager;
+    }
+
+    /**
+     * add-models-dropdown-v0：注入 /effort 回调（ChatCommand 启动时调）。
+     *
+     * @param onEffort 思考强度切换回调（接收新 effort；{@code null} = /effort 退化为提示信息）
+     */
+    public void setOnEffort(Consumer<String> onEffort) {
+        this.onEffort = onEffort;
     }
 
     /**
@@ -148,6 +163,8 @@ public class SlashCommand {
             default -> {
                 if (trimmed.startsWith("/model")) {
                     doModel(trimmed, model, onModel);
+                } else if (trimmed.startsWith("/effort")) {
+                    doEffort(trimmed);
                 } else if (trimmed.startsWith("/worktree")) {
                     doWorktree(trimmed);
                 } else {
@@ -181,6 +198,31 @@ public class SlashCommand {
         }
         if (onModel != null) onModel.accept(target);
         System.out.println("[/model] 切换到 " + target);
+    }
+
+    /**
+     * /effort <low|medium|high> 处理（add-models-dropdown-v0）。
+     *
+     * <p>无参数时列出可选档位；非法档位报错不切换；onEffort 为 null 时只显示信息不真正切换。
+     */
+    private void doEffort(String trimmed) {
+        String[] parts = trimmed.split("\\s+", 2);
+        if (parts.length < 2 || parts[1].isBlank()) {
+            System.out.println("可用 effort: " + String.join(", ", SUPPORTED_EFFORTS));
+            return;
+        }
+        String target = parts[1].trim().toLowerCase();
+        if (!SUPPORTED_EFFORTS.contains(target)) {
+            System.out.println(
+                    "[思考强度必须是 " + String.join(" / ", SUPPORTED_EFFORTS) + ", 当前未变]");
+            return;
+        }
+        if (onEffort == null) {
+            System.out.println("[/effort] 未启用（ChatCommand 未注入 onEffort 回调）");
+            return;
+        }
+        onEffort.accept(target);
+        System.out.println("[/effort] 已切换思考强度为 " + target);
     }
 
     /**
@@ -232,6 +274,8 @@ public class SlashCommand {
     private void printHelp() {
         System.out.println("可用命令:");
         for (String c : COMMANDS) System.out.println("  " + c);
+        // add-models-dropdown-v0：help 增加 /effort 提示
+        System.out.println("提示：/model 切换模型；/effort 切换思考强度 (low/medium/high)");
     }
 
     /**
