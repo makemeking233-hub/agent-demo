@@ -54,7 +54,9 @@ Java 编写的 Claude Code 风格 Agent CLI，第一阶段独立调 DeepSeek API
 
 - **TDD 优先**：每个 Task 严格按 plan 中"测试先红 → 实现 → 测试转绿"的顺序执行
 - **commit 即里程碑**：每个 Task 完成后立即 commit，commit 信息遵循全局规则 §13 的中文 Conventional Commits 风格
-- **commit 即 push**：本地 commit 完成后**立即** push 到 `origin/main`，不积压等待；默认分支是 `main`
+- **commit 即 push**：本地 commit 完成后**立即** push，不积压等待。
+  - 迭代需求在**隔离分支**上作业（见 §2.7），此时 push 到**该分支**（`git push -u origin feat/<change-id>`），**不推 `main`**；
+  - 分支验证全绿并合并回 `main` 后，再把 `main` push 到 `origin/main`。
 - **里程碑 review 点**：每个里程碑（M0-M10）完成后停下，向用户汇报：
   - 已完成内容
   - 测试结果（`mvn test` 全绿）
@@ -161,6 +163,7 @@ openspec/
 | 场景 | 必须做 |
 |------|-------|
 | 接到新需求 | **必须先 `openspec-explore`** 澄清再动手；不允许直接进 `openspec-apply-change` 跳过设计 |
+| 接到新需求 | **必须先建分支/worktree 隔离**（见 §2.7），不允许直接在 `main` 上迭代 |
 | 改完一个 change | **必须 `openspec-archive-change`** 收尾；不允许留 `openspec/changes/<id>/` 未归档导致下次 session 看到一堆"已完成但未归档" |
 | archive 后 | delta spec 已合并到 `openspec/specs/`，下次 session 才能看到新行为 |
 | 提案 scope | 超过 20 行 → 拆 change（每个 change 一周内可完成） |
@@ -247,6 +250,77 @@ docs/test-agent-demo/
 
 ---
 
+### 2.7 分支隔离（迭代需求默认）
+
+> **任何迭代需求（新功能 / 行为变更 / 重构 / 性能优化 / 修 bug）都必须先建分支或 git worktree 隔离，在新分支上迭代，完成并验证后再合并回 `main`。**
+> **不允许直接在 `main` 上改代码后提交。** 走 OpenSpec 的 change 尤其必须如此。
+
+#### 2.7.1 为什么（2026-09-13 实测教训）
+
+同一工作区里多 agent 并行 + 直接在 `main` 上迭代，实际造成过三次事故：
+
+| 事故 | 现象 | 根因 |
+|------|------|------|
+| 增量编译残留 | 运行期 `NoClassDefFoundError: EditFileTool$Input`，一个工具崩掉整条 SSE 连接 | 应用运行期间对同一 `target/` 执行了构建 |
+| 测试类残留 | `NoClassDefFoundError: ToolCallClosureTest$1`（匿名内部类 class 文件缺失） | 两个 agent **在同一 `target/` 并发跑 Maven**，互相踩坏增量编译输出 |
+| 误提交他人工作 | 自己的归档提交里混进了另一个 agent 未完成的 change 提案 | 用了 `git add -A` 这类过宽模式 |
+
+另有两个直接代价：
+
+- `main` 上存在他人未完成的改动时，`mvn verify` 会因别人的 WIP 变红，**无法判断是不是自己弄坏的**（实测遇到过 `agent-core` 因他人改动编译失败、测试类残留报错）。
+- 并行 agent 的未提交文件会与自己的改动**争抢同一个文件**（实测 `AgentLoop.java`、`OpenAiCompatibleMapper.java`、`ChatCommand.java` 都被双方同时改过）。
+
+#### 2.7.2 标准流程
+
+```bash
+# 1. 隔离：多 agent 并行时优先 worktree，否则至少建分支
+git worktree add .worktrees/<change-id> -b feat/<change-id>   # worktree
+# 或
+git checkout -b feat/<change-id>                              # 分支
+
+# 2. 在隔离工作区里走 OpenSpec 四阶段（explore → propose → apply → archive）
+cd .worktrees/<change-id>
+
+# 3. 每个 task 完成即 commit + push 到**本分支**（不推 main）
+git push -u origin feat/<change-id>
+
+# 4. 验证：mvn -o -pl agent-core,agent-web verify + 前端 npx vitest run 全绿
+
+# 5. 合并回 main（能快进就快进；有冲突才 merge commit）
+cd <主工作区>
+git merge feat/<change-id>
+git push origin main
+
+# 6. 清理
+git worktree remove .worktrees/<change-id>
+git branch -d feat/<change-id>
+```
+
+#### 2.7.3 命名约定
+
+| 项 | 约定 |
+|----|------|
+| 分支名 | `feat/<change-id>`、`fix/<change-id>`、`chore/<change-id>`（与 OpenSpec change id 对齐） |
+| worktree 路径 | `.worktrees/<change-id>`（已在 `.gitignore` 中） |
+| OpenSpec change | 在分支内照常在 `openspec/changes/<change-id>/` 建立，归档后随分支合并回 `main` |
+
+#### 2.7.4 提交纪律（多 agent 并行时尤其重要）
+
+- **只用显式路径 `git add <path>...`**，禁止 `git add -A` / `git add .`——会把其他 agent 的未提交文件卷进自己的提交（实测发生过）。
+- 提交前用 `git status` 核对暂存清单里**没有不属于本次改动的文件**。
+- **不修改、不提交、不删除其他 agent 的未提交文件**；发现文件被他人同时改动时先停下问用户。
+- 从分支合并/推送前，先确认 `main`（或分支）上的既有失败**不是自己造成的**——对照改动前的基线，必要时在干净 HEAD 上复现一次。
+
+#### 2.7.5 豁免
+
+| 场景 | 是否需分支 |
+|------|-----------|
+| 任何迭代需求（含走 OpenSpec 的 change） | **必须**（多 agent 并行时用 worktree） |
+| 纯文档 / typo / 注释微调 | 可豁免（仍建议顺手建分支） |
+| 紧急 hotfix | 可豁免，但需用户明确同意，修完立刻同步 `main` |
+
+---
+
 ## 3. 关键决策摘要（供后续 Agent 快速对齐）
 
 - **JDK 17 + Spring Boot 3.2 + Maven 3.9**（plan §3）
@@ -257,10 +331,12 @@ docs/test-agent-demo/
 - **shell 黑名单匹配**：归一化（basename）+ 短参数簇展开（`-rf` ≡ `-fr` ≡ `-r -f`）
 - **不引入 Lombok、spring-boot-starter-web、数据库**
 - **stdout 留给模型输出，日志主写文件，WARN+ 镜像 stderr**
+- **迭代需求一律走分支/worktree 隔离**（§2.7）：不在 `main` 上直接改；提交只用显式路径 `git add <path>`
 
 ---
 
 > 修订记录：
+> - v0.1.4（2026-09-13）：新增 §2.7 分支隔离（迭代需求默认）——分支/worktree 标准流程、命名约定、多 agent 并行的提交纪律（禁用 `git add -A`）、豁免清单；§2.2「commit 即 push」明确为推送当前分支；§2.5.4 强制门禁加一行；§3 加一条
 > - v0.1.3（2026-08-30）：§1 测试文档路径改为批次目录；新增 §2.6 测试文档组织规范（每次测试一个带时间戳子目录 + 四件套 test-design/test-cases/test-report/test-review）
 > - v0.1.2（2026-08-26）：§1 加 OpenSpec 路径索引；新增 §2.5 OpenSpec 迭代流程（默认）：四阶段（explore → propose → apply → archive）、目录布局、与 §2.1/§2.2/§3 的衔接、强制门禁、适用/豁免清单
 > - v0.1.1（2026-08-26）：新增 §2.4 Mermaid 8.8.3 兼容性规则（docs/ 文档专属）
