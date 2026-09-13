@@ -38,7 +38,13 @@ public class ModelsController {
                                             || id.contains("thinking")
                                             || id.contains("opus-4")
                                             || id.contains("sonnet-4");
-                                    return new ModelsResponse.Model(id, id, supportsReasoning);
+                                    // add-models-dropdown-v0：supportsReasoning=true 时返回三档固定 effort；
+                                    // 后续 change add-provider-catalog-abstract 升级为按 provider 动态化。
+                                    List<String> efforts =
+                                            supportsReasoning
+                                                    ? List.of("low", "medium", "high")
+                                                    : List.of();
+                                    return new ModelsResponse.Model(id, id, supportsReasoning, efforts);
                                 })
                         .toList();
         return Mono.just(new ModelsResponse(models));

@@ -15,4 +15,6 @@ public record SendRequest(
         @JsonProperty("permission_mode") String permissionMode,
         @JsonProperty("workspace") String workspace,
         /** add-reasoning-thinking-streaming: 可选模型名（如 {@code deepseek-reasoner}）；null/缺省用 {@code deepseek-chat} */
-        @JsonProperty("model") String model) {}
+        @JsonProperty("model") String model,
+        /** add-models-dropdown-v0: 可选思考强度（{@code low} / {@code medium} / {@code high}）；null/缺省由 Provider 内部 fallback（如 OAI 默认 medium、Anthropic 默认 4096 token） */
+        @JsonProperty("reasoning_effort") String reasoningEffort) {}

@@ -122,9 +122,13 @@ public class AnthropicProvider implements LlmProvider {
         body.put("model", req.model());
         body.put("max_tokens", req.maxTokens() != null ? req.maxTokens() : 4096);
         body.put("stream", true);
-        // add-reasoning-thinking-streaming: 推理模型自动开 thinking
+        // add-reasoning-thinking-streaming + add-models-dropdown-v0：
+        //   - 推理模型自动开 thinking
+        //   - reasoningEffort 透传：extra.reasoning_effort（"low"/"medium"/"high"）→ budget_tokens 折算
+        //     low→1024 / medium→4096 / high→16384（无 extra 时 fallback 4096，即原 medium 行为，向后兼容）
         if (isThinkingModel(req.model())) {
-            body.put("thinking", Map.of("type", "enabled", "budget_tokens", 4096));
+            int budget = resolveBudgetTokens(req);
+            body.put("thinking", Map.of("type", "enabled", "budget_tokens", budget));
         }
         if (req.systemPrompt() != null && !req.systemPrompt().isEmpty()) {
             body.put("system", req.systemPrompt());
@@ -151,6 +155,33 @@ public class AnthropicProvider implements LlmProvider {
         return m.contains("opus-4") || m.contains("sonnet-4") || m.contains("3-7-sonnet")
                 || m.contains("claude-3-7") || m.contains("claude-opus-4")
                 || m.contains("claude-sonnet-4");
+    }
+
+    /**
+     * reasoningEffort → budget_tokens 折算表（add-models-dropdown-v0）。
+     *
+     * <p>Anthropic 不接受 reasoning_effort 字符串，需折算为 thinking.budget_tokens 整数。
+     * low→1024(轻量思考)/ medium→4096(中等深度)/ high→16384(深度推理)。
+     */
+    private static final Map<String, Integer> EFFORT_BUDGET_TOKENS = Map.of(
+            "low", 1024,
+            "medium", 4096,
+            "high", 16384);
+
+    /** 默认 budget_tokens（add-reasoning-thinking-streaming 老行为；向后兼容） */
+    private static final int DEFAULT_BUDGET_TOKENS = 4096;
+
+    /**
+     * 从 req.extra() 读 reasoning_effort，折算 budget_tokens；未传时回退 DEFAULT_BUDGET_TOKENS。
+     */
+    static int resolveBudgetTokens(ChatRequest req) {
+        if (req.extra() == null) return DEFAULT_BUDGET_TOKENS;
+        Object v = req.extra().get("reasoning_effort");
+        if (v instanceof String s) {
+            Integer budget = EFFORT_BUDGET_TOKENS.get(s.toLowerCase());
+            if (budget != null) return budget;
+        }
+        return DEFAULT_BUDGET_TOKENS;
     }
 
     /**

@@ -9,12 +9,29 @@ export interface SendRequest {
   content: string;
   session_id?: string;
   permission_mode?: PermissionMode;
+  /** add-models-dropdown-v0: 可选模型名（如 deepseek-reasoner）；缺省 deepseek-chat */
+  model?: string;
+  /** add-models-dropdown-v0: 可选思考强度（low / medium / high）；缺省由 Provider 内部 fallback */
+  reasoning_effort?: string;
 }
 
 export interface SendResponse {
   stream_id: string;
   session_id: string;
   model: string;
+}
+
+/** add-models-dropdown-v0: /api/chat/models 返回的模型条目 */
+export interface ModelEntry {
+  id: string;
+  name: string;
+  supportsReasoning: boolean;
+  reasoningEfforts: string[];
+}
+
+/** add-models-dropdown-v0: /api/chat/models 响应包装 */
+export interface ModelsResponse {
+  models: ModelEntry[];
 }
 
 export interface SlashResult {
@@ -236,5 +253,12 @@ export class ChatApi {
     const r = await fetch(this.base + '/api/health');
     if (!r.ok) throw new Error(`health ${r.status}`);
     return await r.json();
+  }
+
+  /** add-models-dropdown-v0: 拉取 supported-models 列表（含 reasoningEfforts） */
+  async listModels(): Promise<ModelsResponse> {
+    const r = await fetch(this.base + '/api/chat/models');
+    if (!r.ok) throw new Error(`listModels ${r.status}`);
+    return (await r.json()) as ModelsResponse;
   }
 }

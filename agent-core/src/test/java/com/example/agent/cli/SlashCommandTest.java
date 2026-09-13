@@ -149,4 +149,84 @@ class SlashCommandTest {
         resolved::set);
     assertNull(resolved.get()); // 未知 model 不调 setter
   }
+
+  // ---- add-models-dropdown-v0：/effort 命令 ----
+
+  @Test
+  void effortHighTriggersCallback() {
+    var hist = new MessageHistory(new TokenEstimator());
+    int[] p = {0}, c = {0};
+    AtomicReference<String> effort = new AtomicReference<>();
+    cmd.setOnEffort(effort::set);
+    boolean consumed =
+        cmd.dispatch(
+            "/effort high",
+            hist,
+            p,
+            c,
+            "deepseek-chat",
+            () -> {},
+            null,
+            null,
+            null);
+    assertTrue(consumed, "/effort 应被 slash 命令消费");
+    assertEquals("high", effort.get());
+  }
+
+  @Test
+  void effortMediumTriggersCallback() {
+    var hist = new MessageHistory(new TokenEstimator());
+    int[] p = {0}, c = {0};
+    AtomicReference<String> effort = new AtomicReference<>();
+    cmd.setOnEffort(effort::set);
+    cmd.dispatch(
+        "/effort medium",
+        hist,
+        p,
+        c,
+        "deepseek-chat",
+        () -> {},
+        null,
+        null,
+        null);
+    assertEquals("medium", effort.get());
+  }
+
+  @Test
+  void effortLowTriggersCallback() {
+    var hist = new MessageHistory(new TokenEstimator());
+    int[] p = {0}, c = {0};
+    AtomicReference<String> effort = new AtomicReference<>();
+    cmd.setOnEffort(effort::set);
+    cmd.dispatch(
+        "/effort low",
+        hist,
+        p,
+        c,
+        "deepseek-chat",
+        () -> {},
+        null,
+        null,
+        null);
+    assertEquals("low", effort.get());
+  }
+
+  @Test
+  void effortIllegalArgDoesNotTriggerCallback() {
+    var hist = new MessageHistory(new TokenEstimator());
+    int[] p = {0}, c = {0};
+    AtomicReference<String> effort = new AtomicReference<>();
+    cmd.setOnEffort(effort::set);
+    cmd.dispatch(
+        "/effort extreme",
+        hist,
+        p,
+        c,
+        "deepseek-chat",
+        () -> {},
+        null,
+        null,
+        null);
+    assertNull(effort.get(), "/effort extreme 非白名单 → 不触发回调");
+  }
 }
