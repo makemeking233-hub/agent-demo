@@ -12,7 +12,7 @@ import { PermissionCard } from "./PermissionCard";
 import { StatsBar } from "./StatsBar";
 import { ToolCallCard } from "./ToolCallCard";
 
-type Item =
+export type Item =
   | {
       kind: "text";
       id: string;
@@ -74,8 +74,10 @@ function clearPersisted() {
 }
 
 /** 把服务端返回的消息历史重建为渲染 items（仅保留用户/助手文本与内联工具，处于稳定态）。 */
-function mapHistoryToItems(messages: HistoryMessage[]): Item[] {
+export function mapHistoryToItems(messages: HistoryMessage[]): Item[] {
   const items: Item[] = [];
+  // 记录每个 toolCallId 落在哪个 item 的第几个内联工具上，供随后的 tool 结果消息回填
+  const toolIndex = new Map<string, { itemIdx: number; toolIdx: number }>();
   for (const m of messages) {
     if (m.role === "user") {
       items.push({ kind: "text", id: "h-u-" + items.length, role: "user", text: m.content });
@@ -92,18 +94,141 @@ function mapHistoryToItems(messages: HistoryMessage[]): Item[] {
         text: m.content,
         tools: tools.length ? tools : undefined,
       });
+      const itemIdx = items.length - 1;
+      tools.forEach((t, toolIdx) => toolIndex.set(t.id, { itemIdx, toolIdx }));
     } else if (m.role === "tool") {
-      items.push({
-        kind: "tool",
-        id: "h-t-" + items.length,
-        name: "tool",
-        toolCallId: m.toolCallId ?? "",
-        status: m.isError ? "fail" : "ok",
-        text: m.content,
-      });
+      // 同一次调用只渲染一张卡：把结果回填到该 assistant item 的内联工具上，
+      // 而不是再单独出一张（此前会重复出卡，且第二张的工具名是字面量 "tool"）。
+      const loc = m.toolCallId ? toolIndex.get(m.toolCallId) : undefined;
+      if (loc) {
+        const item = items[loc.itemIdx] as Extract<Item, { kind: "text" }>;
+        const tools = [...(item.tools ?? [])];
+        tools[loc.toolIdx] = {
+          ...tools[loc.toolIdx],
+          status: m.isError ? "fail" : "ok",
+          text: m.content,
+        };
+        items[loc.itemIdx] = { ...item, tools } as Item;
+      } else {
+        // 孤儿结果（找不到对应调用，例如历史被裁剪）：仍以独立卡渲染，不丢信息
+        items.push({
+          kind: "tool",
+          id: "h-t-" + items.length,
+          name: "tool",
+          toolCallId: m.toolCallId ?? "",
+          status: m.isError ? "fail" : "ok",
+          text: m.content,
+        });
+      }
     }
   }
   return items;
+}
+
+/**
+ * 当前最新的 assistant 文本项是否还能继续追加**文本/思考**。
+ *
+ * <p>只认「最后一条」而不是「从后往前第一条」——这是 fix-tool-call-inline-order 的关键：
+ * 工具卡渲染在该 item 的文本下方，一旦这一迭代已经挂上工具，它就"收尾"了；后续文本必须新建
+ * item 才能落在工具卡**之后**。否则 `MessageBubble` 固定按 text→tools 渲染，文本会跳到所有
+ * 工具卡上面，多轮迭代下来工具就全堆到了底部。
+ *
+ * @returns 可追加的下标；不可追加返回 -1
+ */
+function openAssistantIndexForText(items: Item[]): number {
+  const last = items[items.length - 1];
+  if (
+    last &&
+    last.kind === "text" &&
+    last.role === "assistant" &&
+    !(last.tools && last.tools.length > 0)
+  ) {
+    return items.length - 1;
+  }
+  return -1;
+}
+
+/**
+ * 当前最新 assistant 文本项是否还能继续追加**工具**。
+ *
+ * <p>同一次迭代的工具调用是在 `onAssistant` 里**一次性公告**的（结果稍后才到），所以判据是
+ * 「已有工具都还是 running」：说明还在同一批公告里，继续追加；一旦结果回来了，下一个
+ * `tool_call_start` 必属新的迭代，要新建 item 才能让上一迭代的文本留在工具卡之前。
+ *
+ * @returns 可追加的下标；不可追加返回 -1
+ */
+function openAssistantIndexForTool(items: Item[]): number {
+  const last = items[items.length - 1];
+  if (!last || last.kind !== "text" || last.role !== "assistant") return -1;
+  const tools = last.tools ?? [];
+  if (tools.length === 0) return items.length - 1;
+  return tools.every((t) => t.status === "running") ? items.length - 1 : -1;
+}
+
+/**
+ * 沿时间线追加一段助手文本（纯函数，便于单测）。
+ *
+ * <p>落在「当前这条助手 item」之后：若最后一条已挂工具（该迭代已收尾），则新建一条，
+ * 使文本位于工具卡之下，恢复「每次迭代 文本→工具」的真实顺序。
+ *
+ * @param items 现有渲染项
+ * @param text 追加的文本增量
+ * @param id 新建 item 时使用的 id
+ * @returns 新的渲染项数组
+ */
+export function appendTextToTimeline(items: Item[], text: string, id: string): Item[] {
+  const idx = openAssistantIndexForText(items);
+  if (idx >= 0) {
+    const updated = [...items];
+    const it = items[idx] as Extract<Item, { kind: "text" }>;
+    updated[idx] = { ...it, text: it.text + text } as Item;
+    return updated;
+  }
+  return [...items, { kind: "text", id, role: "assistant", text }];
+}
+
+/**
+ * 沿时间线追加助手思考增量（纯函数；判据与文本一致，使同一次迭代的思考与文本落在同一条 item）。
+ *
+ * @param items 现有渲染项
+ * @param chunk 思考增量
+ * @param id 新建 item 时使用的 id
+ * @returns 新的渲染项数组
+ */
+export function appendThinkingToTimeline(items: Item[], chunk: string, id: string): Item[] {
+  const idx = openAssistantIndexForText(items);
+  if (idx >= 0) {
+    const updated = [...items];
+    const it = items[idx] as Extract<Item, { kind: "text" }>;
+    updated[idx] = { ...it, thinking: (it.thinking ?? "") + chunk } as Item;
+    return updated;
+  }
+  return [...items, { kind: "text", id, role: "assistant", text: "", thinking: chunk } as Item];
+}
+
+/**
+ * 沿时间线追加一个工具调用（纯函数）。
+ *
+ * <p>同一批公告（工具都还在 running）追加到同一条 item；否则新建——这样上一迭代的文本会留在
+ * 自己的工具卡之上，而新迭代的工具卡排在其后。
+ *
+ * @param items 现有渲染项
+ * @param tool 内联工具
+ * @param id 新建 item 时使用的 id
+ * @returns 新的渲染项数组
+ */
+export function appendToolToTimeline(items: Item[], tool: InlineTool, id: string): Item[] {
+  const idx = openAssistantIndexForTool(items);
+  if (idx >= 0) {
+    const updated = [...items];
+    const it = items[idx] as Extract<Item, { kind: "text" }>;
+    updated[idx] = { ...it, tools: [...(it.tools ?? []), tool] } as Item;
+    return updated;
+  }
+  return [
+    ...items,
+    { kind: "text", id, role: "assistant", text: "", tools: [tool] } as Item,
+  ];
 }
 
 export function ChatPanel(props: { currentSessionId?: string | null; workspace?: string }) {
@@ -202,45 +327,21 @@ export function ChatPanel(props: { currentSessionId?: string | null; workspace?:
     setItems((prev) => prev.map((it) => (it.id === id ? ({ ...it, ...patch } as Item) : it)));
   }
 
-  // 关键修复: 用函数式 setItems 追加文本到"最后一条 assistant 文本项"。
+  // 关键修复: 用函数式 setItems 追加文本到"当前这条 assistant 文本项"。
   // 不能用闭包里的 items(陈旧), 否则 message_delta 永远匹配不到 last 项 → 界面空白。
+  // 排序规则见模块级 appendTextToTimeline（fix-tool-call-inline-order）。
   function appendTextToLastAssistant(text: string) {
-    setItems((prev) => {
-      // 从后向前找最后一条 assistant 文本项
-      for (let i = prev.length - 1; i >= 0; i--) {
-        const it = prev[i];
-        if (it.kind === "text" && it.role === "assistant") {
-          const updated = [...prev];
-          updated[i] = { ...it, text: (it as { text: string }).text + text };
-          return updated;
-        }
-      }
-      // 没有 assistant 文本项则追加一条
-      return [...prev, { kind: "text", id: "a-" + Date.now(), role: "assistant", text }];
-    });
+    setItems((prev) => appendTextToTimeline(prev, text, "a-" + Date.now()));
   }
 
   /**
-   * 追加 thinking（推理）内容到最后一条 assistant 消息项。
+   * 追加 thinking（推理）内容到当前这条 assistant 消息项。
    *
    * <p>修复：add-reasoning-thinking-streaming 提交时只调用了本函数却未定义，收到 thinking delta 会抛
    * ReferenceError（add-session-stats-bar 实施时一并补齐）。
    */
   function appendThinkingToLastAssistant(chunk: string) {
-    setItems((prev) => {
-      for (let i = prev.length - 1; i >= 0; i--) {
-        const it = prev[i];
-        if (it.kind === "text" && it.role === "assistant") {
-          const updated = [...prev];
-          updated[i] = { ...it, thinking: (it.thinking ?? "") + chunk } as Item;
-          return updated;
-        }
-      }
-      return [
-        ...prev,
-        { kind: "text", id: "a-think-" + Date.now(), role: "assistant", text: "", thinking: chunk } as Item,
-      ];
-    });
+    setItems((prev) => appendThinkingToTimeline(prev, chunk, "a-think-" + Date.now()));
   }
 
   async function startStream(content: string) {
@@ -330,21 +431,9 @@ export function ChatPanel(props: { currentSessionId?: string | null; workspace?:
     }
   }
 
-  // 把工具调用内联到最近一条 assistant 消息项（无则创建一条空 assistant 承载）
+  // 把工具调用沿时间线内联到当前这条 assistant 消息项（无则新建一条承载）
   function addToolToLastAssistant(tool: InlineTool) {
-    setItems((prev) => {
-      for (let i = prev.length - 1; i >= 0; i--) {
-        const it = prev[i];
-        if (it.kind === "text" && it.role === "assistant") {
-          const updated = [...prev];
-          const tools = [...(it.tools ?? []), tool];
-          updated[i] = { ...it, tools } as Item;
-          return updated;
-        }
-      }
-      // 无 assistant 文本项 → 新建一条空的 assistant 承载工具
-      return [...prev, { kind: "text", id: "a-tool-" + Date.now(), role: "assistant", text: "", tools: [tool] }];
-    });
+    setItems((prev) => appendToolToTimeline(prev, tool, "a-tool-" + Date.now()));
   }
 
   // 在最近的 assistant 内联工具里按 toolCallId 更新（找不到则 fallback 到独立 tool item）

@@ -328,6 +328,8 @@ SSE 7 种事件：`message_start` / `message_delta` / `tool_call_start` / `tool_
 
 **Web UI 会话统计状态栏**（仿 DeepSeek Harness）：输入框下方显示会话累计统计——`N 轮 · M 步 | LLM Xs · 工具调用 Ys | 首 token 平均 Zs · P tok/s | 缓存命中 Q% | 输入 R tok · 输出 S tok`。每轮结束经 SSE `turn_stats` 实时刷新，首屏 / resume 用 `GET /api/sessions/{id}/stats` 回填；不可用指标显示 `N/A`（如 provider 不返回缓存字段）。吞吐分母为纯生成耗时（不含首 token 延迟）。
 
+**Web UI 工具调用内联排布**：工具调用卡片按**调用发生的位置**插在助手回复的时间线里（该迭代的文本之后、下一次迭代之前），而不是统一堆在回复末尾；刷新会话后与服务端历史重建结果一致（同一次调用只渲染一张卡，含真实工具名与执行结果）。实现见 `ChatPanel.tsx` 的 `appendTextToTimeline` / `appendToolToTimeline` / `mapHistoryToItems`。
+
 ---
 
 ## 11. 验证
