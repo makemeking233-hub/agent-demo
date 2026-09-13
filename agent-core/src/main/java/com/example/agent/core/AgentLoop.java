@@ -374,7 +374,7 @@ public class AgentLoop {
                 .flatMapMany(
                         chunks -> {
                             Message.Assistant assistant = extractAssistant(chunks);
-                            sink.onAssistant(assistant, List.of());
+                            sink.onAssistant(assistant, assistant.reasoning());
                             history.append(assistant);
                             if (assistant.toolCalls() == null || assistant.toolCalls().isEmpty()) {
                                 printer.onFinished();
@@ -457,6 +457,9 @@ public class AgentLoop {
     private void printChunk(StreamChunk chunk) {
         if (chunk instanceof StreamChunk.TextDelta t) {
             printer.onTextDelta(t.text());
+        } else if (chunk instanceof StreamChunk.ThinkingDelta tk) {
+            // add-reasoning-thinking-streaming: thinking 实时转发到 sink（落 thinking.log）
+            sink.onThinkingDelta(tk.text());
         } else if (chunk instanceof StreamChunk.ToolCallStart s) {
             printer.onToolCallStart(s.id(), s.name());
         } else if (chunk instanceof StreamChunk.ToolCallDelta d) {
@@ -477,11 +480,15 @@ public class AgentLoop {
      */
     private Message.Assistant extractAssistant(List<StreamChunk> chunks) {
         StringBuilder content = new StringBuilder();
+        List<String> reasoning = new ArrayList<>();
+        int reasoningTokens = 0;
         for (StreamChunk c : chunks) {
             if (c instanceof StreamChunk.TextDelta t) content.append(t.text());
+            else if (c instanceof StreamChunk.ThinkingDelta tk) reasoning.add(tk.text());
+            else if (c instanceof StreamChunk.Usage u) reasoningTokens = u.reasoningTokens();
         }
         List<ToolCall> calls = StreamChunk.aggregate(chunks);
-        return new Message.Assistant(content.toString(), calls);
+        return new Message.Assistant(content.toString(), calls, reasoning, reasoningTokens);
     }
 
     /**

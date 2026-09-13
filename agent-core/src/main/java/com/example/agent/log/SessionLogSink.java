@@ -44,6 +44,16 @@ public interface SessionLogSink {
     default void onAssistant(Message.Assistant assistant, List<String> thinking) {}
 
     /**
+     * assistant 推理增量逐 token 推送（add-reasoning-thinking-streaming）。
+     *
+     * <p>用于 {@link SessionLogger} 实时写入 {@code thinking.log}（脱敏后）。
+     * v0.1 默认 no-op；v0.2 实现类可累积后落盘。
+     *
+     * @param text 增量文本（已含前缀空白处理）
+     */
+    default void onThinkingDelta(String text) {}
+
+    /**
      * 单个工具调用（拿到完整入参后）。
      *
      * @param call 工具调用描述

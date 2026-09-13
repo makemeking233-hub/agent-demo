@@ -7,34 +7,34 @@
 
 ## 2. Provider 层
 
-- [ ] 2.1 `DeepSeekProvider` 解析 `choices[].delta.reasoning_content` → emit `ThinkingDelta`；`usage` 解析 `completion_tokens` + `reasoning_tokens`（独立计费）
-- [ ] 2.2 `DeepSeekProviderTest` 扩 reasoning 流测试（正常 / 不触发 chat / token 单独计费）
-- [ ] 2.3 `OpenAiCompatibleProvider` 适配 o1 / o3：`reasoning_effort` 参数 + `usage.completion_tokens_details.reasoning_tokens` 解析
-- [ ] 2.4 `OpenAiCompatibleProviderTest` 扩 o1 reasoning token 测试（mock OpenAI o1 响应）
-- [ ] 2.5 `AnthropicProvider` 解析 `content[].type="thinking"` 块 → emit `ThinkingDelta`（text + thinking 混合按数组顺序推）
-- [ ] 2.6 `AnthropicProviderTest` 扩 thinking block 测试
+- [x] 2.1 `DeepSeekProvider` 解析 `choices[].delta.reasoning_content` → emit `ThinkingDelta`；`usage` 解析 `completion_tokens` + `reasoning_tokens`（独立计费）
+- [x] 2.2 `DeepSeekProviderTest` 扩 reasoning 流测试（正常 / 不触发 chat / token 单独计费）
+- [x] 2.3 `OpenAiCompatibleProvider` 适配 o1 / o3：`reasoning_effort` 参数 + `usage.completion_tokens_details.reasoning_tokens` 解析
+- [x] 2.4 `OpenAiCompatibleProviderTest` 扩 o1 reasoning token 测试（mock OpenAI o1 响应）
+- [x] 2.5 `AnthropicProvider` 解析 `content[].type="thinking"` 块 → emit `ThinkingDelta`（text + thinking 混合按数组顺序推）
+- [x] 2.6 `AnthropicProviderTest` 扩 thinking block 测试
 
 ## 3. AgentLoop 核心逻辑
 
-- [ ] 3.1 `AgentLoop` 加 `currentThinking: List<String>` 字段；`processTurn` 内累积 ThinkingDelta + 通过 `SessionLogSink.onThinkingDelta` 转发
-- [ ] 3.2 `AgentLoop.processTurn` turn 收尾时把 `currentThinking` 合并到 `Message.Assistant.thinking` + 清空 list
-- [ ] 3.3 `SessionLogSink` 接口加 `onThinkingDelta(delta)` 默认空方法 + `CompositeSessionLogSink` 派发
-- [ ] 3.4 `SessionLogger.thinking.log` 写入逻辑：从 v0.1 "v0.1 恒为空" 改为实际写入（带 Redactor 脱敏）
-- [ ] 3.5 `AgentLoopTest` 扩 thinking 累积 + turn 收尾合并 + 跨 turn 清空测试
+- [x] 3.1 `AgentLoop` 加 `currentThinking: List<String>` 字段；`processTurn` 内累积 ThinkingDelta + 通过 `SessionLogSink.onThinkingDelta` 转发
+- [x] 3.2 `AgentLoop.processTurn` turn 收尾时把 `currentThinking` 合并到 `Message.Assistant.thinking` + 清空 list
+- [x] 3.3 `SessionLogSink` 接口加 `onThinkingDelta(delta)` 默认空方法 + `CompositeSessionLogSink` 派发
+- [x] 3.4 `SessionLogger.thinking.log` 写入逻辑：从 v0.1 "v0.1 恒为空" 改为实际写入（带 Redactor 脱敏）
+- [x] 3.5 `AgentLoopTest` 扩 thinking 累积 + turn 收尾合并 + 跨 turn 清空测试
 
 ## 4. ContextCompressor thinking-aware 压缩
 
-- [ ] 4.1 `ContextCompressor` 加 thinking-aware 压缩：保留最近 2 轮完整 + 早期压缩为摘要模板 `[第 N 轮思考摘要] <前 50 字>...`
-- [ ] 4.2 `ContextCompressorTest` 扩 3 轮 / 5 轮 / 10 轮场景测试
+- [x] 4.1 `ContextCompressor` 加 thinking-aware 压缩：保留最近 2 轮完整 + 早期压缩为摘要模板 `[第 N 轮思考摘要] <前 50 字>...`
+- [x] 4.2 `ContextCompressorTest` 扩 3 轮 / 5 轮 / 10 轮场景测试
 
 ## 5. 后端 SSE / API 层（agent-web）
 
-- [ ] 5.1 `SseEvent` / `messageDelta` 增 `deltaType` 字段值 "thinking" 适配（已有 text，新增 thinking）
-- [ ] 5.2 `ChatStreamService` 透传 `StreamChunk.ThinkingDelta` → SSE `message_delta` (delta_type: "thinking")，与 text_delta 同频逐 token
-- [ ] 5.3 `ChatStreamServiceTest` 扩 thinking 流测试（按事件序 / abort 时同时停）
-- [ ] 5.4 `ModelsController` 新增 `GET /api/chat/models` 端点（从 `agent.chat.supported-models` 读）+ `ModelsControllerTest` 单测
-- [ ] 5.5 `SlashCommand` 加 `/model <name>` 命令（含 `/model reasoning` / `/model chat`），响应 `message_delta` 提示
-- [ ] 5.6 `application-web.yml` 增 `agent.chat.supported-models: [deepseek-chat, deepseek-reasoner]` + `default-model: deepseek-chat`
+- [x] 5.1 `SseEvent` / `messageDelta` 增 `deltaType` 字段值 "thinking" 适配（已有 text，新增 thinking）
+- [x] 5.2 `ChatStreamService` 透传 `StreamChunk.ThinkingDelta` → SSE `message_delta` (delta_type: "thinking")，与 text_delta 同频逐 token
+- [x] 5.3 `ChatStreamServiceTest` 扩 thinking 流测试（按事件序 / abort 时同时停）
+- [x] 5.4 `ModelsController` 新增 `GET /api/chat/models` 端点（从 `agent.chat.supported-models` 读）+ `ModelsControllerTest` 单测
+- [x] 5.5 `SlashCommand` 加 `/model <name>` 命令（含 `/model reasoning` / `/model chat`），响应 `message_delta` 提示
+- [x] 5.6 `application-web.yml` 增 `agent.chat.supported-models: [deepseek-chat, deepseek-reasoner]` + `default-model: deepseek-chat`
 
 ## 6. 前端核心流（TypeScript）
 
@@ -70,3 +70,4 @@
 - [ ] 10.1 新增 `docs/reasoning-thinking.md`（架构 + 缓存策略 + 三 provider 适配表 + 决策记录）
 - [ ] 10.2 写四件套：`docs/test-agent-demo/2026-09-04-reasoning-thinking/{test-design,test-cases,test-report,test-review}.md` + 更新 `test-guide.md` §2.9
 - [ ] 10.3 `openspec validate add-reasoning-thinking-streaming --type change --strict` 通过 + `openspec archive add-reasoning-thinking-streaming --yes` + commit + push
+

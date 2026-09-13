@@ -246,7 +246,20 @@ public class ContextCompressor {
             if (m instanceof Message.Assistant a
                     && a.toolCalls() != null
                     && !a.toolCalls().isEmpty()) {
-                collapsed.add(new Message.Assistant("- **做了什么**: " + a.content(), a.toolCalls()));
+                // add-reasoning-thinking-streaming: 早期 thinking 转单行摘要（保留最近 2 轮在 content 即可）
+                String thinkingSummary =
+                        a.reasoning() == null || a.reasoning().isEmpty()
+                                ? ""
+                                : "[thinking 摘要] " + String.join(" ", a.reasoning()).substring(
+                                                0, Math.min(50, String.join(" ", a.reasoning()).length()))
+                                        + (String.join(" ", a.reasoning()).length() > 50 ? "..." : "");
+                collapsed.add(
+                        new Message.Assistant(
+                                "- **做了什么**: " + a.content()
+                                        + (thinkingSummary.isEmpty() ? "" : "\n" + thinkingSummary),
+                                a.toolCalls(),
+                                List.of(),
+                                a.reasoningTokens()));
             } else if (m instanceof Message.ToolResult tr) {
                 collapsed.add(new Message.Assistant("- **结果**: " + tr.content(), null));
             } else {

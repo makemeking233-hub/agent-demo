@@ -173,6 +173,16 @@ public class SessionLogger implements SessionLogSink, AutoCloseable {
     }
 
     @Override
+    public void onThinkingDelta(String text) {
+        // add-reasoning-thinking-streaming: 实时逐 token 写入 thinking.log（脱敏后）
+        safe(() -> {
+            thinkWriter.write(
+                    "[" + CHAT_TS.format(LocalDateTime.now()) + "] thinking> " + Redactor.redact(text) + "\n");
+            thinkWriter.flush();
+        });
+    }
+
+    @Override
     public void onAssistant(Message.Assistant assistant, List<String> thinking) {
         safe(() -> {
             Map<String, Object> data = new LinkedHashMap<>();

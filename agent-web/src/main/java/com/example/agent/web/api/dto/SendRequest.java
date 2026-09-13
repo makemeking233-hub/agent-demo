@@ -13,4 +13,6 @@ public record SendRequest(
         @JsonProperty("content") String content,
         @JsonProperty("session_id") String sessionId,
         @JsonProperty("permission_mode") String permissionMode,
-        @JsonProperty("workspace") String workspace) {}
+        @JsonProperty("workspace") String workspace,
+        /** add-reasoning-thinking-streaming: 可选模型名（如 {@code deepseek-reasoner}）；null/缺省用 {@code deepseek-chat} */
+        @JsonProperty("model") String model) {}

@@ -53,9 +53,10 @@ public class ChatController {
         if (!streams.workspaceExists(req.workspace())) {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "workspace_not_found")));
         }
-        ChatStreamService.ActiveStream meta = streams.create(sessionId, "deepseek-chat", mode, req.workspace());
+        String model = resolveModel(req.model());
+        ChatStreamService.ActiveStream meta = streams.create(sessionId, model, mode, req.workspace());
         streams.start(meta.streamId(), req.content());
-        return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, "deepseek-chat")));
+        return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, model)));
     }
 
     private static String pickFirstNonBlank(String... candidates) {
@@ -63,6 +64,16 @@ public class ChatController {
             if (s != null && !s.isBlank()) return s;
         }
         return null;
+    }
+
+    /**
+     * add-reasoning-thinking-streaming: 解析模型名。null/空用默认 {@code deepseek-chat}；
+     * 非法（不在 supported-models 列表）回退默认（前端可调 /api/chat/models 看合法列表）。
+     */
+    private String resolveModel(String requested) {
+        String fallback = "deepseek-chat";
+        if (requested == null || requested.isBlank()) return fallback;
+        return ModelRegistry.isSupported(requested, env) ? requested : fallback;
     }
 
     @PostMapping("/abort/{streamId}")

@@ -112,5 +112,101 @@ class OpenAiCompatibleMapperTest {
                     + "\"function\":{}}]}}]}";
         assertTrue(mapper.parseSseLine(sse).isEmpty());
     }
+
+    // ===== add-reasoning-thinking-streaming =====
+
+    @Test
+    void o1RequestIncludesReasoningEffort() {
+        ChatRequest req =
+                new ChatRequest(
+                        "o1-preview",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        Map.of());
+        Map<String, Object> body = mapper.toRequestBody(req);
+        assertEquals("medium", body.get("reasoning_effort"));
+    }
+
+    @Test
+    void o3RequestIncludesReasoningEffort() {
+        ChatRequest req =
+                new ChatRequest(
+                        "o3-mini",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        Map.of());
+        Map<String, Object> body = mapper.toRequestBody(req);
+        assertEquals("medium", body.get("reasoning_effort"));
+    }
+
+    @Test
+    void nonReasonerRequestHasNoReasoningEffort() {
+        ChatRequest req =
+                new ChatRequest(
+                        "deepseek-chat",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        Map.of());
+        Map<String, Object> body = mapper.toRequestBody(req);
+        assertTrue(!body.containsKey("reasoning_effort"));
+    }
+
+    @Test
+    void customReasoningEffortOverridesDefault() {
+        Map<String, Object> extra = new java.util.HashMap<>();
+        extra.put("reasoning_effort", "high");
+        ChatRequest req =
+                new ChatRequest(
+                        "o1-preview",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        extra);
+        Map<String, Object> body = mapper.toRequestBody(req);
+        assertEquals("high", body.get("reasoning_effort"));
+    }
+
+    @Test
+    void sseLineWithReasoningContentProducesThinkingDelta() {
+        String sse = "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"我先思考\"}}]}";
+        Optional<StreamChunk> chunk = mapper.parseSseLine(sse);
+        assertTrue(chunk.isPresent());
+        assertInstanceOf(StreamChunk.ThinkingDelta.class, chunk.get());
+        assertEquals("我先思考", ((StreamChunk.ThinkingDelta) chunk.get()).text());
+    }
+
+    @Test
+    void sseLineWithReasoningAndContentProducesThinkingDeltaOnly() {
+        // reasoning + content 同时出现：parser pipeline 第一个命中者（reasoning）胜出
+        String sse =
+                "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"思考\",\"content\":\"答案\"}}]}";
+        Optional<StreamChunk> chunk = mapper.parseSseLine(sse);
+        assertInstanceOf(StreamChunk.ThinkingDelta.class, chunk.get());
+    }
+
+    @Test
+    void o1UsageIncludesReasoningTokens() {
+        String sse =
+                "data: {\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,"
+                    + "\"completion_tokens_details\":{\"reasoning_tokens\":15}}}";
+        Optional<StreamChunk> chunk = mapper.parseSseLine(sse);
+        assertTrue(chunk.isPresent());
+        assertInstanceOf(StreamChunk.Usage.class, chunk.get());
+        StreamChunk.Usage usage = (StreamChunk.Usage) chunk.get();
+        assertEquals(10, usage.promptTokens());
+        assertEquals(20, usage.completionTokens());
+        assertEquals(15, usage.reasoningTokens());
+    }
 }
 

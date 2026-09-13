@@ -44,10 +44,14 @@ public class OpenAiCompatibleMapper {
     private final ObjectMapper json = new ObjectMapper();
 
     /**
-     * SSE parser pipeline（按优先级排序；第一个命中者胜出）
+     * SSE parser pipeline（按优先级排序；第一个命中者胜出）。
+     *
+     * <p>add-reasoning-thinking-streaming：新增 {@link ChoiceReasoningParser} 放第一位，
+     * 优先匹配 DeepSeek {@code choices[0].delta.reasoning_content}。
      */
     private final List<SsePayloadParser> parsers =
             List.of(
+                    new ChoiceReasoningParser(),
                     new ChoiceContentParser(),
                     new ChoiceToolCallParser(),
                     new ChoiceFinishReasonParser(),
@@ -55,6 +59,9 @@ public class OpenAiCompatibleMapper {
 
     /**
      * 构造 OpenAI 格式 chat completion 请求体（含 {@code stream_options.include_usage=true}）。
+     *
+     * <p>add-reasoning-thinking-streaming：自动识别 OpenAI o1 / o3 / o4 模型并注入 {@code reasoning_effort}
+     * 参数（默认 {@code "medium"}）。其他 model 不注入该参数（DeepSeek 等不识别）。
      *
      * @param req 聊天请求
      * @return OpenAI 兼容 API 请求体 Map
@@ -66,6 +73,11 @@ public class OpenAiCompatibleMapper {
         body.put(STREAM_OPTIONS_KEY, Map.of(INCLUDE_USAGE_KEY, true));
         if (req.temperature() != null) body.put("temperature", req.temperature());
         if (req.maxTokens() != null) body.put("max_tokens", req.maxTokens());
+        // add-reasoning-thinking-streaming: OpenAI o1/o3/o4 reasoning 注入
+        if (isOpenAiReasonerModel(req.model())
+                && (req.extra() == null || !req.extra().containsKey("reasoning_effort"))) {
+            body.put("reasoning_effort", "medium");
+        }
         if (req.systemPrompt() != null && !req.systemPrompt().isEmpty()) {
             body.put("messages", mergeSystemPrompt(req));
         } else {
@@ -91,6 +103,16 @@ public class OpenAiCompatibleMapper {
         }
         if (req.extra() != null) body.putAll(req.extra());
         return body;
+    }
+
+    /**
+     * OpenAI reasoning 模型（o1 / o3 / o4 系列）自动注入 reasoning_effort。
+     * 其他 model（含 deepseek-* / gpt-3.5 / gpt-4o）不注入。
+     */
+    static boolean isOpenAiReasonerModel(String model) {
+        if (model == null) return false;
+        String m = model.toLowerCase();
+        return m.startsWith("o1") || m.startsWith("o3") || m.startsWith("o4") || m.contains("o1-preview") || m.contains("o1-mini");
     }
 
     /**
@@ -156,6 +178,26 @@ public class OpenAiCompatibleMapper {
             JsonNode content = firstChoiceDeltaContent(root);
             if (content == null) return Optional.empty();
             return Optional.of(new StreamChunk.TextDelta(content.asText()));
+        }
+    }
+
+    /**
+     * 解析 choices[0].delta.reasoning_content → ThinkingDelta（add-reasoning-thinking-streaming）。
+     *
+     * <p>DeepSeek {@code deepseek-reasoner} 模型在增量响应里携带 reasoning_content 字段。
+     * 此 parser 必须在 content parser 之前，否则 content 与 reasoning 会被同个 delta 拆开。
+     */
+    static final class ChoiceReasoningParser implements SsePayloadParser {
+        @Override
+        public Optional<StreamChunk> parse(JsonNode root) {
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) return Optional.empty();
+            JsonNode delta = choices.get(0).path("delta");
+            JsonNode rc = delta.path("reasoning_content");
+            if (rc.isMissingNode() || rc.isNull() || rc.asText().isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(new StreamChunk.ThinkingDelta(rc.asText()));
         }
     }
 

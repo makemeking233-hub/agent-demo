@@ -162,5 +162,87 @@ class DeepSeekProviderTest {
                                         "期望 TextDelta 长度 300000；实际 " + chunks))
                 .verifyComplete();
     }
+
+    // ===== add-reasoning-thinking-streaming =====
+
+    @Test
+    void deepseekReasonerEmitsThinkingDelta() {
+        // deepseek-reasoner 模型返回 choices[0].delta.reasoning_content 字段
+        wm.stubFor(
+                post(urlEqualTo("/v1/chat/completions"))
+                        .willReturn(
+                                aResponse()
+                                        .withStatus(200)
+                                        .withHeader("Content-Type", "text/event-stream")
+                                        .withBody(
+                                                "data:"
+                                                    + " {\"choices\":[{\"delta\":{\"reasoning_content\":\"我先思考\"}}]}\n\n"
+                                                    + "data:"
+                                                    + " {\"choices\":[{\"delta\":{\"content\":\"答案\"}}]}\n\n"
+                                                    + "data: [DONE]\n\n")));
+
+        ChatRequest req =
+                new ChatRequest(
+                        "deepseek-reasoner",
+                        null,
+                        List.of(new Message.User("hello")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        Map.of());
+
+        StepVerifier.create(provider.streamChat(req).collectList())
+                .assertNext(
+                        chunks -> {
+                            long thinkingCount =
+                                    chunks.stream()
+                                            .filter(c -> c instanceof StreamChunk.ThinkingDelta)
+                                            .count();
+                            long textCount =
+                                    chunks.stream()
+                                            .filter(c -> c instanceof StreamChunk.TextDelta)
+                                            .count();
+                            assertTrue(
+                                    thinkingCount > 0,
+                                    "期望至少 1 个 ThinkingDelta，实际 " + chunks);
+                            assertTrue(textCount > 0, "期望至少 1 个 TextDelta，实际 " + chunks);
+                        })
+                .verifyComplete();
+    }
+
+    @Test
+    void deepseekChatDoesNotEmitThinkingDelta() {
+        // 普通 deepseek-chat 模型不返回 reasoning_content，应只发 TextDelta
+        wm.stubFor(
+                post(urlEqualTo("/v1/chat/completions"))
+                        .willReturn(
+                                aResponse()
+                                        .withStatus(200)
+                                        .withHeader("Content-Type", "text/event-stream")
+                                        .withBody(
+                                                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n"
+                                                    + "data: [DONE]\n\n")));
+
+        ChatRequest req =
+                new ChatRequest(
+                        "deepseek-chat",
+                        null,
+                        List.of(new Message.User("hello")),
+                        List.of(),
+                        1.0,
+                        1000,
+                        Map.of());
+
+        StepVerifier.create(provider.streamChat(req).collectList())
+                .assertNext(
+                        chunks -> {
+                            long thinkingCount =
+                                    chunks.stream()
+                                            .filter(c -> c instanceof StreamChunk.ThinkingDelta)
+                                            .count();
+                            assertEquals(0, thinkingCount, "deepseek-chat 不应触发 ThinkingDelta");
+                        })
+                .verifyComplete();
+    }
 }
 
