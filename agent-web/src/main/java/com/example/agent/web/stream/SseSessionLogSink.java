@@ -60,6 +60,7 @@ public class SseSessionLogSink implements SessionLogSink {
 
     @Override
     public void onTurnEnd(TurnResult result) {
-        stream.stop(streamId, "stop");
+        // add-session-stats-bar：先累加并推送 turn_stats，再发 message_stop 关流。
+        stream.onTurnEnd(streamId, result);
     }
 }
