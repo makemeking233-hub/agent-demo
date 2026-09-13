@@ -67,8 +67,12 @@
 
 ## 10. 文档 + 收尾
 
-- [ ] 10.1 新增 `docs/reasoning-thinking.md`（架构 + 缓存策略 + 三 provider 适配表 + 决策记录）
-- [ ] 10.2 写四件套：`docs/test-agent-demo/2026-09-04-reasoning-thinking/{test-design,test-cases,test-report,test-review}.md` + 更新 `test-guide.md` §2.9
-- [ ] 10.3 `openspec validate add-reasoning-thinking-streaming --type change --strict` 通过 + `openspec archive add-reasoning-thinking-streaming --yes` + commit + push
+> **回填说明（2026-09-13）**：以下 3 项在归档时漏勾，经核实产物均已落地后补勾——
+> `docs/reasoning-thinking.md`（75 行）、四件套 4 个文件与 `test-guide.md` 的 §1 登记表 + §2.9 详情
+> 均在 `91d1f7c` 落地；archive 与推送由 `91d1f7c` + `78e82a5` 完成。
+
+- [x] 10.1 新增 `docs/reasoning-thinking.md`（架构 + 缓存策略 + 三 provider 适配表 + 决策记录）
+- [x] 10.2 写四件套：`docs/test-agent-demo/2026-09-04-reasoning-thinking/{test-design,test-cases,test-report,test-review}.md` + 更新 `test-guide.md` §2.9
+- [x] 10.3 `openspec validate add-reasoning-thinking-streaming --type change --strict` 通过 + `openspec archive add-reasoning-thinking-streaming --yes` + commit + push
 
 
