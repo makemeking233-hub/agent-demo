@@ -357,6 +357,22 @@ mvn -pl agent-web verify # agent-web 模块（注意用 -DskipNpm=true 可跳过
 
 > `-DskipNpm=true` 只适用于纯后端迭代：此时不会生成前端产物，打出的 jar 不含界面，依赖产物的测试（如 SPA 回落）会被跳过而非失败。
 
+**⚠️ 改了前端必须重新构建，否则浏览器加载的仍是旧代码。** 这一条踩过坑：`static/` 是构建产物，源码改动不会自动进入被服务的 bundle，而 PWA 的 Service Worker 又把旧 assets 缓存了 30 天，表现就是"代码明明改了、行为一点没变"，排查方向极易被带偏。
+
+```bash
+cd agent-web/frontend && npm run build        # 重建产物到 src/main/resources/static/
+mvn -o -q -pl agent-web process-resources -DskipNpm=true   # 同步到 target/classes（从那里启动时用）
+```
+
+自查被服务的 bundle 里有没有你的改动（压缩后函数名会变，用**字符串字面量**当标记）：
+
+```bash
+grep -l "waitUntilIdle" agent-web/target/classes/static/assets/index-*.js   # 语音回声防护
+grep -l "最近归档"      agent-web/target/classes/static/assets/index-*.js   # 归档时间分档
+```
+
+> 从 `target/classes` 启动的长驻进程会**懒加载类与静态资源**，因此构建前最好先停掉应用（或改用拷贝出来的 jar 启动），否则可能在"下一次用到某个未加载的类/资源"时出错。
+
 ---
 
 ## 12. 阶段与已归档变更

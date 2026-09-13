@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { VoiceReader } from "./voice";
+import { looksLikeEcho } from "./voice";
 import type { Stt } from "./stt";
 
 export type VoiceState = "idle" | "loading" | "listening" | "sending";
@@ -7,9 +8,10 @@ export type VoiceState = "idle" | "loading" | "listening" | "sending";
 /**
  * 朗读结束到重新开麦之间的静音余量（毫秒）。
  *
- * <p>覆盖扬声器混响尾巴：TTS 的 onend 触发时房间里往往还有余音，立刻开麦会被识别到。
+ * <p>覆盖扬声器混响尾巴与"onend 早于音频真正播完"的情况：TTS 的 onend 触发时房间里往往还有
+ * 余音，立刻开麦会被识别到。用户反馈 400ms 仍能听到回声，放宽到 700ms。
  */
-export const ECHO_GUARD_MS = 400;
+export const ECHO_GUARD_MS = 700;
 
 export interface UseVoiceOptions {
   /** 异步获取 STT 实例（Vosk 需先加载模型，故用工厂 + 缓存）。 */
@@ -39,6 +41,11 @@ export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOpt
       // （扬声器 → 麦克风）。麦克风本应在朗读期间关闭，这里是第二道保险，防止时序缝隙
       // 把助手的话当成用户输入提交、进而形成自我循环。
       if (voice.isSpeaking()) return;
+      // 第三道保险：朗读刚结束时收到、且与我们刚说过的话高度重合的识别结果，同样按回声丢弃。
+      // 时序防护挡不住"扬声器余音落进刚打开的麦克风"与"onend 早于音频播完"两种情况；
+      // 语音识别对回声的转写往往是残缺错字的，靠字符重合率判定比整句比对可靠。
+      const recent = voice.recentSpeech();
+      if (recent && looksLikeEcho(t, recent)) return;
       // 只暂停监听（本轮处理中不捕捉声音），但循环仍“武装”，每轮结束由 onTurnEnd 恢复监听
       sttRef.current?.stop();
       setState("sending");

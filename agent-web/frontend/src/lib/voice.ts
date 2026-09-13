@@ -37,22 +37,40 @@ export interface VoiceReader {
    * @returns 播放结束后 resolve
    */
   waitUntilIdle(timeoutMs?: number): Promise<void>;
+  /**
+   * 最近朗读过的文本（默认最近 {@link DEFAULT_ECHO_WINDOW_MS} 毫秒内），供回声判定使用。
+   *
+   * @param withinMs 时间窗口（毫秒）
+   * @returns 拼接后的最近朗读文本；窗口内没有则空串
+   */
+  recentSpeech(withinMs?: number): string;
 }
 
-/** 攒够这么多字符才考虑朗读——把大量小增量合并成一次合成，避免逐字起停。 */
-export const MIN_CHUNK_CHARS = 12;
+/**
+ * 攒够这么多字符才考虑朗读——把大量小增量合并成一次合成，避免逐字起停。
+ *
+ * <p>取 24（约半句）而非更小值：每次合成之间浏览器 TTS 有可感知的停顿，句子切太碎会让整体
+ * 听感明显变慢，这比 rate 参数影响更大。
+ */
+export const MIN_CHUNK_CHARS = 24;
 
 /** 单次合成的最长字符数：长文没有句末标点时也要及时开口。 */
-export const MAX_CHUNK_CHARS = 80;
+export const MAX_CHUNK_CHARS = 120;
 
-/** 默认语速（略快于浏览器默认，缓解听感拖沓）。 */
-export const DEFAULT_RATE = 1.1;
+/** 默认语速。用户反馈默认/1.1 都偏慢，取 1.5（浏览器允许 0.1–10）。 */
+export const DEFAULT_RATE = 1.5;
 
 /** 等待播放结束时的轮询间隔（毫秒）。 */
 const IDLE_POLL_MS = 100;
 
 /** 等待播放结束的最长时限：浏览器不触发 onend 时不能把麦克风永久锁死。 */
 export const DEFAULT_IDLE_TIMEOUT_MS = 15000;
+
+/** 回声判定默认回看窗口：朗读结束后这段时间内收到、且与刚说过内容高度重合的识别结果按回声丢弃。 */
+export const DEFAULT_ECHO_WINDOW_MS = 10000;
+
+/** 保留最近多少条朗读文本用于回声比对。 */
+const SPOKEN_LOG_MAX = 8;
 
 /** 句末标点（含中文全角与省略号、换行）。 */
 const SENTENCE_END = /[。！？!?；;…\n]/;
@@ -114,6 +132,51 @@ function endsWithSentenceEnd(s: string): boolean {
   return trimmed.length > 0 && SENTENCE_END.test(trimmed[trimmed.length - 1]);
 }
 
+/** 归一化用于回声比对：去掉空白与标点，只留实义字符。 */
+function normalizeForCompare(s: string): string {
+  return (s ?? "").replace(/[\s\p{P}\p{S}]/gu, "");
+}
+
+/** 判定回声时，识别结果至少要有这么多实义字符（太短不作为判据）。 */
+export const ECHO_MIN_CHARS = 6;
+
+/** 判定回声的重合率阈值：识别结果中落到「刚说过的话」里的字符占比。 */
+export const ECHO_OVERLAP_THRESHOLD = 0.6;
+
+/**
+ * 判断一段识别结果是否疑似**把我们自己刚朗读的内容又听了回来**。
+ *
+ * <p>为什么需要它：时序防护（朗读期间不开麦）能挡住绝大部分回声，但挡不住两类残留——
+ * 扬声器到麦克风的物理串音发生在"朗读刚结束、麦克风刚打开"的缝隙里，以及部分浏览器
+ * {@code onend} 早于音频真正播放完。此时识别结果会带着助手刚说过的词。
+ *
+ * <p>判据是**字符重合率**而不是整句相等：语音识别对回声的转写通常是残缺、错字的
+ * （实测形如「再正常不过了一段时间凶手升级说稿费的那接下来想干」），逐字比对抓不住，
+ * 但"这句话里的字有多少比例刚被我说过"能抓住。用多重集合计数，避免重复字符被高估。
+ *
+ * @param heard 识别到的文本
+ * @param spoken 最近朗读过的文本（多句拼接）
+ * @returns 疑似回声则 true
+ */
+export function looksLikeEcho(heard: string, spoken: string): boolean {
+  const h = normalizeForCompare(heard);
+  if (h.length < ECHO_MIN_CHARS) return false;
+  const s = normalizeForCompare(spoken);
+  if (!s) return false;
+
+  const counts = new Map<string, number>();
+  for (const ch of s) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+  let hit = 0;
+  for (const ch of h) {
+    const n = counts.get(ch) ?? 0;
+    if (n > 0) {
+      hit++;
+      counts.set(ch, n - 1);
+    }
+  }
+  return hit / h.length >= ECHO_OVERLAP_THRESHOLD;
+}
+
 /**
  * 创建基于浏览器 speechSynthesis 的朗读器。
  *
@@ -124,6 +187,8 @@ export function createVoice(defaultMuted = false, rateOverride?: number): VoiceR
   let muted = defaultMuted;
   let buffer = "";
   let pending = 0;
+  /** 最近朗读过的文本 + 时间戳，供回声判定（只保留最近若干条）。 */
+  const spokenLog: { text: string; at: number }[] = [];
   const rate = rateOverride ?? DEFAULT_RATE;
   const synth: SpeechSynthesis | undefined =
     typeof window !== "undefined" ? window.speechSynthesis : undefined;
@@ -167,6 +232,9 @@ export function createVoice(defaultMuted = false, rateOverride?: number): VoiceR
       u.onend = settle;
       u.onerror = settle;
       synth.speak(u);
+      // 记录"刚说过什么"：回声判定靠它区分"用户说的话"与"我们自己的话被听回来"
+      spokenLog.push({ text: clean, at: Date.now() });
+      while (spokenLog.length > SPOKEN_LOG_MAX) spokenLog.shift();
     } catch {
       /* 朗读失败不阻断 */
     }
@@ -210,6 +278,7 @@ export function createVoice(defaultMuted = false, rateOverride?: number): VoiceR
     cancel() {
       buffer = "";
       pending = 0;
+      spokenLog.length = 0;
       try {
         synth?.cancel();
       } catch {
@@ -224,11 +293,19 @@ export function createVoice(defaultMuted = false, rateOverride?: number): VoiceR
       if (m) {
         buffer = "";
         pending = 0;
+        spokenLog.length = 0;
         synth?.cancel();
       }
     },
     isSpeaking() {
       return pending > 0;
+    },
+    recentSpeech(withinMs = DEFAULT_ECHO_WINDOW_MS) {
+      const since = Date.now() - withinMs;
+      return spokenLog
+        .filter((e) => e.at >= since)
+        .map((e) => e.text)
+        .join("");
     },
     waitUntilIdle(timeoutMs = DEFAULT_IDLE_TIMEOUT_MS) {
       if (pending === 0) return Promise.resolve();

@@ -8,7 +8,7 @@ function mockStt(startImpl?: (cb: (t: string) => void) => void): Stt {
   return { start: vi.fn(startImpl), stop: vi.fn() };
 }
 
-function mockVoice(opts: { speaking?: boolean } = {}): VoiceReader {
+function mockVoice(opts: { speaking?: boolean; recent?: string } = {}): VoiceReader {
   return {
     speak: vi.fn(),
     flush: vi.fn(),
@@ -17,6 +17,7 @@ function mockVoice(opts: { speaking?: boolean } = {}): VoiceReader {
     setMuted: vi.fn(),
     isSpeaking: vi.fn(() => opts.speaking ?? false),
     waitUntilIdle: vi.fn(async () => {}),
+    recentSpeech: vi.fn(() => opts.recent ?? ""),
   };
 }
 
@@ -144,6 +145,43 @@ describe("useVoiceChat", () => {
     act(() => cb!("这是助手自己说的话"));
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("朗读刚结束时把助手自己的话听回来 → 丢弃（第三道保险）", async () => {
+    // 真实样本：用户实测中 Vosk 把助手刚说的话残缺地转写出来
+    let cb: ((t: string) => void) | undefined;
+    const stt = mockStt((c) => (cb = c));
+    const voice = mockVoice({
+      recent: "从「眼角含小」到「现在看再正常不过了」，你这语音输入终于是走对了。那接下来想干点啥？",
+    });
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useVoiceChat({ getStt: async () => stt, voice, onSubmit, canSubmit: () => true }),
+    );
+    await act(async () => {
+      await result.current.start();
+    });
+
+    act(() => cb!("再正常不过了那接下来想干"));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("用户真的说话时正常提交（不被回声过滤误杀）", async () => {
+    let cb: ((t: string) => void) | undefined;
+    const stt = mockStt((c) => (cb = c));
+    const voice = mockVoice({ recent: "好的，我这就去看一下那个文件。" });
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useVoiceChat({ getStt: async () => stt, voice, onSubmit, canSubmit: () => true }),
+    );
+    await act(async () => {
+      await result.current.start();
+    });
+
+    act(() => cb!("帮我把那个日志文件删掉"));
+
+    expect(onSubmit).toHaveBeenCalledWith("帮我把那个日志文件删掉");
   });
 
   it("stop 停止监听与朗读", async () => {

@@ -3,6 +3,7 @@ import {
   MAX_CHUNK_CHARS,
   MIN_CHUNK_CHARS,
   createVoice,
+  looksLikeEcho,
   sanitizeForSpeech,
 } from "./voice";
 
@@ -76,10 +77,10 @@ describe("voice 按句聚合（improve-voice-readout）", () => {
     v.speak("，我是");
     expect(synth.speak).not.toHaveBeenCalled();
 
-    // 攒够长度且以句末标点收尾 → 一次合成
-    v.speak("助手，很高兴见到你。");
+    // 攒够长度（≥MIN_CHUNK_CHARS=24）且以句末标点收尾 → 一次合成，减少合成间停顿
+    v.speak("助手，很高兴见到你，我们现在就开始正式对话吧。");
     expect(synth.speak).toHaveBeenCalledTimes(1);
-    expect(spoken()[0]).toBe("你好，我是助手，很高兴见到你。");
+    expect(spoken()[0]).toBe("你好，我是助手，很高兴见到你，我们现在就开始正式对话吧。");
   });
 
   it("flush 把不足一句的尾巴读掉", () => {
@@ -101,7 +102,25 @@ describe("voice 按句聚合（improve-voice-readout）", () => {
     const v = createVoice();
     v.speak("。".repeat(MIN_CHUNK_CHARS));
     expect(synth.utterances[0].lang).toBe("zh-CN");
-    expect(synth.utterances[0].rate).toBeGreaterThan(1);
+    // 用户反馈默认与 1.1 都偏慢 → 默认 1.5
+    expect(synth.utterances[0].rate).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it("recentSpeech 返回刚朗读过的文本，供回声判定", () => {
+    const v = createVoice();
+    v.speak("这是一句会被朗读的话。");
+    v.flush();
+    expect(v.recentSpeech()).toContain("这是一句会被朗读的话");
+    // 窗口收缩到负值（即"未来"）则不再返回任何内容
+    expect(v.recentSpeech(-1)).toBe("");
+  });
+
+  it("cancel 清空最近朗读记录", () => {
+    const v = createVoice();
+    v.speak("一句会被朗读的话。");
+    v.flush();
+    v.cancel();
+    expect(v.recentSpeech()).toBe("");
   });
 
   it("优先选用中文音色", () => {
@@ -110,6 +129,36 @@ describe("voice 按句聚合（improve-voice-readout）", () => {
     const v = createVoice();
     v.speak("。".repeat(MIN_CHUNK_CHARS));
     expect(synth.utterances[0].voice).toBe(zh);
+  });
+});
+
+describe("looksLikeEcho（第三道回声保险）", () => {
+  // 真实样本：用户实测中 Vosk 把助手刚朗读的内容残缺转写出来
+  const SPOKEN =
+    "哈哈，好嘞，小白 那就正常聊起来了。从「眼角含小」到「现在看再正常不过了」，你这语音输入终于是走对了。那接下来想干点啥？随便聊也行，要我干活也行，你说";
+
+  it("识别出助手刚说过的话 → 判为回声", () => {
+    expect(looksLikeEcho("再正常不过了那接下来想干", SPOKEN)).toBe(true);
+  });
+
+  it("整句被听回来 → 判为回声", () => {
+    expect(looksLikeEcho("那接下来想干点啥", SPOKEN)).toBe(true);
+  });
+
+  it("用户独立说的话 → 不是回声", () => {
+    expect(looksLikeEcho("帮我把昨天那个日志文件清一下", SPOKEN)).toBe(false);
+  });
+
+  it("过短的结果不作为判据（避免误杀「好的」「嗯」）", () => {
+    expect(looksLikeEcho("好的", SPOKEN)).toBe(false);
+  });
+
+  it("没有任何朗读记录时不误判", () => {
+    expect(looksLikeEcho("随便说点什么吧", "")).toBe(false);
+  });
+
+  it("标点与空白不影响判定", () => {
+    expect(looksLikeEcho("再正常不过了，那接下来想干点啥？", SPOKEN)).toBe(true);
   });
 });
 
