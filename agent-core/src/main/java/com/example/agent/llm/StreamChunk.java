@@ -133,13 +133,28 @@ public sealed interface StreamChunk
     }
 
     /**
-     * token 计量（add-reasoning-thinking-streaming 增 {@code reasoningTokens} 单独计费）。
+     * token 计量（add-reasoning-thinking-streaming 增 {@code reasoningTokens} 单独计费；
+     * add-session-stats-bar 增缓存命中/未命中字段）。
      *
      * @param promptTokens     prompt 段 token 数
      * @param completionTokens completion 段 token 数（不含 reasoning）
      * @param reasoningTokens  reasoning 段 token 数（与 completion 独立计费，与上游 DeepSeek / OpenAI / Anthropic 对齐）
+     * @param cacheHitTokens   命中前缀缓存的 prompt token 数（可空 = provider 未返回该字段 → N/A）
+     * @param cacheMissTokens  未命中前缀缓存的 prompt token 数（可空 = provider 未返回该字段 → N/A）
      */
-    record Usage(int promptTokens, int completionTokens, int reasoningTokens) implements StreamChunk {
+    record Usage(
+            int promptTokens,
+            int completionTokens,
+            int reasoningTokens,
+            Integer cacheHitTokens,
+            Integer cacheMissTokens)
+            implements StreamChunk {
+
+        /** 3 参便捷构造：无缓存信息（缓存命中率按 N/A 处理）。 */
+        public Usage(int promptTokens, int completionTokens, int reasoningTokens) {
+            this(promptTokens, completionTokens, reasoningTokens, null, null);
+        }
+
         @Override
         public void accept(StreamChunkVisitor v) {
             v.visitUsage(this);
