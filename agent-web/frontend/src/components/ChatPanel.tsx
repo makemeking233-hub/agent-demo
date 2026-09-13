@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChatApi, type HistoryMessage, type PermissionMode } from "../api/chat";
+import { ChatApi, type HistoryMessage, type PermissionMode, type SessionStats } from "../api/chat";
 import { SseClient } from "../lib/sse-client";
 import { SseEvent } from "../lib/event-types";
 import { createVoice } from "../lib/voice";
@@ -9,6 +9,7 @@ import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
 import { PermissionCard } from "./PermissionCard";
+import { StatsBar } from "./StatsBar";
 import { ToolCallCard } from "./ToolCallCard";
 
 type Item =
@@ -105,10 +106,12 @@ function mapHistoryToItems(messages: HistoryMessage[]): Item[] {
   return items;
 }
 
-export function ChatPanel(props: { currentSessionId?: string | null }) {
+export function ChatPanel(props: { currentSessionId?: string | null; workspace?: string }) {
   const [busy, setBusy] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [streamId, setStreamId] = useState<string | null>(null);
+  // 底部统计状态栏数据（add-session-stats-bar）：首屏拉 stats API，运行时由 turn_stats 事件刷新。
+  const [stats, setStats] = useState<SessionStats | null>(null);
   // 权限模式（add-permission-mode-dropdown）：缺省 read_only；切换即调后端 setPermission；随 send 透传初始模式。
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("read_only");
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
@@ -169,14 +172,22 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     setStreamId(null);
     streamIdRef.current = null;
     sessionIdRef.current = next;
-    if (!next) return;
+    if (!next) {
+      setStats(null);
+      return;
+    }
     new ChatApi()
       .history(next)
       .then((h) => {
         setItems((prev) => (prev.length === 0 ? mapHistoryToItems(h.messages) : prev));
       })
       .catch(() => {});
-  }, [props.currentSessionId]);
+    // add-session-stats-bar：切换会话时回填该会话累计统计（首屏值）
+    new ChatApi()
+      .sessionStats(next, props.workspace)
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, [props.currentSessionId, props.workspace]);
 
   // 会话重进恢复：消息/会话变化时（防抖）写回 localStorage，供下次重进恢复。
   useEffect(() => {
@@ -206,6 +217,29 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
       }
       // 没有 assistant 文本项则追加一条
       return [...prev, { kind: "text", id: "a-" + Date.now(), role: "assistant", text }];
+    });
+  }
+
+  /**
+   * 追加 thinking（推理）内容到最后一条 assistant 消息项。
+   *
+   * <p>修复：add-reasoning-thinking-streaming 提交时只调用了本函数却未定义，收到 thinking delta 会抛
+   * ReferenceError（add-session-stats-bar 实施时一并补齐）。
+   */
+  function appendThinkingToLastAssistant(chunk: string) {
+    setItems((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const it = prev[i];
+        if (it.kind === "text" && it.role === "assistant") {
+          const updated = [...prev];
+          updated[i] = { ...it, thinking: (it.thinking ?? "") + chunk } as Item;
+          return updated;
+        }
+      }
+      return [
+        ...prev,
+        { kind: "text", id: "a-think-" + Date.now(), role: "assistant", text: "", thinking: chunk } as Item,
+      ];
     });
   }
 
@@ -259,10 +293,19 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
     } else if (ev.type === "message_delta" && ev.delta_type === "thinking") {
       // add-reasoning-thinking-streaming: 累加 thinking 到最后一条 assistant
       appendThinkingToLastAssistant(ev.content);
-    } else if (ev.type === "message_stop") {
-    } else if (ev.type === "message_delta" && ev.delta_type === "thinking") {
-      // add-reasoning-thinking-streaming: 累加 thinking 到最后一条 assistant
-      appendThinkingToLastAssistant(ev.content);
+    } else if (ev.type === "turn_stats") {
+      // add-session-stats-bar：用累计统计刷新底部状态栏
+      setStats({
+        turns: ev.turns,
+        steps: ev.steps,
+        tokens_in: ev.tokens_in,
+        tokens_out: ev.tokens_out,
+        llm_ms: ev.llm_ms,
+        tool_ms: ev.tool_ms,
+        avg_ttft_ms: ev.avg_ttft_ms,
+        tok_per_sec: ev.tok_per_sec,
+        cache_hit_rate: ev.cache_hit_rate,
+      });
     } else if (ev.type === "message_stop") {
       setBusy(false);
       setStreamId(null);
@@ -395,6 +438,8 @@ export function ChatPanel(props: { currentSessionId?: string | null }) {
         onVoiceToggle={handleVoiceToggle}
         onMuteToggle={handleMuteToggle}
       />
+      {/* 底部统计状态栏（add-session-stats-bar） */}
+      <StatsBar stats={stats} />
     </div>
   );
 }

@@ -60,6 +60,27 @@ export interface SessionSummary {
   time: number;
 }
 
+/** 工作区（add-workspaces-and-rename）。 */
+export interface Workspace {
+  name: string;
+  dir: string;
+  sessionCount: number;
+  lastActiveAt: number;
+}
+
+/** 会话累计统计（add-session-stats-bar）；派生指标不可用时为 null。 */
+export interface SessionStats {
+  turns: number;
+  steps: number;
+  tokens_in: number;
+  tokens_out: number;
+  llm_ms: number;
+  tool_ms: number;
+  avg_ttft_ms: number | null;
+  tok_per_sec: number | null;
+  cache_hit_rate: number | null;
+}
+
 export class ChatApi {
   constructor(private base: string = '') {}
 
@@ -180,6 +201,14 @@ export class ChatApi {
       body: JSON.stringify({ title }),
     });
     if (!r.ok) throw new Error(`renameSession ${r.status}`);
+  }
+
+  // 会话累计统计（add-session-stats-bar）
+  async sessionStats(sessionId: string, workspace?: string): Promise<SessionStats> {
+    const q = workspace ? `?workspace=${encodeURIComponent(workspace)}` : '';
+    const r = await fetch(this.base + `/api/sessions/${encodeURIComponent(sessionId)}/stats${q}`);
+    if (!r.ok) throw new Error(`sessionStats ${r.status}`);
+    return (await r.json()) as SessionStats;
   }
 
   // 归档（软删除）会话（add-session-management）
