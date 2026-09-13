@@ -13,6 +13,7 @@ import com.example.agent.permission.PermissionManager;
 import com.example.agent.permission.PermissionMode;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.signal.AbortSignal;
+import com.example.agent.stats.TurnDelta;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.ToolResult;
@@ -118,6 +119,31 @@ public class AgentLoop {
      * 当前轮次序号（context/snapshot 与 turn 事件用；每轮成功后自增）
      */
     private int currentTurn = 0;
+
+    // ---- add-session-stats-bar：本轮统计采集累加器（processTurn 开始时重置） ----
+
+    /** 本轮累计 LLM 耗时（毫秒，每次 streamChat 区间之和） */
+    private long accLlmMillis = 0;
+    /** 本轮累计工具耗时（毫秒） */
+    private long accToolMillis = 0;
+    /** 本轮工具调用次数（含失败） */
+    private long accSteps = 0;
+    /** 本轮累计 prompt token */
+    private long accTokensIn = 0;
+    /** 本轮累计 completion token */
+    private long accTokensOut = 0;
+    /** 本轮累计 reasoning token */
+    private long accReasoning = 0;
+    /** 本轮首 token 延迟累计（毫秒） */
+    private long accTtftMillis = 0;
+    /** 本轮首 token 延迟样本数 */
+    private long accTtftSamples = 0;
+    /** 本轮缓存命中 token 累计 */
+    private long accCacheHit = 0;
+    /** 本轮缓存未命中 token 累计 */
+    private long accCacheMiss = 0;
+    /** 本轮是否收到过缓存字段（决定缓存命中率是否 N/A） */
+    private boolean accCacheSeen = false;
 
     /**
      * 构造 Agent 主循环（无系统提示词；等价于 {@code systemPrompt = null}）。
@@ -324,6 +350,7 @@ public class AgentLoop {
      * @return 该轮拼接后的 {@link TurnResult}（finalMessage + token 累计）
      */
     public Mono<TurnResult> processTurn(Message.User userMsg) {
+        resetTurnAccumulators();
         sink.onTurnStart(currentTurn);
         sink.onUser(userMsg);
         history.append(userMsg);
@@ -345,9 +372,62 @@ public class AgentLoop {
                                             e.getClass().getSimpleName(),
                                             "message",
                                             truncate(e.getMessage())));
-                            sink.onTurnEnd(new TurnResult("", 0, 0, 0));
+                            sink.onTurnEnd(new TurnResult("", 0, 0, 0, currentTurnDelta()));
                             currentTurn++;
                         });
+    }
+
+    /** 重置本轮统计累加器（add-session-stats-bar）。 */
+    private void resetTurnAccumulators() {
+        accLlmMillis = 0;
+        accToolMillis = 0;
+        accSteps = 0;
+        accTokensIn = 0;
+        accTokensOut = 0;
+        accReasoning = 0;
+        accTtftMillis = 0;
+        accTtftSamples = 0;
+        accCacheHit = 0;
+        accCacheMiss = 0;
+        accCacheSeen = false;
+    }
+
+    /** 组装本轮统计增量（缓存未出现时两字段传 null → 上层按 N/A 处理）。 */
+    private TurnDelta currentTurnDelta() {
+        return new TurnDelta(
+                accSteps,
+                accTokensIn,
+                accTokensOut,
+                accReasoning,
+                accLlmMillis,
+                accToolMillis,
+                accTtftMillis,
+                accTtftSamples,
+                accCacheSeen ? (int) accCacheHit : null,
+                accCacheSeen ? (int) accCacheMiss : null);
+    }
+
+    /** 累加单个 chunk 携带的 usage（Usage chunk 或 Finished.usage）。 */
+    private void accumulateUsage(StreamChunk c) {
+        StreamChunk.Usage u;
+        if (c instanceof StreamChunk.Usage uu) {
+            u = uu;
+        } else if (c instanceof StreamChunk.Finished f && f.usage() != null) {
+            u = f.usage();
+        } else {
+            return;
+        }
+        accTokensIn += u.promptTokens();
+        accTokensOut += u.completionTokens();
+        accReasoning += u.reasoningTokens();
+        if (u.cacheHitTokens() != null) {
+            accCacheHit += u.cacheHitTokens();
+            accCacheSeen = true;
+        }
+        if (u.cacheMissTokens() != null) {
+            accCacheMiss += u.cacheMissTokens();
+            accCacheSeen = true;
+        }
     }
 
     /** 截断长文本（可观测性事件用，避免错误信息撑爆日志） */
@@ -368,8 +448,22 @@ public class AgentLoop {
             log.warn("hit maxToolIterations={}, stopping turn", iteration);
             return Flux.error(new MaxIterationsExceededException(iteration));
         }
+        // add-session-stats-bar：每次 streamChat 记一段 LLM 耗时；首个文本 chunk 记一次 TTFT 样本。
+        long startNs = System.nanoTime();
+        java.util.concurrent.atomic.AtomicBoolean firstTextSeen =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
         return provider.streamChat(toRequest())
-                .doOnNext(this::printChunk)
+                .doOnNext(
+                        c -> {
+                            if (c instanceof StreamChunk.TextDelta
+                                    && firstTextSeen.compareAndSet(false, true)) {
+                                accTtftMillis += (System.nanoTime() - startNs) / 1_000_000L;
+                                accTtftSamples++;
+                            }
+                            accumulateUsage(c);
+                            printChunk(c);
+                        })
+                .doFinally(sig -> accLlmMillis += (System.nanoTime() - startNs) / 1_000_000L)
                 .collectList()
                 .flatMapMany(
                         chunks -> {
@@ -515,6 +609,8 @@ public class AgentLoop {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Mono<List<ToolResult<Object>>> executeOne(ToolCall call, Tool tool) {
         if (tool == null) {
+            // add-session-stats-bar：工具不存在也是一次失败的调用 → 计入步数（耗时为 0）。
+            accSteps++;
             return Mono.just(
                     List.of(ToolResult.<Object>error(call.id(), "工具不存在: " + call.name())));
         }
@@ -527,7 +623,9 @@ public class AgentLoop {
                     // 强制用本次调用的真实 id 覆盖工具结果里的 toolCallId（工具常返回 null 或 "<auto>" 占位），
                     // 保证回流给模型的 tool_call_id 与 assistant tool_calls[].id 一致（否则 DeepSeek 400）
                     ToolResult<Object> typed = stampCallId(r, call.id());
-                    sink.onToolResult(typed, (System.nanoTime() - startNs) / 1_000_000L);
+                    long elapsed = (System.nanoTime() - startNs) / 1_000_000L;
+                    sink.onToolResult(typed, elapsed);
+                    recordToolExecution(elapsed);
                     return List.of(typed);
                 })
                 .onErrorResume(
@@ -535,9 +633,17 @@ public class AgentLoop {
                             log.warn("工具执行失败 [{}]: {}", call.name(), e.getMessage());
                             ToolResult<Object> err =
                                     ToolResult.error(call.id(), "工具执行失败: " + e.getMessage());
-                            sink.onToolResult(err, (System.nanoTime() - startNs) / 1_000_000L);
+                            long elapsed = (System.nanoTime() - startNs) / 1_000_000L;
+                            sink.onToolResult(err, elapsed);
+                            recordToolExecution(elapsed);
                             return Mono.just(List.of(err));
                         });
+    }
+
+    /** 记录一次工具执行（add-session-stats-bar）：步数 +1、工具耗时累加。 */
+    private void recordToolExecution(long elapsedMillis) {
+        accSteps++;
+        accToolMillis += elapsedMillis;
     }
 
     /**
@@ -664,6 +770,6 @@ public class AgentLoop {
                 completion += f.usage().completionTokens();
             }
         }
-        return new TurnResult(text, prompt, completion, 0);
+        return new TurnResult(text, prompt, completion, (int) accSteps, currentTurnDelta());
     }
 }
