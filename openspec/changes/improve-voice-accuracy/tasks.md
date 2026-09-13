@@ -2,10 +2,10 @@
 
 ## 1. 常量加固（回声防护参数）
 
-- [ ] 1.1 `voice.ts` 改 `ECHO_GUARD_MS = 700` → `1500`
-- [ ] 1.2 `voice.ts` 改 `ECHO_OVERLAP_THRESHOLD = 0.6` → `0.75`
-- [ ] 1.3 `voice.ts` 改 `DEFAULT_ECHO_WINDOW_MS = 10000` → `6000`
-- [ ] 1.4 `voice.test.ts` 更新 `looksLikeEcho` 测试用例以匹配新阈值（边界值 0.74 vs 0.75）
+- [x] 1.1 `useVoiceChat.ts` 改 `ECHO_GUARD_MS = 700` → `1500`（实际在 useVoiceChat.ts 不在 voice.ts）
+- [x] 1.2 `voice.ts` 改 `ECHO_OVERLAP_THRESHOLD = 0.6` → `0.75`
+- [x] 1.3 `voice.ts` 改 `DEFAULT_ECHO_WINDOW_MS = 10000` → `6000`
+- [x] 1.4 `voice.test.ts` 更新 `looksLikeEcho` 测试用例以匹配新阈值（边界值 0.74 vs 0.75 + 常量断言）
 
 ## 2. Vosk partial result 暴露
 
