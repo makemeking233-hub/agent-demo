@@ -69,3 +69,6 @@ secrets.yaml
 
 # 误提交的临时测试文件（agent-core main 下不应有 test 目录；Solution0831.java 误提交已 git rm 移除）
 agent-core/src/main/java/com/example/agent/test/
+
+# 本地简历/笔记/学习材料（仓库根目录临时存放，不提交）
+/Agent-Demo-简历-PathMatcher详解.txt
