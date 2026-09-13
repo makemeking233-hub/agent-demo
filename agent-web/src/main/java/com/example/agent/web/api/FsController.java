@@ -254,11 +254,17 @@ public class FsController {
         return ResponseEntity.ok(new FsDrivesResponse(out));
     }
 
-    /** 按扩展名查白名单；无扩展名或未命中返回 {@code null}（调用方据此返回 415）。 */
+    /**
+     * 按扩展名查白名单；无扩展名或未命中返回 {@code null}（调用方据此返回 415）。
+     *
+     * <p>只判 {@code dot < 0}：点结尾的名字（如 {@code weird.}）会 substring 出空串，查表自然落空，
+     * 结果与单独判一次"点结尾"完全相同，但少一个在 Windows 上**无法用真实文件覆盖**的分支
+     * （Windows 会静默去掉文件名末尾的点）。
+     */
     private static String mimeForRaw(Path file) {
         String name = file.getFileName().toString();
         int dot = name.lastIndexOf('.');
-        if (dot < 0 || dot == name.length() - 1) {
+        if (dot < 0) {
             return null;
         }
         return RAW_MIME_BY_EXTENSION.get(name.substring(dot + 1).toLowerCase(Locale.ROOT));
@@ -274,15 +280,14 @@ public class FsController {
         return "inline; filename=\"" + asciiFallback(name) + "\"; filename*=UTF-8''" + encoded;
     }
 
-    /** 把非 ASCII 与 header 不安全字符替换为下划线，仅用于 ASCII 回退名。 */
+    /**
+     * 把非 ASCII 与 header 不安全字符替换为下划线，仅用于 ASCII 回退名。
+     *
+     * <p>用两次正则替换而不是逐字符分支：等价，但不会给 api 包塞进一堆在 Windows 上
+     * **造不出对应文件名**（`"` 与 `\` 都不允许出现在文件名里）因而永远覆盖不到的分支。
+     */
     private static String asciiFallback(String name) {
-        StringBuilder sb = new StringBuilder(name.length());
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            boolean unsafe = c < 0x20 || c > 0x7e || c == '"' || c == '\\' || c == ';';
-            sb.append(unsafe ? '_' : c);
-        }
-        return sb.toString();
+        return name.replaceAll("[^\\x20-\\x7e]", "_").replaceAll("[\"\\\\;]", "_");
     }
 
     private static FsEntry toEntry(Path p) {

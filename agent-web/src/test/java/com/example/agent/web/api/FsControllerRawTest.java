@@ -177,6 +177,22 @@ class FsControllerRawTest {
         assertThat(resp.getBody()).extracting("error").isEqualTo("unsupported_media_type");
     }
 
+    @Test
+    void rawSanitizesSemicolonInAsciiFallbackFilename() throws IOException {
+        Path img = home.resolve("a;b.png");
+        Files.write(img, new byte[] {1});
+
+        ResponseEntity<?> resp = controller.raw(img.toString());
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String cd = resp.getHeaders().getFirst("Content-Disposition");
+        assertThat(cd).isNotNull();
+        // ASCII 回退名里 ; 被替换掉，避免被当成 header 参数分隔符
+        assertThat(cd).contains("filename=\"a_b.png\"");
+        // 完整原名走 RFC 5987 的 UTF-8 形式，不受替换影响
+        assertThat(cd).contains("filename*=UTF-8''a%3Bb.png");
+    }
+
     // ----- 响应头加固 -----
 
     @Test
