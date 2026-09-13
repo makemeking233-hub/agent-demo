@@ -26,6 +26,7 @@ import reactor.core.publisher.Mono;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -94,6 +95,14 @@ public class AgentLoop {
      * 模型名（{@code null} 时回落到 {@link #DEFAULT_MODEL}）
      */
     private volatile String model;
+
+    /**
+     * 思考强度（add-models-dropdown-v0；{@code null} = 不传，由 Provider 内部 fallback）。
+     *
+     * <p>运行时由 {@link #setReasoningEffort(String)} 切换；多线程可见（{@code volatile}）。
+     * 每次构造 {@code ChatRequest} 时通过 {@code extra} map 透传给 Provider。
+     */
+    private volatile String reasoningEffort;
 
     /**
      * 系统提示词（{@code null} 表示不注入 system 消息；由 SystemPromptBuilder 组装或用户 --system-prompt 覆盖）
@@ -317,6 +326,22 @@ public class AgentLoop {
     }
 
     /**
+     * 运行时切换思考强度（add-models-dropdown-v0；{@code /effort} slash 命令 + 前端下拉用）。volatile 保证多线程可见。
+     *
+     * <p>仅影响切换之后的新 ChatRequest，正在进行的 turn 不受影响（流中不切）。
+     *
+     * @param newEffort 新思考强度（{@code null} = 不切换；{@code low/medium/high} 之一）
+     */
+    public void setReasoningEffort(String newEffort) {
+        this.reasoningEffort = newEffort;
+    }
+
+    /** 当前思考强度（供 UI / 测试读取）。 */
+    public String reasoningEffort() {
+        return reasoningEffort;
+    }
+
+    /**
      * 运行时切换权限模式（add-permission-mode-dropdown；对齐 {@link #setModel} 的 volatile 范式）。
      *
      * <p>仅影响切换之后的新 {@link PermissionManager#decide}，正在执行的工具不受影响。
@@ -499,7 +524,7 @@ public class AgentLoop {
     }
 
     /**
-     * 组装当前 {@link ChatRequest}：工具 schema + 历史消息 + 默认采样参数。
+     * 组装当前 {@link ChatRequest}：工具 schema + 历史消息 + 默认采样参数 + 运行时配置（model / reasoningEffort）。
      *
      * @return 当前轮的聊天请求
      */
@@ -515,6 +540,14 @@ public class AgentLoop {
         List<com.example.agent.core.Message> msgs =
                 ToolCallPairing.repair(history.all());
         sink.onContextSnapshot(buildSnapshot(specs));
+        // add-models-dropdown-v0：把 volatile reasoningEffort 透传到 ChatRequest.extra，
+        // 让 OpenAI/Anthropic mapper 按各自规则写入请求 body（DeepSeek 忽略）。
+        // 用 LinkedHashMap 保留插入顺序，便于上游 mapper 调试日志可读。
+        Map<String, Object> extra = null;
+        if (reasoningEffort != null) {
+            extra = new LinkedHashMap<>();
+            extra.put("reasoning_effort", reasoningEffort);
+        }
         return new ChatRequest(
                 model != null ? model : DEFAULT_MODEL,
                 systemPrompt,
@@ -522,7 +555,7 @@ public class AgentLoop {
                 specs,
                 DEFAULT_TEMPERATURE,
                 DEFAULT_MAX_TOKENS,
-                null);
+                extra);
     }
 
     /**

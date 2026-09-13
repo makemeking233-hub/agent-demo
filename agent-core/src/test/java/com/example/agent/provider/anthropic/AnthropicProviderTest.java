@@ -34,6 +34,45 @@ class AnthropicProviderTest {
     }
 
     @Test
+    void reasoningEffortMapsToBudgetTokens() {
+        // add-models-dropdown-v0: reasoningEffort="low"/"medium"/"high" 折算为正确 budget_tokens
+        AnthropicProvider p = new AnthropicProvider("test-key");
+        // low
+        ChatRequest lowReq =
+                new ChatRequest(
+                        "claude-opus-4-20250514",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        4096,
+                        Map.of("reasoning_effort", "low"));
+        assertThat(p.buildRequestBody(lowReq)).contains("\"budget_tokens\":1024");
+        // medium
+        ChatRequest mediumReq =
+                new ChatRequest(
+                        "claude-opus-4-20250514",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        4096,
+                        Map.of("reasoning_effort", "medium"));
+        assertThat(p.buildRequestBody(mediumReq)).contains("\"budget_tokens\":4096");
+        // high
+        ChatRequest highReq =
+                new ChatRequest(
+                        "claude-opus-4-20250514",
+                        null,
+                        List.of(new Message.User("hi")),
+                        List.of(),
+                        1.0,
+                        4096,
+                        Map.of("reasoning_effort", "high"));
+        assertThat(p.buildRequestBody(highReq)).contains("\"budget_tokens\":16384");
+    }
+
+    @Test
     void nonThinkingModelRequestHasNoThinkingField() {
         AnthropicProvider p = new AnthropicProvider("test-key");
         ChatRequest req =
