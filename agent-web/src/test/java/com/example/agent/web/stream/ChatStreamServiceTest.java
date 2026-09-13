@@ -52,12 +52,14 @@ class ChatStreamServiceTest {
         // 用裸 any()（匹配含 null），因为默认 create 的 workspace / sink 可能为 null。
         when(runtime.sinkFor(any(), any(), any()))
                 .thenAnswer(inv -> inv.getArgument(2));
-        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any()))
+        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(
                         inv -> {
-                            SessionLogSink sink = inv.getArgument(2);
+                            // 参数顺序（与 ChatStreamService.create 对齐）: streamId, sessionId, model,
+                            // sessionSink, confirmer, abortSignal, mode, workspace
+                            SessionLogSink sink = inv.getArgument(3);
                             AgentLoop loop = loopWithMockProvider(sink);
-                            com.example.agent.permission.PermissionMode mode = inv.getArgument(5);
+                            com.example.agent.permission.PermissionMode mode = inv.getArgument(6);
                             if (mode != null) {
                                 loop.setPermissionMode(mode);
                             }
@@ -198,6 +200,29 @@ class ChatStreamServiceTest {
         ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
         assertThat(svc.workspaceExists(null)).isTrue();
         assertThat(svc.workspaceExists("")).isTrue();
+    }
+
+    /**
+     * fix-model-pass-through：ChatStreamService.create 必须把 SendRequest.model 透传给
+     * runtime.createLoop（不再吞掉）。验证 createLoop 第 3 个参数 == "deepseek-v4-flash-vision-exp"。
+     */
+    @Test
+    void passesRequestedModelToCreateLoop() {
+        WebAgentRuntime runtime = mock(WebAgentRuntime.class);
+        when(runtime.sinkFor(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
+        java.util.concurrent.atomic.AtomicReference<String> capturedModel =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            // 第 3 个参数 = model
+                            capturedModel.set(inv.getArgument(2));
+                            return null;
+                        });
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        // 用 add-models-dropdown-v0 已下发的非默认模型，验证真的透传而不是被硬编码覆盖
+        svc.create("session-1", "deepseek-v4-flash-vision-exp");
+        assertThat(capturedModel.get()).isEqualTo("deepseek-v4-flash-vision-exp");
     }
 }
 

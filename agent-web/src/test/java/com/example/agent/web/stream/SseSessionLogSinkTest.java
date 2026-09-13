@@ -24,7 +24,7 @@ class SseSessionLogSinkTest {
 
     private ChatStreamService realService(ChatStreamService.ActiveStream[] out) {
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
-        when(runtime.createLoop(anyString(), anyString(), any(SessionLogSink.class), any(), any()))
+        when(runtime.createLoop(anyString(), anyString(), anyString(), any(SessionLogSink.class), any(), any(), any(), any()))
                 .thenAnswer(
                         inv ->
                                 new AgentLoop(

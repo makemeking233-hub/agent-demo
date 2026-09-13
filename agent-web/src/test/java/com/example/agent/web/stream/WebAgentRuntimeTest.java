@@ -69,7 +69,7 @@ class WebAgentRuntimeTest {
     @Test
     void createLoopReturnsAgentLoop() {
         WebAgentRuntime rt = runtime(tmp);
-        var loop = rt.createLoop("s1", "s1", SessionLogSink.NOOP, null, null);
+        var loop = rt.createLoop("s1", "s1", "deepseek-chat", SessionLogSink.NOOP, null, null);
         assertThat(loop).isNotNull();
     }
 
@@ -83,7 +83,7 @@ class WebAgentRuntimeTest {
     @Test
     void createLoopWithConfirmerBuilds() {
         WebAgentRuntime rt = runtime(tmp);
-        var loop = rt.createLoop("s1", "s1", SessionLogSink.NOOP, com.example.agent.permission.PermissionConfirmer.allowAll(), null);
+        var loop = rt.createLoop("s1", "s1", "deepseek-chat", SessionLogSink.NOOP, com.example.agent.permission.PermissionConfirmer.allowAll(), null);
         assertThat(loop).isNotNull();
     }
 
@@ -251,7 +251,7 @@ class WebAgentRuntimeTest {
     void createLoopWithWorkspaceBuildsWithoutError() throws Exception {
         createWorkspace("md-main");
         WebAgentRuntime rt = runtime(tmp);
-        var loop = rt.createLoop("s1", "s-ws1", SessionLogSink.NOOP, null, null, null, "md-main");
+        var loop = rt.createLoop("s1", "s-ws1", "deepseek-chat", SessionLogSink.NOOP, null, null, null, "md-main");
         assertThat(loop).isNotNull();
     }
 }

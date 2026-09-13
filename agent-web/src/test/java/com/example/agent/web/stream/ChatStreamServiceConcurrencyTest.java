@@ -92,11 +92,12 @@ class ChatStreamServiceConcurrencyTest {
 
         WebAgentRuntime runtime = mock(WebAgentRuntime.class);
         when(runtime.sinkFor(any(), any(), any())).thenAnswer(inv -> inv.getArgument(2));
-        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any()))
+        when(runtime.createLoop(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenAnswer(
                         inv -> {
                             String sessionId = inv.getArgument(1);
-                            SessionLogSink sink = inv.getArgument(2);
+                            // 参数顺序: streamId, sessionId, model, sessionSink, confirmer, abortSignal, mode, workspace
+                            SessionLogSink sink = inv.getArgument(3);
                             return AgentLoopFactory.buildLoop(
                                     AgentConfig.defaults(),
                                     bySession.get(sessionId),
