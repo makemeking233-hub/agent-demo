@@ -42,11 +42,11 @@
 
 ## 7. 后端语音纠错端点
 
-- [ ] 7.1 新增 `VoiceCorrectionController.java`：`POST /api/chat/voice-correction` 接受 `{rawText, sessionId, recentTurns}`
-- [ ] 7.2 新增 `VoiceCorrectionService.java`：调 DeepSeek（含 1500ms 超时）；5 分钟内同 `rawText + recentTurns` 哈希缓存
-- [ ] 7.3 新增 `VoiceCorrectionRequest` / `VoiceCorrectionResponse` DTO
-- [ ] 7.4 新增 `VoiceCorrectionControllerTest` 覆盖正常/超时/5xx/缓存命中/缺 sessionId 五条路径
-- [ ] 7.5 加 sessionId 令牌桶限流（每会话每秒最多 5 次，超限返回 429）
+- [x] 7.1 新增 `VoiceCorrectionController.java`：`POST /api/chat/voice-correction` 接受 `{rawText, sessionId, recentTurns}`
+- [x] 7.2 新增 `VoiceCorrectionService.java`：调 DeepSeek（含 1500ms 超时）；5 分钟内同 `rawText + recentTurns` 哈希缓存
+- [x] 7.3 新增 `VoiceCorrectionRequest` / `VoiceCorrectionResponse` DTO
+- [x] 7.4 新增 `VoiceCorrectionControllerTest` 覆盖正常/超时/5xx/缓存命中/缺 sessionId 五条路径
+- [x] 7.5 加 sessionId 令牌桶限流（每会话每秒最多 5 次，超限返回 429）
 
 ## 8. 配置与启动门禁
 
