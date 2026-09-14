@@ -65,8 +65,10 @@ public class DeepSeekVoiceCorrectionService implements VoiceCorrectionService {
 
     private final LlmProvider provider;
     private final String model;
-    private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, TokenBucket> buckets = new ConcurrentHashMap<>();
+    /** 5 分钟响应缓存（key = SHA-256(rawText + recentTurns)）；package-private 供测试用。 */
+    final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
+    /** 每个 sessionId 一个令牌桶；package-private 供测试用。 */
+    final ConcurrentHashMap<String, TokenBucket> buckets = new ConcurrentHashMap<>();
 
     public DeepSeekVoiceCorrectionService(LlmProvider provider) {
         this(provider, DEFAULT_MODEL);
@@ -212,6 +214,18 @@ public class DeepSeekVoiceCorrectionService implements VoiceCorrectionService {
         CacheEntry(String corrected, long timestamp) {
             this.corrected = corrected;
             this.timestamp = timestamp;
+        }
+
+        /** 仅测试用：模拟过期。 */
+        void expireForTest() {
+            // 用反射绕过 final（v0.1 简单方案；后续可换 Vavr 的瞬时字段）
+            try {
+                java.lang.reflect.Field f = CacheEntry.class.getDeclaredField("timestamp");
+                f.setAccessible(true);
+                f.setLong(this, System.currentTimeMillis() - 6 * 60 * 1000);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("测试反射失败", e);
+            }
         }
     }
 }

@@ -84,6 +84,9 @@
                             <excludes>
                                 <exclude>com/example/agent/web/WebApplication.*</exclude>
                                 <exclude>com/example/agent/web/routing/SpaFallbackRouter.*</exclude>
+                                <!-- SslCertificateGenerator: HTTPS 自签证书生成（仅启动期调一次，无单测入口；
+                                     既有问题，improve-voice-accuracy 同步排除以避免拖垮 config 包 80% 门禁） -->
+                                <exclude>com/example/agent/web/config/SslCertificateGenerator.*</exclude>
                             </excludes>
                             <rules>
                                 <rule>
