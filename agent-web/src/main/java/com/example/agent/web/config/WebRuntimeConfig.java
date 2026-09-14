@@ -6,6 +6,8 @@ import com.example.agent.core.AgentLoopFactory;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
 import com.example.agent.tools.ToolRegistry;
+import com.example.agent.web.api.voice.DeepSeekVoiceCorrectionService;
+import com.example.agent.web.api.voice.VoiceCorrectionService;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import org.springframework.context.annotation.Bean;
@@ -61,6 +63,14 @@ public class WebRuntimeConfig {
     @Bean
     public TokenEstimator webTokenEstimator() {
         return new TokenEstimator();
+    }
+
+    /**
+     * 语音纠错服务（improve-voice-accuracy T7）：复用 {@link LlmProvider} bean 调 DeepSeek。
+     */
+    @Bean
+    public VoiceCorrectionService webVoiceCorrectionService() {
+        return new DeepSeekVoiceCorrectionService(webLlmProvider());
     }
 
     private static String pickFirstNonBlank(String... candidates) {
