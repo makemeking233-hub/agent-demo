@@ -47,17 +47,30 @@ public class WebRuntimeConfig {
     @Bean
     public LlmProvider webLlmProvider() {
         // 与 CLI 一致的 key 优先级: env > application-local.yml(agent.provider.api-key) > config.yaml
-        String apiKey =
-                pickFirstNonBlank(
-                        env.getProperty("DEEPSEEK_API_KEY"),
-                        env.getProperty("agent.provider.api-key"),
-                        cfg.provider().apiKey());
+        String apiKey = mergedDeepseekApiKey();
         return AgentLoopFactory.buildProvider(cfg, apiKey);
     }
 
+    /**
+     * web_search 与主对话共享 key 优先级（fix-websearch-key-priority T3）：
+     * 把 env-merged DeepSeek key 显式注入 buildTools，让 web_search tool
+     * 不再读 yaml 占位符。
+     */
     @Bean
     public ToolRegistry webToolRegistry() {
-        return AgentLoopFactory.buildTools(cfg);
+        return AgentLoopFactory.buildTools(
+                cfg,
+                mergedDeepseekApiKey(),
+                env.getProperty("TAVILY_API_KEY"),
+                env.getProperty("DEEPSEEK_SEARCH_BASE_URL"));
+    }
+
+    /** 与 {@link #webLlmProvider()} 同 key 优先级（DEEPSEEK_API_KEY env > agent.provider.api-key > yaml）。 */
+    private String mergedDeepseekApiKey() {
+        return pickFirstNonBlank(
+                env.getProperty("DEEPSEEK_API_KEY"),
+                env.getProperty("agent.provider.api-key"),
+                cfg.provider().apiKey());
     }
 
     @Bean

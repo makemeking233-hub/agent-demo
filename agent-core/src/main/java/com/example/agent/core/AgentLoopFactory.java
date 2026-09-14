@@ -71,7 +71,7 @@ public final class AgentLoopFactory {
     }
 
     /**
-     * 注册运行时工具集（内存工具 + shell + ls），并返回注册表。
+     * 注册运行时工具集（内存工具 + shell + ls），并返回注册表。CLI 默认路径，向后兼容。
      *
      * <p>工具沙箱参数来自 {@code cfg.shell()}，跨平台 adapter（Windows=cmd，其余=bash）。
      *
@@ -79,6 +79,28 @@ public final class AgentLoopFactory {
      * @return 组装好的 {@link ToolRegistry}
      */
     public static ToolRegistry buildTools(AgentConfig cfg) {
+        return buildTools(cfg, null, null, null);
+    }
+
+    /**
+     * 注册运行时工具集（fix-websearch-key-priority T2），支持显式注入 web_search keys。
+     *
+     * <p>Web 场景下用 env-merged keys 传入，让 web_search 与主对话（{@code ChatController.send}）
+     * 共享同一 key 优先级（{@code DEEPSEEK_API_KEY} env &gt; {@code agent.provider.api-key} yaml
+     * &gt; {@code cfg.provider().apiKey()}）。任一 keys 为 {@code null} → 沿用
+     * {@link WebSearchProviderFactory} 的默认路径（cfg + 系统环境变量）。
+     *
+     * @param cfg 已加载的配置
+     * @param deepseekApiKey DeepSeek search key（null 走 cfg）
+     * @param tavilyApiKey Tavily key（null 走 env）
+     * @param deepseekBaseUrl DeepSeek search base URL（null 走 env）
+     * @return 组装好的 {@link ToolRegistry}
+     */
+    public static ToolRegistry buildTools(
+            AgentConfig cfg,
+            String deepseekApiKey,
+            String tavilyApiKey,
+            String deepseekBaseUrl) {
         ToolRegistry tools = new ToolRegistry();
         ToolRegistry.registerMemoryTools(tools);
         boolean windows = System.getProperty("os.name").toLowerCase().contains("win");
@@ -106,13 +128,15 @@ public final class AgentLoopFactory {
             }
             ToolRegistry.registerMcpTools(tools, clients);
         }
-        // WebSearch：内置联网搜索（provider 实例化 + config 注入；CLI/web 共用同一装配）
+        // WebSearch：内置联网搜索（fix-websearch-key-priority：接受显式 keys 让 web 场景与主对话同 key 源）
         AgentConfig.Search search = cfg.search();
         int searchMax = search != null ? search.maxResults() : 5;
         int searchTimeout = search != null ? search.timeoutMs() : 60_000;
         tools.register(
                 new WebSearchTool(
-                        WebSearchProviderFactory.create(cfg), searchMax, searchTimeout));
+                        WebSearchProviderFactory.create(cfg, deepseekApiKey, tavilyApiKey, deepseekBaseUrl),
+                        searchMax,
+                        searchTimeout));
         return tools;
     }
 
