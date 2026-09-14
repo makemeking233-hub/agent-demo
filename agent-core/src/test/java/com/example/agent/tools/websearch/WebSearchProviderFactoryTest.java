@@ -57,7 +57,8 @@ class WebSearchProviderFactoryTest {
                 d.mcp(),
                 d.worktree(),
                 d.plugins(),
-                d.search());
+                d.search(),
+                d.voice());
     }
 
     private static AgentConfig withSearch(AgentConfig base, String provider) {
@@ -74,7 +75,8 @@ class WebSearchProviderFactoryTest {
                 base.worktree(),
                 base.plugins(),
                 new AgentConfig.Search(
-                        provider, base.search().maxResults(), base.search().timeoutMs()));
+                        provider, base.search().maxResults(), base.search().timeoutMs()),
+                base.voice());
     }
 }
 

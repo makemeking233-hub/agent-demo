@@ -63,7 +63,8 @@ public class ConfigLoader {
                     mergeMcp(base.mcp(), map),
                     mergeWorktree(base.worktree(), map),
                     mergePlugins(base.plugins(), map),
-                    mergeSearch(base.search(), map));
+                    mergeSearch(base.search(), map),
+                    mergeVoice(base.voice(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -100,7 +101,8 @@ public class ConfigLoader {
                 base.mcp(),
                 base.worktree(),
                 base.plugins(),
-                base.search());
+                base.search(),
+                base.voice());
     }
 
     /**
@@ -251,6 +253,33 @@ public class ConfigLoader {
                 str(m, "provider", base.provider()),
                 intVal(m, "maxResults", base.maxResults()),
                 intVal(m, "timeoutMs", base.timeoutMs()));
+    }
+
+    /**
+     * 合并 user yaml 的 {@code voice.postProcess.enabled} 段到 base（improve-voice-accuracy T8.2）。
+     *
+     * <p>YAML 结构示例：
+     * <pre>
+     * voice:
+     *   postProcess:
+     *     enabled: false
+     * </pre>
+     *
+     * @param base 当前 voice 配置
+     * @param map  user yaml 顶层字典
+     * @return 合并后的 {@link AgentConfig.Voice}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Voice mergeVoice(AgentConfig.Voice base, Map<String, Object> map) {
+        Object seg = map.get("voice");
+        if (!(seg instanceof Map<?, ?> vm)) return base;
+        Object pp = ((Map<String, Object>) vm).get("postProcess");
+        if (!(pp instanceof Map<?, ?> ppm)) return base;
+        Map<String, Object> m = (Map<String, Object>) ppm;
+        boolean enabled = m.containsKey("enabled")
+                ? BoolVal(m.get("enabled"), base.postProcess().enabled())
+                : base.postProcess().enabled();
+        return new AgentConfig.Voice(new AgentConfig.PostProcess(enabled));
     }
 
     /**

@@ -53,3 +53,9 @@ agent:
       after-days: 7
       # 调度间隔（毫秒），默认 6 小时；启动后先执行一次，之后按此间隔重复
       interval-ms: 21600000
+  # improve-voice-accuracy T8.3: ASR 后处理开关
+  # true: 前端 useVoiceChat 调 /api/chat/voice-correction（DeepSeek 语义纠错）；启动时校验 DeepSeek key
+  # false: 跳过纠错端点，仅用 dedupeRepeats 本地去重；启动时不要求 DeepSeek key
+  voice:
+    post-process:
+      enabled: true

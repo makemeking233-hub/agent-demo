@@ -54,7 +54,8 @@ class WorkspaceControllerTest {
                 def.mcp(),
                 def.worktree(),
                 def.plugins(),
-                def.search());
+                def.search(),
+                def.voice());
     }
 
     @Test

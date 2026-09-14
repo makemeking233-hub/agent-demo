@@ -60,5 +60,30 @@ class ConfigLoaderTest {
         assertEquals(5, cfg.search().maxResults());
         assertEquals(60000, cfg.search().timeoutMs());
     }
+
+    /** improve-voice-accuracy T8.2: voice.postProcess.enabled 默认 true。 */
+    @Test
+    void voicePostProcessEnabledByDefault() {
+        var cfg = new ConfigLoader().load(null);
+        assertEquals(true, cfg.voice().postProcess().enabled());
+    }
+
+    /** improve-voice-accuracy T8.2: yaml voice.postProcess.enabled=false 关闭 ASR 后处理。 */
+    @Test
+    void yamlCanDisableVoicePostProcess() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "voice:\n  postProcess:\n    enabled: false\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(false, cfg.voice().postProcess().enabled());
+    }
+
+    /** improve-voice-accuracy T8.2: voice 段缺失保留默认（true）。 */
+    @Test
+    void yamlVoiceMissingKeepsDefault() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "provider:\n  model: deepseek-chat\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(true, cfg.voice().postProcess().enabled());
+    }
 }
 

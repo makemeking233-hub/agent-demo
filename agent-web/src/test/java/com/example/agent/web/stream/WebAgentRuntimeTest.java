@@ -50,7 +50,8 @@ class WebAgentRuntimeTest {
                 def.mcp(),
                 def.worktree(),
                 def.plugins(),
-                def.search());
+                def.search(),
+                def.voice());
     }
 
     private WebAgentRuntime runtime(Path agentDataDir) {

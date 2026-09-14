@@ -56,7 +56,8 @@ class SessionControllerTest {
                 def.mcp(),
                 def.worktree(),
                 def.plugins(),
-                def.search());
+                def.search(),
+                def.voice());
     }
 
     private void writeSession(String sessionId, SessionEntry... entries) throws Exception {

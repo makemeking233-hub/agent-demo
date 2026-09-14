@@ -20,6 +20,7 @@ import java.util.Map;
  * @param worktree Worktree 隔离工作区配置
  * @param plugins 插件列表（add-plugin-system v1.0）。每个 Plugin 启动时由 PluginManager.init() 串行 init, 关闭时反序 close.
  * @param search 网络搜索配置（add-web-search-tool）：provider 选择 + 结果数 + 超时
+ * @param voice 语音相关配置（improve-voice-accuracy T8）：含 postProcess 开关
  */
 public record AgentConfig(
         Provider provider,
@@ -33,7 +34,8 @@ public record AgentConfig(
         Mcp mcp,
         Worktree worktree,
         List<PluginConfig> plugins,
-        Search search) {
+        Search search,
+        Voice voice) {
 
     public record PluginConfig(String className, Map<String, Object> config) {
         public PluginConfig {
@@ -90,6 +92,31 @@ public record AgentConfig(
      */
     public record Search(String provider, int maxResults, int timeoutMs) {}
 
+    /**
+     * 语音相关配置（improve-voice-accuracy T8）。
+     *
+     * @param postProcess ASR 后处理（含 partial 状态机 + DeepSeek 语义纠错 + dedupeRepeats）。
+     *                    关闭后前端跳过 contextCorrect 调用，仅依赖本地 dedupeRepeats。
+     */
+    public record Voice(PostProcess postProcess) {
+        public Voice {
+            postProcess = postProcess == null ? new PostProcess(true) : postProcess;
+        }
+    }
+
+    /**
+     * ASR 后处理开关（improve-voice-accuracy T8.3）。
+     *
+     * <p>{@code enabled=true} 时前端 useVoiceChat 会调 {@code /api/chat/voice-correction}
+     * 让 DeepSeek 做语义纠错；{@code enabled=false} 时跳过此调用（保留 dedupeRepeats 本地去重）。
+     *
+     * <p>启动门禁：{@code enabled=true} 但 DeepSeek API key 未配置 → 启动失败（详见
+     * {@link com.example.agent.web.config.WebConfig#validateVoiceConfig}）。
+     *
+     * @param enabled 是否启用 ASR 后处理（默认 true）
+     */
+    public record PostProcess(boolean enabled) {}
+
     public static AgentConfig defaults() {
         return new AgentConfig(
                 new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 8192),
@@ -128,6 +155,8 @@ public record AgentConfig(
                         false,
                         System.getProperty("user.home") + "/.agent-demo/worktrees"),
                 List.of(),
-                new Search("", 5, 60_000));
+                new Search("", 5, 60_000),
+                // improve-voice-accuracy T8: 默认开启 ASR 后处理（语义纠错）；DeepSeek key 由启动门禁校验。
+                new Voice(new PostProcess(true)));
     }
 }
