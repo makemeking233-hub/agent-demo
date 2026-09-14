@@ -2,69 +2,133 @@ package com.example.agent.web.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.agent.web.api.catalog.ModelCatalog;
+import com.example.agent.web.api.catalog.ProviderCatalogProperties;
+import com.example.agent.web.api.catalog.ProviderCatalogService;
 import com.example.agent.web.api.dto.ModelsResponse;
+import com.example.agent.web.api.dto.ProviderGroup;
+import com.example.agent.web.api.dto.ReasoningEffort;
+import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.env.MockEnvironment;
 
 /**
- * ModelsController（add-models-dropdown-v0）：返回每个 model 的 {@code reasoningEfforts} 数组。
+ * ModelsController（add-provider-catalog-abstract）：返回 {@code providers[]} 嵌套结构。
+ *
+ * <p>直接构造 {@link ModelCatalog} + {@link ModelsController}（不走 Spring 上下文）。
  */
 class ModelsControllerTest {
 
+    private static ModelCatalog catalogFrom(ProviderGroup... groups) {
+        return new ModelCatalog(List.of(groups));
+    }
+
+    private static ProviderGroup deepseekProvider() {
+        return new ProviderGroup(
+                "deepseek",
+                "DeepSeek",
+                List.of(
+                        new com.example.agent.web.api.dto.ModelEntry(
+                                "deepseek-v4-flash", "DeepSeek-V4-Flash", false, List.of()),
+                        new com.example.agent.web.api.dto.ModelEntry(
+                                "deepseek-reasoner",
+                                "DeepSeek Reasoner",
+                                true,
+                                List.of(
+                                        new ReasoningEffort("low", "Low", null),
+                                        new ReasoningEffort("medium", "Medium", null),
+                                        new ReasoningEffort("high", "High", null)))));
+    }
+
     @Test
-    void listsDeepseekV4FlashWithEmptyReasoningEfforts() {
-        MockEnvironment env = new MockEnvironment();
-        ModelsController c = new ModelsController(env);
+    void listsNestedProvidersWithDeepseekV4Flash() {
+        ModelCatalog catalog = catalogFrom(deepseekProvider());
+        ModelsController c = new ModelsController(catalog);
         ModelsResponse resp = c.list().block();
         assertThat(resp).isNotNull();
-        // 默认 supported-models = [deepseek-v4-flash, deepseek-reasoner, deepseek-v4-pro]
-        // 注意：v0.1 移除 deepseek-v4-flash-vision-exp（OpenAiCompatibleMapper 不支持多模态 content，
-        // 调用会 PrematureCloseException；v0.2+ 加 image_url 支持后再启用）。
-        assertThat(resp.models()).hasSize(3);
-        assertThat(resp.models()).extracting("id")
-                .doesNotContain("deepseek-v4-flash-vision-exp");
-        var v4Flash = resp.models().stream().filter(m -> "deepseek-v4-flash".equals(m.id())).findFirst().orElseThrow();
+        assertThat(resp.providers()).hasSize(1);
+        var deepseek = resp.providers().get(0);
+        assertThat(deepseek.id()).isEqualTo("deepseek");
+        assertThat(deepseek.name()).isEqualTo("DeepSeek");
+        assertThat(deepseek.models()).hasSize(2);
+        var v4Flash = deepseek.models().stream()
+                .filter(m -> "deepseek-v4-flash".equals(m.id()))
+                .findFirst()
+                .orElseThrow();
         assertThat(v4Flash.supportsReasoning()).isFalse();
         assertThat(v4Flash.reasoningEfforts()).isEmpty();
     }
 
     @Test
-    void listsDeepseekReasonerWithThreeEffortLevels() {
-        MockEnvironment env = new MockEnvironment();
-        ModelsController c = new ModelsController(env);
+    void reasonerExposesThreeEffortLevels() {
+        ModelCatalog catalog = catalogFrom(deepseekProvider());
+        ModelsController c = new ModelsController(catalog);
         ModelsResponse resp = c.list().block();
-        var reasoner = resp.models().stream().filter(m -> "deepseek-reasoner".equals(m.id())).findFirst().orElseThrow();
+        var reasoner = resp.providers().get(0).models().stream()
+                .filter(m -> "deepseek-reasoner".equals(m.id()))
+                .findFirst()
+                .orElseThrow();
         assertThat(reasoner.supportsReasoning()).isTrue();
-        assertThat(reasoner.reasoningEfforts()).containsExactly("low", "medium", "high");
+        assertThat(reasoner.reasoningEfforts()).hasSize(3);
+        assertThat(reasoner.reasoningEfforts()).extracting("id")
+                .containsExactly("low", "medium", "high");
     }
 
     @Test
-    void customSupportedModelsConfigReturned() {
-        MockEnvironment env = new MockEnvironment();
-        env.setProperty("agent.chat.supported-models", "o1,o1-mini");
-        ModelsController c = new ModelsController(env);
+    void emptyCatalogReturnsEmptyProviders() {
+        ModelCatalog catalog = new ModelCatalog(List.of());
+        ModelsController c = new ModelsController(catalog);
         ModelsResponse resp = c.list().block();
-        assertThat(resp.models()).hasSize(2);
-        // o1 / o1-mini 触发 supportsReasoning=true（包含 "o1"）
-        resp.models().forEach(m -> {
-            assertThat(m.supportsReasoning()).isTrue();
-            assertThat(m.reasoningEfforts()).containsExactly("low", "medium", "high");
-        });
+        assertThat(resp.providers()).isEmpty();
     }
 
     @Test
-    void deepseekV4ProSupportsReasoning() {
-        // add-deepseek-v4-models: deepseek-v4-pro 触发 supportsReasoning=true
-        MockEnvironment env = new MockEnvironment();
-        env.setProperty("agent.chat.supported-models", "deepseek-v4-flash,deepseek-v4-pro");
-        ModelsController c = new ModelsController(env);
+    void multipleProvidersOrderedByYml() {
+        ProviderGroup openai = new ProviderGroup(
+                "openai",
+                "OpenAI",
+                List.of(new com.example.agent.web.api.dto.ModelEntry(
+                        "o1", "o1", true,
+                        List.of(new ReasoningEffort("low", "Low", null)))));
+        ModelCatalog catalog = catalogFrom(deepseekProvider(), openai);
+        ModelsController c = new ModelsController(catalog);
         ModelsResponse resp = c.list().block();
-        assertThat(resp.models()).hasSize(2);
-        var v4Flash = resp.models().stream().filter(m -> m.id().equals("deepseek-v4-flash")).findFirst().orElseThrow();
-        assertThat(v4Flash.supportsReasoning()).isFalse();
-        assertThat(v4Flash.reasoningEfforts()).isEmpty();
-        var v4Pro = resp.models().stream().filter(m -> m.id().equals("deepseek-v4-pro")).findFirst().orElseThrow();
-        assertThat(v4Pro.supportsReasoning()).isTrue();
-        assertThat(v4Pro.reasoningEfforts()).containsExactly("low", "medium", "high");
+        assertThat(resp.providers()).extracting("id").containsExactly("deepseek", "openai");
+    }
+
+    // ----- ProviderCatalogService 启动校验 -----
+
+    @Test
+    void startupValidationRejectsSupportsReasoningFalseWithNonEmptyEfforts() {
+        // add-models-dropdown-v0 spec: supportsReasoning=false 必须 reasoningEfforts=[]
+        ProviderGroup bad = new ProviderGroup(
+                "bad",
+                "Bad",
+                List.of(new com.example.agent.web.api.dto.ModelEntry(
+                        "bad-model", "Bad", false,
+                        List.of(new ReasoningEffort("low", "Low", null)))));
+        ProviderCatalogProperties props = new ProviderCatalogProperties(
+                List.of(bad), "bad", "bad-model");
+        ProviderCatalogService svc = new ProviderCatalogService(props);
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                svc::init,
+                "supportsReasoning=false 但 reasoningEfforts 非空 → 启动必须失败");
+    }
+
+    @Test
+    void startupValidationRejectsEffortWithBlankId() {
+        ProviderGroup bad = new ProviderGroup(
+                "bad",
+                "Bad",
+                List.of(new com.example.agent.web.api.dto.ModelEntry(
+                        "bad-model",
+                        "Bad",
+                        true,
+                        List.of(new ReasoningEffort("", "Low", null)))));
+        ProviderCatalogProperties props = new ProviderCatalogProperties(
+                List.of(bad), "bad", "bad-model");
+        ProviderCatalogService svc = new ProviderCatalogService(props);
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class, svc::init);
     }
 }

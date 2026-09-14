@@ -1,53 +1,32 @@
 package com.example.agent.web.api;
 
+import com.example.agent.web.api.catalog.ModelCatalog;
 import com.example.agent.web.api.dto.ModelsResponse;
-import java.util.List;
 import org.springframework.context.annotation.Profile;
-import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
 /**
- * 模型列表端点（add-reasoning-thinking-streaming）。
+ * 模型列表端点（add-provider-catalog-abstract）。
  *
- * <p>{@code GET /api/chat/models} 返回当前 supported-models 列表（含 supportsReasoning 标记）。
- * 前端 ModelsDropdown 组件用此列表填充下拉。
+ * <p>{@code GET /api/chat/models} 返回 {@link ModelCatalog} 启动加载的嵌套目录
+ * ({@code providers[]} 结构,每个 provider 含其 models[] 与每个 model 的 reasoningEfforts[])。
+ * 前端 ModelSelect 两层菜单(外层 provider / 内层 model + effort 联动)消费此结构。
  */
 @RestController
 @RequestMapping("/api/chat")
 @Profile("web")
 public class ModelsController {
-    private final Environment env;
+    private final ModelCatalog catalog;
 
-    public ModelsController(Environment env) {
-        this.env = env;
+    public ModelsController(ModelCatalog catalog) {
+        this.catalog = catalog;
     }
 
     @GetMapping("/models")
     public Mono<ModelsResponse> list() {
-        List<String> ids = ModelRegistry.supportedModels(env);
-        var models =
-                ids.stream()
-                        .map(
-                                id -> {
-                                    boolean supportsReasoning = id.contains("reasoner")
-                                            || id.contains("o1")
-                                            || id.contains("o3")
-                                            || id.contains("thinking")
-                                            || id.contains("opus-4")
-                                            || id.contains("sonnet-4")
-                                            || id.contains("v4-pro");
-                                    // add-models-dropdown-v0：supportsReasoning=true 时返回三档固定 effort；
-                                    // 后续 change add-provider-catalog-abstract 升级为按 provider 动态化。
-                                    List<String> efforts =
-                                            supportsReasoning
-                                                    ? List.of("low", "medium", "high")
-                                                    : List.of();
-                                    return new ModelsResponse.Model(id, id, supportsReasoning, efforts);
-                                })
-                        .toList();
-        return Mono.just(new ModelsResponse(models));
+        return Mono.just(new ModelsResponse(catalog.providers()));
     }
 }

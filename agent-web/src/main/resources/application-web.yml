@@ -31,18 +31,34 @@ agent:
     #   -Dagent.web.trusted-hosts=192.168.1.0/24   (整个 /24 子网)
     #   -Dagent.web.trusted-hosts=192.168.1.42     (单 IP)
     trusted-hosts: []
-  # add-reasoning-thinking-streaming + add-deepseek-v4-models: 支持的 LLM 模型列表
-  # （逗号分隔；与 ModelRegistry 一致）。ModelsController 返回此列表。
-  # add-deepseek-v4-models: DeepSeek 2026-07-24 停用 deepseek-chat/reasoner，
-  # 统一升级到 V4 系列:
-  #   - deepseek-v4-flash: 默认非推理模型（平替 deepseek-chat）
-  #   - deepseek-reasoner: 推理模型（沿用 V3 名字，DeepSeek 保留 alias）
-  #   - deepseek-v4-pro: 旗舰推理模型（平替 deepseek-reasoner）
-  # 移除 deepseek-v4-flash-vision-exp：v0.1 OpenAiCompatibleMapper 不支持多模态
-  # content 字段（image_url），调用会 PrematureCloseException（v0.2 加支持）。
+  # add-provider-catalog-abstract: provider/model 分层目录（对齐 dsh web ModelProviderGroup）。
+  # 每个 provider 含其 models[],每个 model 含 supportsReasoning + reasoningEfforts[] 数组。
+  # ProviderCatalogService 启动校验 supportsReasoning=false 时 reasoning-efforts 必须为空。
+  # 旧 key supported-models 兼容：通过 System property -Dagent.chat.supported-models=... 兜底（task 3.3）。
   chat:
-    supported-models: deepseek-v4-flash,deepseek-reasoner,deepseek-v4-pro
-    # 缺省模型（前端 SendRequest.model 缺省时用）
+    providers:
+      - id: deepseek
+        name: DeepSeek
+        models:
+          - id: deepseek-v4-flash
+            name: DeepSeek-V4-Flash
+            supports-reasoning: false
+            reasoning-efforts: []
+          - id: deepseek-reasoner
+            name: DeepSeek Reasoner
+            supports-reasoning: true
+            reasoning-efforts:
+              - { id: low,    name: Low }
+              - { id: medium, name: Medium }
+              - { id: high,   name: High }
+          - id: deepseek-v4-pro
+            name: DeepSeek-V4-Pro
+            supports-reasoning: true
+            reasoning-efforts:
+              - { id: low,    name: Low }
+              - { id: medium, name: Medium }
+              - { id: high,   name: High }
+    default-provider: deepseek
     default-model: deepseek-v4-flash
   # auto-archive-stale-sessions: 超期会话自动归档
   session:
