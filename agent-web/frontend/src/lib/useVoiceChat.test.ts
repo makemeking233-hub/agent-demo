@@ -291,4 +291,99 @@ describe("useVoiceChat", () => {
     expect(onSubmit).toHaveBeenCalledWith("帮我看看日志文件");
     expect(result.current.lastPartial).toBe("");
   });
+
+  // improve-voice-accuracy T4.1：partial 连续 3 次相同 → 触发 final 提交
+  it("partial buf 内 3 个元素都等于最新 → 触发 final 提交", async () => {
+    let partialCb: ((t: string) => void) | undefined;
+    const stt = mockStt((_onFinal, onPartial) => {
+      partialCb = onPartial;
+      return Promise.resolve();
+    });
+    const voice = mockVoice();
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useVoiceChat({ getStt: async () => stt, voice, onSubmit, canSubmit: () => true }),
+    );
+    await act(async () => {
+      await result.current.start();
+    });
+
+    // 模拟 Vosk partial 渐进：3 次相同 = "凶手"
+    act(() => partialCb?.("凶手"));
+    act(() => partialCb?.("凶手"));
+    act(() => partialCb?.("凶手")); // 第 3 次相同 → 触发
+    expect(onSubmit).toHaveBeenCalledWith("凶手");
+    expect(result.current.state).toBe("sending");
+    expect(result.current.lastPartial).toBe("");
+  });
+
+  // T4：partial 触发 final 后，Vosk final 到达时不应重复提交
+  it("partial 触发 final 后，Vosk final 到达不再重复 onSubmit", async () => {
+    let cb: ((t: string) => void) | undefined;
+    let partialCb: ((t: string) => void) | undefined;
+    const stt = mockStt((onFinal, onPartial) => {
+      cb = onFinal;
+      partialCb = onPartial;
+      return Promise.resolve();
+    });
+    const voice = mockVoice();
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useVoiceChat({ getStt: async () => stt, voice, onSubmit, canSubmit: () => true }),
+    );
+    await act(async () => {
+      await result.current.start();
+    });
+
+    // partial 稳定触发
+    act(() => partialCb?.("帮我看看"));
+    act(() => partialCb?.("帮我看看"));
+    act(() => partialCb?.("帮我看看"));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith("帮我看看");
+
+    // Vosk final 到达（被 partial 触发后去重）
+    act(() => cb?.("帮我看看日志文件"));
+    // 验证 onSubmit 仍只调用 1 次（第二次被去重）
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  // improve-voice-accuracy T3.1+T5：filterShort 丢弃纯语气词 + dedupeRepeats 去重
+  it("filterShort 丢弃纯语气词（如「嗯」），dedupeRepeats 去重复模式", async () => {
+    let cb: ((t: string) => void) | undefined;
+    const stt = mockStt((onFinal, _onPartial) => {
+      cb = onFinal;
+    });
+    const voice = mockVoice();
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useVoiceChat({ getStt: async () => stt, voice, onSubmit, canSubmit: () => true }),
+    );
+    await act(async () => {
+      await result.current.start();
+    });
+
+    // 纯语气词 → 不提交
+    act(() => cb?.("嗯"));
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    // 重复模式 → 去重后提交"凶手"
+    act(() => cb?.("凶手凶手凶手"));
+    expect(onSubmit).toHaveBeenCalledWith("凶手");
+  });
+
+  // T5.3：postProcessEnabled 暴露在 hook return 里 + setPostProcessEnabled 可切换
+  it("暴露 postProcessEnabled 与 setPostProcessEnabled", async () => {
+    const stt = mockStt();
+    const voice = mockVoice();
+    const { result } = renderHook(() =>
+      useVoiceChat({ getStt: async () => stt, voice, onSubmit: vi.fn(), canSubmit: () => true }),
+    );
+
+    // 默认 true
+    expect(result.current.postProcessEnabled).toBe(true);
+    // 切换到 false
+    act(() => result.current.setPostProcessEnabled(false));
+    expect(result.current.postProcessEnabled).toBe(false);
+  });
 });
