@@ -57,9 +57,9 @@
 
 ## 9. 测试数据隔离
 
-- [ ] 9.1 所有 voice 相关测试用 mock Vosk 输出，不实际录音（已在各任务 T2.3/T3.4/T4.3/T6.4/T7.4 中体现）
-- [ ] 9.2 新增 `src/test/resources/fixtures/voice/README.md` 说明预录 wav 用法与清理要求
-- [ ] 9.3 集成测试用临时目录 `target/test-voice-tmp/`，测试 `tearDown` 钩子自动清理
+- [x] 9.1 所有 voice 相关测试用 mock Vosk 输出，不实际录音（已在各任务 T2.3/T3.4/T4.3/T6.4/T7.4 中体现）
+- [x] 9.2 新增 `src/test/resources/fixtures/voice/README.md` 说明预录 wav 用法与清理要求
+- [x] 9.3 集成测试用临时目录 `target/test-voice-tmp/`，测试 `tearDown` 钩子自动清理
 
 ## 10. 验证与归档
 
