@@ -15,11 +15,11 @@
 
 ## 3. ASR 后处理模块（前端）
 
-- [ ] 3.1 新增 `voicePostProcess.ts`：`dedupeRepeats(text)` 检测并去除连续重复模式（如"凶手凶手凶手" → "凶手"）
-- [ ] 3.2 新增 `voicePostProcess.ts`：`contextCorrect(rawText, recentTurns)` 通过 `/api/chat/voice-correction` 调 DeepSeek 纠错，含超时/5xx 降级路径
-- [ ] 3.3 新增 `voicePostProcess.ts`：`filterShort(text)` 过滤 <2 字或纯语气词（"嗯""啊"）避免空触发
-- [ ] 3.4 新增 `voicePostProcess.test.ts`：mock fetch 覆盖正常、超时、5xx、配置关闭四条路径
-- [ ] 3.5 新增 `VoiceApi.ts` 客户端（封装 fetch 调用 `/api/chat/voice-correction`）
+- [x] 3.1 新增 `voicePostProcess.ts`：`dedupeRepeats(text)` 检测并去除连续重复模式（如"凶手凶手凶手" → "凶手"）
+- [x] 3.2 新增 `voicePostProcess.ts`：`contextCorrect(rawText, recentTurns)` 通过 `/api/chat/voice-correction` 调 DeepSeek 纠错，含超时/5xx 降级路径
+- [x] 3.3 新增 `voicePostProcess.ts`：`filterShort(text)` 过滤 <2 字或纯语气词（"嗯""啊"）避免空触发
+- [x] 3.4 新增 `voicePostProcess.test.ts`：mock fetch 覆盖正常、超时、5xx、配置关闭四条路径（共 15 个用例）
+- [x] 3.5 新增 `VoiceApi.ts` 客户端（封装 fetch 调用 `/api/chat/voice-correction`）
 
 ## 4. partial result 稳定性判定
 
