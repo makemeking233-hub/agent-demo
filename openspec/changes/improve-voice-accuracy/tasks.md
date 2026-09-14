@@ -35,10 +35,10 @@
 
 ## 6. Composer partial UI
 
-- [ ] 6.1 `Composer.tsx` 新增 `<PartialResultDisplay>` 子组件：输入框正上方一行半透明灰色小字（字号 70%）
-- [ ] 6.2 订阅 `useVoiceChat` 的 partial 状态 + 纠错中状态（"纠错中..."）
-- [ ] 6.3 提交后立即清空；语音循环未启动时整行不渲染
-- [ ] 6.4 `Composer.test.tsx` 加测试：partial 显示、提交清空、未启动隐藏、纠错中占位
+- [x] 6.1 `Composer.tsx` 在输入框正上方渲染 partial display（半透明灰色小字 0.7em + italic + ellipsis）
+- [x] 6.2 订阅 `lastPartial` 状态 + `isProcessingVoice` 纠错中占位（显示「纠错中...」）
+- [x] 6.3 `lastPartial` 由 useVoiceChat 在提交后立即清空（已 T2.3 实现）；语音循环未启动（voiceState==idle）时不渲染
+- [x] 6.4 `Composer.test.tsx` 加 5 个用例（未启动不渲染 / 有内容渲染 / 空 partial 不渲染 / 纠错中占位 / 纠错中优先于 lastPartial）
 
 ## 7. 后端语音纠错端点
 
