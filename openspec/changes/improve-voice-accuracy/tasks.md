@@ -50,10 +50,10 @@
 
 ## 8. 配置与启动门禁
 
-- [ ] 8.1 `AgentConfig.java` 加 `voice: Voice` record（含 `postProcess: PostProcess(boolean enabled)`）
-- [ ] 8.2 `ConfigLoader.java` 加 `voice.postProcess.enabled` 解析，默认 `true`
-- [ ] 8.3 `application-web.yml` 加 `agent.voice.post-process.enabled: true` + `deepseek.api-key` 占位
-- [ ] 8.4 应用启动检查：`voice.postProcess.enabled=true` 但 DeepSeek key 未配置 → 启动失败，错误信息明确
+- [x] 8.1 `AgentConfig.java` 加 `voice: Voice` record（含 `postProcess: PostProcess(boolean enabled)`）
+- [x] 8.2 `ConfigLoader.java` 加 `voice.postProcess.enabled` 解析，默认 `true`
+- [x] 8.3 `application-web.yml` 加 `agent.voice.post-process.enabled: true` + `deepseek.api-key` 占位
+- [x] 8.4 应用启动检查：`voice.postProcess.enabled=true` 但 DeepSeek key 未配置 → 启动失败，错误信息明确
 
 ## 9. 测试数据隔离
 
