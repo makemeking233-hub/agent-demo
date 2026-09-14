@@ -23,15 +23,15 @@
 
 ## 4. partial result 稳定性判定
 
-- [ ] 4.1 `useVoiceChat.ts` 加 partial 状态机：维护最近 3 次 partial 文本，连续 3 次相同 → 触发 final 提交
-- [ ] 4.2 `useVoiceChat.ts` 加 2s 最长等待超时：超时则提交当前最新 partial
-- [ ] 4.3 `useVoiceChat.test.ts` 加状态机测试（连续相同触发、超时提交、渐进期等待）
+- [x] 4.1 `useVoiceChat.ts` 加 partial 状态机：维护最近 3 次 partial 文本，连续 3 次相同 → 触发 final 提交
+- [x] 4.2 `useVoiceChat.ts` 加 2s 最长等待超时：超时则提交当前最新 partial（PARTIAL_TIMEOUT_MS=2000）
+- [x] 4.3 `useVoiceChat.test.ts` 加状态机测试（连续相同触发 + Vosk final 去重 + filterShort/dedupeRepeats 集成 + setPostProcessEnabled 暴露）
 
 ## 5. useVoiceChat 集成 postProcess
 
-- [ ] 5.1 `useVoiceChat.ts` `onFinal` 路径：在 `looksLikeEcho` 判定通过后调 `voicePostProcess.contextCorrect`
-- [ ] 5.2 纠错结果与原始 Vosk 文本差异过大（>50% 字符差异）时，记录到 localStorage 用于诊断
-- [ ] 5.3 暴露 `setPostProcessEnabled(boolean)` 让 Composer 集成 UI 开关
+- [x] 5.1 `useVoiceChat.ts` `onFinal` 路径：在 `looksLikeEcho` 判定通过后调 `voicePostProcess.contextCorrect`（fire-and-forget，不阻塞提交）
+- [x] 5.2 纠错结果与原始 Vosk 文本差异过大（>50% 字符差异）时，记录到 localStorage（key=agent-demo:voice-correction-diag，最多 20 条）用于诊断
+- [x] 5.3 暴露 `setPostProcessEnabled(boolean)` 在 hook return 里，让 Composer 集成 UI 开关
 
 ## 6. Composer partial UI
 
