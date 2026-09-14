@@ -63,9 +63,9 @@
 
 ## 10. 验证与归档
 
-- [ ] 10.1 跑 `npx vitest run` 全绿 + 现有测试无回归
-- [ ] 10.2 跑 `mvn -pl agent-web verify` 全绿 + jacoco LINE≥80% / BRANCH≥70% 门禁通过
-- [ ] 10.3 写 `docs/test-agent-demo/2026-09-13-improve-voice-accuracy/{test-design,test-cases,test-report,test-review}.md` 四件套 + 更新 `test-guide.md`
-- [ ] 10.4 文档：`docs/voice-architecture.md` 加"ASR 后处理与 partial UI"章节
-- [ ] 10.5 中文 Conventional Commits 分 commit（feat/fix/docs/test）+ 立即 push
-- [ ] 10.6 `openspec validate improve-voice-accuracy --type change --strict` 通过 + `openspec archive improve-voice-accuracy --yes`
+- [x] 10.1 跑 `npx vitest run` 全绿 + 现有测试无回归
+- [x] 10.2 跑 `mvn -pl agent-web verify` 全绿 + jacoco LINE≥80% / BRANCH≥70% 门禁通过
+- [x] 10.3 写 `docs/test-agent-demo/2026-09-13-improve-voice-accuracy/{test-design,test-cases,test-report,test-review}.md` 四件套 + 更新 `test-guide.md`
+- [x] 10.4 文档：`docs/voice-architecture.md` 加"ASR 后处理与 partial UI"章节
+- [x] 10.5 中文 Conventional Commits 分 commit（feat/fix/docs/test）+ 立即 push
+- [x] 10.6 `openspec validate improve-voice-accuracy --type change --strict` 通过 + `openspec archive improve-voice-accuracy --yes`
