@@ -9,9 +9,9 @@
 
 ## 2. Vosk partial result 暴露
 
-- [ ] 2.1 `stt.ts` 接口扩展：`Stt.start(onFinal, onPartial?)`，`onPartial` 接受 Vosk `partialresult.text`
-- [ ] 2.2 `stt.ts` 在 recognizer.on("partialresult") 处回调 `onPartial`
-- [ ] 2.3 `voice.test.ts`/`useVoiceChat.test.ts` 加 partial 回调的 mock 测试
+- [x] 2.1 `stt.ts` 接口扩展：`Stt.start(onFinal, onPartial?)`，`onPartial` 接受 Vosk `partialresult.text`
+- [x] 2.2 `stt.ts` 在 recognizer.on("partialresult") 处回调 `onPartial`
+- [x] 2.3 `useVoiceChat.test.ts` 加 partial 回调的 mock 测试（mockStt 改 2 参数签名；新增 lastPartial state 暴露 + 提交后清空 2 用例）
 
 ## 3. ASR 后处理模块（前端）
 
