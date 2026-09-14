@@ -399,6 +399,25 @@ git push origin --delete feat/<change-id>   # 若该分支已 push 过
 
 **新增组件时注意**：补了该文件之后，"新加一个 `.module.css` 就多一条 TS2307"这条规律**不再成立**。若基线数字再变，先确认是不是又出现了同类假报错，而不要直接认定是自己写错了。
 
+### 2.8 外部源码参考目录
+
+后续 agent 接到「参考 xxx 源码」类需求时，应优先在 `E:\claude-projects\` 目录下查找——该目录托管常用源码项目，包括但不限于：
+
+| 项目 | 简介 |
+|------|------|
+| `agent-demo` | 本项目（Java Claude Code 风格 Agent CLI） |
+| `cc-switch` / `channels` / `claude-code-analysis` / `claude-code-gui` | Claude Code 相关辅助项目 |
+| `deepseek-harness` / `DeepSeek-Reasonix` / `pi-mono` | DeepSeek / Anthropic Claude 协议封装与衍生 |
+| `TencentDB-Agent-Memory` | 长期记忆 / 知识库相关 |
+| `FlClash` / `fullvidio` / `nacos` / `openclaw` / `rocket-mq` / `tv-box` | 其它常用参考源码 |
+
+#### 查找约定
+
+- **优先级**：`E:\claude-projects\` 本地优先；找不到再去 GitHub / 官方文档搜索
+- **多 agent 并行时**：注意 `E:\claude-projects\` 下可能有其他 agent 同时改动；只用 `git status` / `git diff` 读，不写不删不 commit（§2.7.4）
+- **跨项目引用**：禁止在 agent-demo 里引用 `E:\claude-projects\` 其它项目的源码路径（不构成可移植依赖）；如确需复用，参考其设计而非直接 copy
+- **新加项目**：在该目录下新建源码项目时，可在本节追加一行登记，便于后续 agent 检索
+
 ---
 
 ## 3. 关键决策摘要（供后续 Agent 快速对齐）
