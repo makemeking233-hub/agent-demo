@@ -97,6 +97,18 @@ public class AgentLoop {
     private volatile String model;
 
     /**
+     * Provider id 标识（add-provider-catalog-abstract；{@code null} = 由 caller 兜底）。
+     *
+     * <p>v0.1 (add-models-dropdown-v0) 只有 deepseek 单 provider,本字段是 v0.2 升级为多层 provider
+     * 后引入。运行时由 {@link #setProviderId(String)} 切换;多线程可见({@code volatile})。
+     * 每次构造 {@code ChatRequest} 时通过 {@code extra} map 透传给 Provider。
+     *
+     * <p>注:与上面的 {@link #provider} LlmProvider 字段不同——那是注入的 LLM 客户端实例,
+     * 本字段是 provider id 字符串(如 "deepseek" / "openai" / "anthropic")。
+     */
+    private volatile String providerId;
+
+    /**
      * 思考强度（add-models-dropdown-v0；{@code null} = 不传，由 Provider 内部 fallback）。
      *
      * <p>运行时由 {@link #setReasoningEffort(String)} 切换；多线程可见（{@code volatile}）。
@@ -342,6 +354,36 @@ public class AgentLoop {
     }
 
     /**
+     * add-provider-catalog-abstract：运行时切换 provider id。仅影响切换之后的新 {@code ChatRequest}。
+     *
+     * @param newProviderId 新 provider id（{@code null} 视为不切换）
+     */
+    public void setProviderId(String newProviderId) {
+        this.providerId = newProviderId;
+    }
+
+    /** 当前 provider id（供 UI / 测试读取；可能为 {@code null}）。 */
+    public String providerId() {
+        return providerId;
+    }
+
+    /**
+     * add-provider-catalog-abstract：复合 setter,同时切 providerId + model + reasoningEffort。
+     *
+     * <p>对齐 dsh web {@code setModelSelection} 语义。前端 ModelSelect 切换一次触发三个 volatile
+     * 字段一起更新,无需三次原子操作。
+     *
+     * @param newProviderId 新 provider id（{@code null} 保留旧值）
+     * @param newModel      新 model id（{@code null} 保留旧值）
+     * @param newEffort     新 reasoning effort（{@code null} 保留旧值）
+     */
+    public void setSelection(String newProviderId, String newModel, String newEffort) {
+        if (newProviderId != null) this.providerId = newProviderId;
+        if (newModel != null) this.model = newModel;
+        if (newEffort != null) this.reasoningEffort = newEffort;
+    }
+
+    /**
      * 运行时切换权限模式（add-permission-mode-dropdown；对齐 {@link #setModel} 的 volatile 范式）。
      *
      * <p>仅影响切换之后的新 {@link PermissionManager#decide}，正在执行的工具不受影响。
@@ -540,13 +582,15 @@ public class AgentLoop {
         List<com.example.agent.core.Message> msgs =
                 ToolCallPairing.repair(history.all());
         sink.onContextSnapshot(buildSnapshot(specs));
-        // add-models-dropdown-v0：把 volatile reasoningEffort 透传到 ChatRequest.extra，
-        // 让 OpenAI/Anthropic mapper 按各自规则写入请求 body（DeepSeek 忽略）。
-        // 用 LinkedHashMap 保留插入顺序，便于上游 mapper 调试日志可读。
+        // add-models-dropdown-v0 + add-provider-catalog-abstract：把 volatile reasoningEffort
+        // + providerId 透传到 ChatRequest.extra,让 OpenAI/Anthropic mapper 按各自规则写入
+        // 请求 body（DeepSeek 忽略 providerId）。用 LinkedHashMap 保留插入顺序,便于上游 mapper
+        // 调试日志可读。
         Map<String, Object> extra = null;
-        if (reasoningEffort != null) {
+        if (reasoningEffort != null || providerId != null) {
             extra = new LinkedHashMap<>();
-            extra.put("reasoning_effort", reasoningEffort);
+            if (providerId != null) extra.put("provider", providerId);
+            if (reasoningEffort != null) extra.put("reasoning_effort", reasoningEffort);
         }
         return new ChatRequest(
                 model != null ? model : DEFAULT_MODEL,
