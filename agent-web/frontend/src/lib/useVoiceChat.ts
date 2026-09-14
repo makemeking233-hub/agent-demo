@@ -30,8 +30,12 @@ export interface UseVoiceOptions {
  */
 export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOptions) {
   const [state, setState] = useState<VoiceState>("idle");
+  // improve-voice-accuracy T2.3：partial result 通过 React state 暴露给 UI（T6 partial UI 用）。
+  // T4 会在 useVoiceChat 加 partial 稳定性判定；T2 阶段只暴露给消费者。
+  const [lastPartial, setLastPartial] = useState<string>("");
   const sttRef = useRef<Stt | null>(null);
   const onFinalRef = useRef<(t: string) => void>(() => {});
+  const onPartialRef = useRef<(t: string) => void>(() => {});
   const runningRef = useRef(false);
 
   const onFinal = useCallback(
@@ -47,6 +51,8 @@ export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOpt
       // 语音识别对回声的转写往往是残缺错字的，靠字符重合率判定比整句比对可靠。
       const recent = voice.recentSpeech();
       if (recent && looksLikeEcho(t, recent)) return;
+      // 提交后清掉 partial UI（improve-voice-accuracy T6：partial UI 在提交后立即清空）
+      setLastPartial("");
       // 只暂停监听（本轮处理中不捕捉声音），但循环仍“武装”，每轮结束由 onTurnEnd 恢复监听
       sttRef.current?.stop();
       setState("sending");
@@ -56,6 +62,12 @@ export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOpt
   );
   onFinalRef.current = onFinal;
 
+  // partial 回调：更新 state（给 UI 看）；T4 会在此基础上加稳定性判定。
+  const onPartial = useCallback((text: string) => {
+    setLastPartial(text);
+  }, []);
+  onPartialRef.current = onPartial;
+
   /** 开始（或恢复）自由语音：懒加载 STT 并开始监听。 */
   const start = useCallback(async () => {
     runningRef.current = true;
@@ -63,7 +75,10 @@ export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOpt
     try {
       const stt = (sttRef.current ??= await getStt());
       setState("listening");
-      await stt.start((t) => onFinalRef.current(t));
+      await stt.start(
+        (t) => onFinalRef.current(t),
+        (p) => onPartialRef.current(p),
+      );
     } catch (e) {
       runningRef.current = false;
       setState("idle");
@@ -76,6 +91,7 @@ export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOpt
     runningRef.current = false;
     sttRef.current?.stop();
     voice.cancel();
+    setLastPartial("");
     setState("idle");
   }, [voice]);
 
@@ -113,12 +129,17 @@ export function useVoiceChat({ getStt, voice, onSubmit, canSubmit }: UseVoiceOpt
           return;
         }
         setState("listening");
-        return Promise.resolve(stt.start((t) => onFinalRef.current(t))).catch(() => {
+        return Promise.resolve(
+          stt.start(
+            (t) => onFinalRef.current(t),
+            (p) => onPartialRef.current(p),
+          ),
+        ).catch(() => {
           runningRef.current = false;
           setState("idle");
         });
       });
   }, [voice]);
 
-  return { state, start, stop, onAssistantDelta, onTurnEnd };
+  return { state, lastPartial, start, stop, onAssistantDelta, onTurnEnd };
 }
