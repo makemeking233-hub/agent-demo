@@ -82,6 +82,23 @@ class ModelsControllerTest {
     }
 
     @Test
+    void flatModelsFieldMirrorsProvidersForBackwardCompat() {
+        // add-provider-catalog-abstract 过渡期:前端 chat.ts 还在读 models[],
+        // 后端同时输出 providers + flat models,前端不报错
+        ModelCatalog catalog = catalogFrom(deepseekProvider());
+        ModelsController c = new ModelsController(catalog);
+        ModelsResponse resp = c.list().block();
+        assertThat(resp.providers()).hasSize(1);
+        assertThat(resp.models()).hasSize(2);
+        assertThat(resp.models()).extracting("id")
+                .containsExactlyInAnyOrder("deepseek-v4-flash", "deepseek-reasoner");
+        // flat 的 reasoningEfforts 是 String 列表,id 一致
+        var flatReasoner = resp.models().stream()
+                .filter(m -> "deepseek-reasoner".equals(m.id())).findFirst().orElseThrow();
+        assertThat(flatReasoner.reasoningEfforts()).containsExactly("low", "medium", "high");
+    }
+
+    @Test
     void multipleProvidersOrderedByYml() {
         ProviderGroup openai = new ProviderGroup(
                 "openai",

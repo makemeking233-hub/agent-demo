@@ -1,18 +1,53 @@
 package com.example.agent.web.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * {@code GET /api/chat/models} 响应（add-provider-catalog-abstract）。
+ * {@code GET /api/chat/models} 响应（add-provider-catalog-abstract + hotfix 兼容期）。
  *
  * <p>v0.1 (add-models-dropdown-v0) 是平铺 {@code models[]};v0.2 (本 change) 升级为嵌套
- * {@code providers[]},对齐 dsh web {@code ModelProviderGroup[]} 形态。前端两层菜单
- * (外层 provider / 内层 model) 直接消费此结构。
+ * {@code providers[]},对齐 dsh web {@code ModelProviderGroup[]} 形态。
  *
- * <p>BREAKING：响应字段名从 {@code models} 改为 {@code providers},每项从 {@link Model}
- * (含 {@code reasoningEfforts: List<String>}) 升级为 {@link ProviderGroup} +
- * {@link ModelEntry} + {@link ReasoningEffort} 三层嵌套。
+ * <p>本响应**同时输出两套字段**(过渡期兼容 add-models-dropdown-v0 阶段的前端 chat.ts
+ * 还在读 {@code models[]}):
+ *
+ * <ul>
+ *   <li>{@code providers}: 新嵌套结构,add-provider-catalog-abstract task 9 前端两层菜单消费</li>
+ *   <li>{@code models}: 平铺结构(从 providers 扁平化),前端 chat.ts 当前仍读此字段</li>
+ * </ul>
+ *
+ * <p>task 8 (前端 chat.ts 类型升级 + ModelSelect 两层菜单) 完成后会移除 {@code models}
+ * 平铺字段,正式 BREAKING。当前为过渡态。
  */
 public record ModelsResponse(@JsonProperty("providers") List<ProviderGroup> providers) {
+
+    /** 平铺 {@code models} 字段(过渡期兼容)。{@code @JsonInclude.ALWAYS} 强制输出,即便 providers 非空。 */
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    @JsonProperty("models")
+    public List<LegacyModel> models() {
+        List<LegacyModel> flat = new ArrayList<>();
+        if (providers != null) {
+            for (ProviderGroup p : providers) {
+                if (p.models() == null) continue;
+                for (ModelEntry m : p.models()) {
+                    flat.add(new LegacyModel(m.id(), m.id(), m.supportsReasoning(),
+                            m.reasoningEfforts().stream().map(ReasoningEffort::id).toList()));
+                }
+            }
+        }
+        return flat;
+    }
+
+    /**
+     * 平铺模型条目(add-models-dropdown-v0 形态,过渡期用)。
+     * 字段顺序与原 ModelsResponse.Model 保持一致(id / name / supportsReasoning / reasoningEfforts)。
+     */
+    public record LegacyModel(
+            @JsonProperty("id") String id,
+            @JsonProperty("name") String name,
+            @JsonProperty("supportsReasoning") boolean supportsReasoning,
+            @JsonProperty("reasoningEfforts") List<String> reasoningEfforts) {}
 }
