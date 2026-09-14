@@ -20,6 +20,21 @@
   box-shadow: var(--dsw-alias-shadow-md);
 }
 
+/* improve-voice-accuracy T6：Vosk partial result 显示在输入框正上方。
+   半透明灰色，字号为主输入框 70%，让用户能看见"在听什么"以便即时纠正。 */
+.partial {
+  align-self: stretch;
+  font-size: 0.7em;
+  color: var(--dsw-alias-fg-muted, #8b949e);
+  opacity: 0.7;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .slashHintItem {
   font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: 12px;

@@ -51,3 +51,61 @@ describe("Composer 语音按钮（add-voice-interaction）", () => {
     expect(screen.getByLabelText("关闭自由语音")).toBeInTheDocument();
   });
 });
+
+// improve-voice-accuracy T6：partial result UI
+describe("Composer partial UI（T6）", () => {
+  it("语音循环未启动（voiceState=idle）时，partial 不渲染", () => {
+    const { container } = render(
+      <Composer busy={false} onSend={() => {}} voiceState="idle" lastPartial="帮我看看" />,
+    );
+    // 无 .partial 元素
+    expect(container.querySelector('[class*="partial"]')).toBeNull();
+  });
+
+  it("voiceState=listening 且 lastPartial 非空时，渲染 partial 内容", () => {
+    render(
+      <Composer
+        busy={false}
+        onSend={() => {}}
+        voiceState="listening"
+        lastPartial="帮我看看日志"
+      />,
+    );
+    expect(screen.getByText("帮我看看日志")).toBeInTheDocument();
+  });
+
+  it("voiceState=listening 但 lastPartial 为空时，partial 不渲染", () => {
+    const { container } = render(
+      <Composer busy={false} onSend={() => {}} voiceState="listening" lastPartial="" />,
+    );
+    expect(container.querySelector('[class*="partial"]')).toBeNull();
+  });
+
+  it("isProcessingVoice=true 时显示「纠错中...」占位", () => {
+    render(
+      <Composer
+        busy={false}
+        onSend={() => {}}
+        voiceState="sending"
+        isProcessingVoice
+        lastPartial=""
+      />,
+    );
+    expect(screen.getByText("纠错中...")).toBeInTheDocument();
+  });
+
+  it("isProcessingVoice=true 优先于 lastPartial 显示", () => {
+    render(
+      <Composer
+        busy={false}
+        onSend={() => {}}
+        voiceState="sending"
+        isProcessingVoice
+        lastPartial="原始 partial"
+      />,
+    );
+    // 纠错中优先显示"纠错中..."
+    expect(screen.getByText("纠错中...")).toBeInTheDocument();
+    expect(screen.queryByText("原始 partial")).toBeNull();
+  });
+});

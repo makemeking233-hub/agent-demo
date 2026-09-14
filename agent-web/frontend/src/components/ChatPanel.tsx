@@ -547,6 +547,8 @@ export function ChatPanel(props: {
         model={currentModelEntry}
         reasoningEffort={reasoningEffort}
         onReasoningEffortChange={onReasoningEffortChange}
+        // improve-voice-accuracy T6：partial result UI
+        lastPartial={voiceChat.lastPartial}
       />
       {/* 底部统计状态栏（add-session-stats-bar） */}
       <StatsBar stats={stats} />

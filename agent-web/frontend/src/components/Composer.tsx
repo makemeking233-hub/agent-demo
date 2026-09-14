@@ -23,6 +23,11 @@ interface ComposerProps {
   reasoningEffort?: string;
   /** add-models-dropdown-v0: 思考强度切换回调 */
   onReasoningEffortChange?: (effort: string) => void;
+  // improve-voice-accuracy T6：partial result UI
+  /** Vosk 最新 partial 文本（空串 = 不显示） */
+  lastPartial?: string;
+  /** 是否正在调 LLM 纠错（contextCorrect fire-and-forget 进行中），显示"纠错中..."占位 */
+  isProcessingVoice?: boolean;
 }
 
 const SLASH_COMMANDS = ["/help", "/clear", "/resume", "/history", "/quit"];
@@ -57,6 +62,8 @@ function ComposerInner({
   model,
   reasoningEffort,
   onReasoningEffortChange,
+  lastPartial = "",
+  isProcessingVoice = false,
 }: ComposerProps) {
   const [value, setValue] = useState("");
   const [showSlashHint, setShowSlashHint] = useState(false);
@@ -83,11 +90,16 @@ function ComposerInner({
 
   const trimmed = value.trim();
   const voiceActive = voiceState !== "idle";
+  // T6：partial display 仅在语音循环已启动（voiceActive）且有内容时显示
+  const showPartial = voiceActive && (isProcessingVoice || lastPartial.length > 0);
+  const partialText = isProcessingVoice ? "纠错中..." : lastPartial;
   const { isOnline } = useOnline();
   const offline = !isOnline;
 
   return (
     <div className={styles.composer}>
+      {/* T6：partial display（输入框正上方，半透明灰色，语音循环未启动不渲染） */}
+      {showPartial && <div className={styles.partial}>{partialText}</div>}
       {showSlashHint && (
         <div className={styles.slashHint}>
           {SLASH_COMMANDS.filter((c) => c.startsWith(trimmed)).map((c) => (
