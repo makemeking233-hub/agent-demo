@@ -35,7 +35,7 @@
 
 .cubeRow {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
 
 .cube {
@@ -43,25 +43,40 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 12px 24px;
+  padding: 14px 16px;
   border: 1px solid var(--border, #e5e7eb);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--bg, #fff);
   color: var(--fg, #1f2937);
   cursor: pointer;
   font-size: 13px;
-  min-width: 88px;
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .cube:hover {
-  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+  background: var(--hover-bg, rgba(0, 0, 0, 0.04));
+  border-color: var(--border-hover, #d1d5db);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.cube:active {
+  transform: translateY(0);
 }
 
 .cube.selected {
   border-color: var(--accent, #2563eb);
-  background: var(--active-bg, rgba(59, 130, 246, 0.08));
+  background: var(--active-bg, rgba(59, 130, 246, 0.10));
   color: var(--accent, #2563eb);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), 0 2px 6px rgba(59, 130, 246, 0.10);
+}
+
+.cube.selected:hover {
+  background: var(--active-bg-hover, rgba(59, 130, 246, 0.14));
 }
 
 .select {
