@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
+import com.example.agent.llm.ChatRequest;
 import reactor.core.publisher.Flux;
 import reactor.netty.http.client.HttpClient;
 
@@ -45,6 +46,9 @@ public class AnthropicProvider implements LlmProvider {
     private static final int MAX_IN_MEMORY_BYTES = 16 * 1024 * 1024;
     private static final Duration DEFAULT_RESPONSE_TIMEOUT = Duration.ofSeconds(180);
     private static final Duration DEFAULT_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+
+    /** add-provider-catalog-abstract：本 provider 对应的 providerId（Anthropic） */
+    private static final String PROVIDER_ID = "anthropic";
 
     private final String apiKey;
     private final String baseUrl;
@@ -81,6 +85,24 @@ public class AnthropicProvider implements LlmProvider {
                         .build();
     }
 
+    /**
+     * add-provider-catalog-abstract：校验 {@code req.extra().get("provider")} 等于本 provider id。
+     *
+     * <p>多 provider 共存时,前端 ModelSelect 选择的 provider 必须与 AgentLoop 实际路由的 provider
+     * 一致,避免误把 Anthropic 请求发到 DeepSeek provider。若 {@code req.extra} 为空或不含
+     * "provider" 字段,跳过校验(向后兼容 v0.1 调用方)。
+     */
+    static void validateProvider(ChatRequest req) {
+        if (req.extra() == null) return;
+        Object v = req.extra().get("provider");
+        if (v == null) return;
+        if (!PROVIDER_ID.equals(v.toString())) {
+            throw new IllegalArgumentException(
+                    "AnthropicProvider expected provider=\"" + PROVIDER_ID
+                            + "\" but req.extra.provider=\"" + v + "\"");
+        }
+    }
+
     @Override
     public String name() {
         return "anthropic";
@@ -98,6 +120,8 @@ public class AnthropicProvider implements LlmProvider {
 
     @Override
     public Flux<StreamChunk> streamChat(ChatRequest req) {
+        // add-provider-catalog-abstract: 校验 req.extra 中的 provider 与本实例一致
+        validateProvider(req);
         String body = buildRequestBody(req);
         return http
                 .post()
