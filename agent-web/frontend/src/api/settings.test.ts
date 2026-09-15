@@ -80,4 +80,15 @@ describe("SettingsApi", () => {
     const api = new SettingsApi();
     expect(api.eventsUrl()).toBe("/api/settings/events");
   });
+
+  it("reveal returns revealed + path", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ revealed: true, path: "/home/x/settings.yaml" }),
+    });
+    const api = new SettingsApi();
+    const r = await api.reveal();
+    expect(r.revealed).toBe(true);
+    expect(r.path).toBe("/home/x/settings.yaml");
+  });
 });

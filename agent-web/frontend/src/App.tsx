@@ -7,6 +7,7 @@ import { SettingsModal } from "./components/SettingsModal";
 import { Sidebar, type SidebarSession } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { OnlineProvider } from "./hooks/useOnline";
+import { useThemeApplication } from "./hooks/useThemeApplication";
 import styles from "./App.module.css";
 
 function toSidebar(s: SessionSummary): SidebarSession {
@@ -14,6 +15,8 @@ function toSidebar(s: SessionSummary): SidebarSession {
 }
 
 export function App() {
+  // add-settings-general-items: 把 settings store 的 preference 应用到 <html data-theme>
+  useThemeApplication();
   const [sessions, setSessions] = useState<SidebarSession[]>([]);
   const [archived, setArchived] = useState<SidebarSession[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);

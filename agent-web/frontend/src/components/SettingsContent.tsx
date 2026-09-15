@@ -1,27 +1,63 @@
 /**
- * SettingsContent (add-settings-foundation M1).
+ * SettingsContent (add-settings-foundation M1 + add-settings-general-items M2 + add-settings-menu-placeholders M3).
  *
- * M1: 4 个菜单都显示占位文字（M2 接入具体设置项 / M3 接入模型 + 插件占位 / Agent 预设占位）。
+ * 路由 4 个菜单：通用设置 / 模型 / 插件 / Agent 预设.
+ * - 通用设置：M2 接入 4 个设置组件
+ * - 模型 / 插件 / Agent 预设：M3 占位
  */
 
-import styles from './SettingsModal.module.css';
+import { AppearanceCards } from "./AppearanceCards";
+import { EnterBehaviorSelect } from "./EnterBehaviorSelect";
+import { LanguageSelect } from "./LanguageSelect";
+import { PermissionModeSelect } from "./PermissionModeSelect";
+import styles from "./SettingsModal.module.css";
 
 interface SettingsContentProps {
   activeId: string;
 }
 
-const PLACEHOLDERS: Record<string, string> = {
-  'general': '通用设置内容将在 add-settings-general-items 接入',
-  'models': '模型设置将在 add-settings-menu-placeholders 接入',
-  'plugins': '插件设置将在 add-settings-menu-placeholders 接入',
-  'agent-presets': 'Agent 预设将在后续版本接入',
-};
-
-export function SettingsContent({ activeId }: SettingsContentProps) {
-  const text = PLACEHOLDERS[activeId] ?? PLACEHOLDERS['general'];
+function Placeholder({ text, testId }: { text: string; testId: string }) {
   return (
-    <div className={styles.placeholder} data-testid={`settings-content-${activeId}`}>
+    <div className={styles.placeholder} data-testid={testId}>
       {text}
     </div>
   );
+}
+
+export function SettingsContent({ activeId }: SettingsContentProps) {
+  if (activeId === "general") {
+    return (
+      <div data-testid="settings-content-general">
+        <AppearanceCards />
+        <PermissionModeSelect />
+        <LanguageSelect />
+        <EnterBehaviorSelect />
+      </div>
+    );
+  }
+  if (activeId === "models") {
+    return (
+      <Placeholder
+        text="模型设置将在 add-settings-menu-placeholders 接入"
+        testId="settings-content-models"
+      />
+    );
+  }
+  if (activeId === "plugins") {
+    return (
+      <Placeholder
+        text="插件设置将在 add-settings-menu-placeholders 接入"
+        testId="settings-content-plugins"
+      />
+    );
+  }
+  if (activeId === "agent-presets") {
+    return (
+      <Placeholder
+        text="Agent 预设将在后续版本接入"
+        testId="settings-content-agent-presets"
+      />
+    );
+  }
+  return <Placeholder text="未知菜单" testId="settings-content-unknown" />;
 }

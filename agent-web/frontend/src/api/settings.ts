@@ -51,6 +51,13 @@ export class SettingsApi {
     return body.path;
   }
 
+  /** POST /api/settings/reveal：在文件管理器中显示 */
+  async reveal(): Promise<{ revealed: boolean; path: string }> {
+    const r = await fetch(this.base + '/api/settings/reveal', { method: 'POST' });
+    if (!r.ok) throw new Error(`reveal ${r.status}`);
+    return (await r.json()) as { revealed: boolean; path: string };
+  }
+
   /** GET /api/settings/events SSE URL；浏览器原生 EventSource 用 */
   eventsUrl(): string {
     return this.base + '/api/settings/events';

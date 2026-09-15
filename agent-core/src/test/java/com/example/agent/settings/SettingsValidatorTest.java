@@ -58,4 +58,45 @@ class SettingsValidatorTest {
     void validateField_stringOk() {
         assertDoesNotThrow(() -> SettingsValidator.validateField("general.foo", "bar"));
     }
+
+    // ---------- M2 枚举校验 ----------
+
+    @Test
+    void validateField_appearanceValid() {
+        assertDoesNotThrow(() -> SettingsValidator.validateField("general.appearance.preference", "light"));
+        assertDoesNotThrow(() -> SettingsValidator.validateField("general.appearance.preference", "dark"));
+        assertDoesNotThrow(() -> SettingsValidator.validateField("general.appearance.preference", "system"));
+    }
+
+    @Test
+    void validateField_appearanceInvalid_throws() {
+        assertThrows(SettingsValidationException.class,
+                () -> SettingsValidator.validateField("general.appearance.preference", "neon"));
+    }
+
+    @Test
+    void validateField_permissionValid() {
+        for (String mode : new String[]{"plan", "ask", "danger-full", "dontAsk"}) {
+            assertDoesNotThrow(() -> SettingsValidator.validateField("general.permission.mode", mode));
+        }
+    }
+
+    @Test
+    void validateField_permissionInvalid_throws() {
+        assertThrows(SettingsValidationException.class,
+                () -> SettingsValidator.validateField("general.permission.mode", "super-admin"));
+    }
+
+    @Test
+    void validateField_enterBehaviorValid() {
+        for (String mode : new String[]{"send", "queue", "newSession"}) {
+            assertDoesNotThrow(() -> SettingsValidator.validateField("general.enterBehavior.mode", mode));
+        }
+    }
+
+    @Test
+    void validateField_enterBehaviorInvalid_throws() {
+        assertThrows(SettingsValidationException.class,
+                () -> SettingsValidator.validateField("general.enterBehavior.mode", "ignore"));
+    }
 }
