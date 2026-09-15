@@ -1,10 +1,10 @@
 # settings Capability（delta for polish-theme-toggle）
 
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: User can change appearance preference
+### Requirement: User can change appearance preference via TopBar popover
 
-（原 M1/M2 已定义 appearance 三卡片；本次仅改 UI 入口位置，行为不变）
+The TopBar theme button SHALL display the current preference icon (Sun for light, Moon for dark, Monitor for system) and SHALL open a popover containing 3 appearance cards when clicked.
 
 #### Scenario: User clicks TopBar theme button to open popover
 - **WHEN** the user clicks the theme button in TopBar
