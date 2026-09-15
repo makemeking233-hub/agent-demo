@@ -1,5 +1,5 @@
 /**
- * SettingsModal (add-settings-foundation M1).
+ * SettingsModal (add-settings-foundation M1 + add-settings-general-items M2).
  *
  * 居中 modal: 左 nav + 右 content.
  * 关闭路径: ESC / mask / X.
@@ -8,6 +8,7 @@
 
 import { X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
+import { OpenConfigButton } from './OpenConfigButton';
 import { SettingsContent } from './SettingsContent';
 import { SettingsNav, type SettingsNavItem } from './SettingsNav';
 import styles from './SettingsModal.module.css';
@@ -78,7 +79,9 @@ export function SettingsModal({ open, onClose, triggerElement }: SettingsModalPr
         </nav>
         <div className={styles.content}>
           <div className={styles.header}>
-            <div className={styles.actions}>{/* M2: 打开配置文件按钮 */}</div>
+            <div className={styles.actions}>
+              <OpenConfigButton />
+            </div>
             <button
               ref={closeButtonRef}
               type="button"

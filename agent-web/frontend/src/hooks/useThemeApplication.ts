@@ -1,0 +1,32 @@
+/**
+ * useThemeApplication (add-settings-general-items M2).
+ *
+ * 监听 settings store 的 appearance.preference，写入 <html data-theme>。
+ * preference=system 时跟随 prefers-color-scheme。
+ */
+
+import { useEffect } from "react";
+import { useSettingsStore } from "../hooks/useSettingsStore";
+
+export function useThemeApplication() {
+  const preference = useSettingsStore(
+    (s) => (s.snapshot?.general?.appearance as { preference?: string } | undefined)?.preference ?? "system",
+  );
+
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    function resolve(): "light" | "dark" {
+      if (preference === "system") return mql.matches ? "dark" : "light";
+      return preference === "dark" ? "dark" : "light";
+    }
+    function apply() {
+      document.documentElement.setAttribute("data-theme", resolve());
+    }
+    apply();
+    if (preference === "system") {
+      mql.addEventListener("change", apply);
+      return () => mql.removeEventListener("change", apply);
+    }
+    return undefined;
+  }, [preference]);
+}
