@@ -1,6 +1,6 @@
-# workspace-management Capability（delta for native-folder-picker）
+# settings Capability（delta for native-folder-picker）
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: User can create a new workspace via OS native folder picker
 
