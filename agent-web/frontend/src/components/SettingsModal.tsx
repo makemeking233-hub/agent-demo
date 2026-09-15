@@ -1,5 +1,5 @@
 /**
- * SettingsModal (add-settings-foundation M1 + add-settings-general-items M2).
+ * SettingsModal (add-settings-foundation M1 + add-settings-general-items M2 + add-settings-menu-placeholders M3).
  *
  * 居中 modal: 左 nav + 右 content.
  * 关闭路径: ESC / mask / X.
@@ -8,6 +8,7 @@
 
 import { X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
+import { ChatApi, type ModelEntry } from '../api/chat';
 import { OpenConfigButton } from './OpenConfigButton';
 import { SettingsContent } from './SettingsContent';
 import { SettingsNav, type SettingsNavItem } from './SettingsNav';
@@ -17,6 +18,12 @@ interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   triggerElement?: HTMLElement | null;
+  api: ChatApi;
+  model: string;
+  currentModelEntry: ModelEntry | null;
+  reasoningEffort: string;
+  onModelChange: (modelId: string) => void;
+  onReasoningEffortChange: (effort: string) => void;
 }
 
 const NAV_ITEMS: SettingsNavItem[] = [
@@ -26,7 +33,17 @@ const NAV_ITEMS: SettingsNavItem[] = [
   { id: 'agent-presets', label: 'Agent 预设' },
 ];
 
-export function SettingsModal({ open, onClose, triggerElement }: SettingsModalProps) {
+export function SettingsModal({
+  open,
+  onClose,
+  triggerElement,
+  api,
+  model,
+  currentModelEntry,
+  reasoningEffort,
+  onModelChange,
+  onReasoningEffortChange,
+}: SettingsModalProps) {
   const [activeId, setActiveId] = useState<string>('general');
   const titleId = useId();
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -94,7 +111,15 @@ export function SettingsModal({ open, onClose, triggerElement }: SettingsModalPr
             </button>
           </div>
           <div className={styles.options}>
-            <SettingsContent activeId={activeId} />
+            <SettingsContent
+              activeId={activeId}
+              api={api}
+              model={model}
+              currentModelEntry={currentModelEntry}
+              reasoningEffort={reasoningEffort}
+              onModelChange={onModelChange}
+              onReasoningEffortChange={onReasoningEffortChange}
+            />
           </div>
         </div>
       </div>

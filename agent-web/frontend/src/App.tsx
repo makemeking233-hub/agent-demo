@@ -244,6 +244,12 @@ export function App() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         triggerElement={settingsTriggerRef.current}
+        api={api}
+        model={model}
+        currentModelEntry={currentModelEntry}
+        reasoningEffort={reasoningEffort}
+        onModelChange={handleModelChange}
+        onReasoningEffortChange={handleReasoningEffortChange}
       />
     </OnlineProvider>
   );
