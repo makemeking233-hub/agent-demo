@@ -1,0 +1,136 @@
+# settings Specification
+
+## Purpose
+TBD - created by archiving change add-settings-foundation. Update Purpose after archive.
+## Requirements
+### Requirement: Settings modal is openable from TopBar
+
+The system SHALL display a centered modal dialog when the user clicks the settings (gear) button in the TopBar, replacing the previous alert placeholder.
+
+#### Scenario: Click gear button opens modal
+- **WHEN** the user clicks the TopBar gear button
+- **THEN** the system SHALL open a modal dialog with `role="dialog"` and `aria-modal="true"`
+- **AND** the modal title SHALL be "设置"
+
+#### Scenario: Modal is closable via three paths
+- **WHEN** the modal is open
+- **THEN** the system SHALL close the modal when any of these occurs:
+  - User presses the `Escape` key
+  - User clicks the modal mask (outside the panel)
+  - User clicks the close (×) button
+
+#### Scenario: Focus returns to trigger on close
+- **WHEN** the modal closes
+- **THEN** the system SHALL restore keyboard focus to the TopBar gear button that opened it
+
+### Requirement: Settings are persisted in a YAML file
+
+The system SHALL read and write user settings from `~/.agent-demo/settings.yaml`.
+
+#### Scenario: File does not exist on first launch
+- **WHEN** the settings file does not exist
+- **THEN** the system SHALL create the directory `~/.agent-demo/` if missing
+- **AND** the system SHALL create the file with default values
+
+#### Scenario: File is read with preserved unknown fields
+- **WHEN** the settings file contains fields not recognized by the current schema
+- **THEN** the system SHALL preserve those fields when writing back
+
+#### Scenario: Writes are atomic
+- **WHEN** the system writes the settings file
+- **THEN** the system SHALL use a temporary file + atomic rename
+- **AND** the system SHALL never leave a half-written file
+
+#### Scenario: File permissions follow JSONL 0700/0600 rule
+- **WHEN** the settings file or directory is created
+- **THEN** the directory SHALL have mode `0700`
+- **AND** the file SHALL have mode `0600`
+
+### Requirement: Settings API supports GET and PATCH
+
+The system SHALL expose a REST API at `/api/settings` for reading and updating settings.
+
+#### Scenario: GET returns full settings
+- **WHEN** a client calls `GET /api/settings`
+- **THEN** the system SHALL return `200 OK` with body `{ version, general, revision }`
+
+#### Scenario: PATCH updates a single field
+- **WHEN** a client calls `PATCH /api/settings/general/appearance/preference` with `{"value":"dark","revision":<n>}`
+- **THEN** the system SHALL validate the value
+- **AND** the system SHALL atomically write to the YAML file
+- **AND** the system SHALL return `200 OK` with the updated full settings (including new revision)
+
+#### Scenario: PATCH with invalid value returns 400
+- **WHEN** a client calls PATCH with a value not in the allowed enum
+- **THEN** the system SHALL return `400 Bad Request` with an error body
+- **AND** the system SHALL NOT modify the YAML file
+
+#### Scenario: PATCH with stale revision returns 409
+- **WHEN** a client calls PATCH with a `revision` that does not match the current revision on disk
+- **THEN** the system SHALL return `409 Conflict` with the latest full settings
+
+#### Scenario: GET nonexistent path returns 404
+- **WHEN** a client calls PATCH with a path not in the schema
+- **THEN** the system SHALL return `404 Not Found`
+
+### Requirement: Settings changes propagate via SSE
+
+The system SHALL broadcast a `settings.changed` SSE event whenever the YAML file is modified by any client or external editor.
+
+#### Scenario: External file change triggers SSE event
+- **WHEN** an external process writes to `~/.agent-demo/settings.yaml`
+- **THEN** the file watcher SHALL detect the change within 1 second
+- **AND** the system SHALL broadcast a `settings.changed` event to all connected SSE subscribers
+
+#### Scenario: PATCH through API triggers SSE event
+- **WHEN** a client successfully PATCHes a setting via the API
+- **THEN** the system SHALL broadcast a `settings.changed` event
+- **AND** the broadcasting client SHALL also receive the event (loopback consistency)
+
+#### Scenario: SSE connection auto-reconnects
+- **WHEN** the SSE connection is lost
+- **THEN** the client SHALL attempt to reconnect with exponential backoff (max 30s)
+- **AND** after reconnect the client SHALL call `GET /api/settings` to resync
+
+### Requirement: Frontend store exposes a single hook
+
+The system SHALL provide a `useSettingsStore()` React hook that exposes the current settings snapshot, a `patch(path, value)` function, and a `status` indicator.
+
+#### Scenario: Hook returns current snapshot
+- **WHEN** any component calls `useSettingsStore(s => s.snapshot)`
+- **THEN** the hook SHALL return the latest snapshot or `null` if not yet loaded
+
+#### Scenario: patch updates local state on success
+- **WHEN** a component calls `patch("general.appearance.preference", "dark")`
+- **AND** the server returns 200 with new snapshot
+- **THEN** the hook SHALL update the local snapshot
+- **AND** all subscribers SHALL re-render with the new value
+
+#### Scenario: patch preserves old value on error
+- **WHEN** a component calls `patch(...)`
+- **AND** the server returns 4xx
+- **THEN** the hook SHALL preserve the old snapshot value
+- **AND** the hook SHALL set the `error` field with details
+
+#### Scenario: Hook subscribes to SSE on first use
+- **WHEN** the hook is first called by any component
+- **THEN** the system SHALL call `GET /api/settings` to initialize
+- **AND** the system SHALL subscribe to `GET /api/settings/events` SSE endpoint
+
+### Requirement: Settings modal has 4-item left navigation
+
+The modal SHALL display a left navigation rail with exactly 4 menu items: 通用设置, 模型, 插件, Agent 预设.
+
+#### Scenario: Nav items render with correct labels and aria-current
+- **WHEN** the modal is open
+- **THEN** the system SHALL render 4 buttons with labels "通用设置", "模型", "插件", "Agent 预设"
+- **AND** the active item SHALL have `aria-current="true"`
+
+#### Scenario: Click nav item switches content area
+- **WHEN** the user clicks a nav item
+- **THEN** the content area SHALL render the corresponding section component
+
+#### Scenario: M1 content area shows placeholder
+- **WHEN** the user activates any nav item in M1
+- **THEN** the content area SHALL render a placeholder (M2 will replace for 通用设置; M3 for the rest)
+
