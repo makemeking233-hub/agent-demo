@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatApi, type ModelEntry, type SessionSummary, type Workspace } from "./api/chat";
 import { ChatPanel } from "./components/ChatPanel";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { PwaUpdatePrompt } from "./components/PwaUpdatePrompt";
+import { SettingsModal } from "./components/SettingsModal";
 import { Sidebar, type SidebarSession } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { OnlineProvider } from "./hooks/useOnline";
@@ -19,6 +20,9 @@ export function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<string>("agent-demo");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>("1");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // add-settings-foundation: 设置 modal 状态
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsTriggerRef = useRef<HTMLElement | null>(null);
   // add-models-dropdown-v0：模型/思考强度全局状态（App 持有，TopBar 和 ChatPanel 共享）
   const [model, setModel] = useState<string>("deepseek-chat");
   const [reasoningEffort, setReasoningEffort] = useState<string>("medium");
@@ -194,7 +198,10 @@ export function App() {
           api={api}
           model={model}
           onModelChange={handleModelChange}
-          onOpenSettings={() => alert("设置 v0.2 接入")}
+          onOpenSettings={() => {
+            settingsTriggerRef.current = document.activeElement as HTMLElement | null;
+            setSettingsOpen(true);
+          }}
         />
         <div
           className={
@@ -230,6 +237,11 @@ export function App() {
           </main>
         </div>
       </div>
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        triggerElement={settingsTriggerRef.current}
+      />
     </OnlineProvider>
   );
 }
