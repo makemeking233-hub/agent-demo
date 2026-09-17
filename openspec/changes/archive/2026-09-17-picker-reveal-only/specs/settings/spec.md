@@ -1,6 +1,6 @@
 # settings Capability（delta for picker-reveal-only）
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: User can create workspace via path input + reveal (no native picker)
 
