@@ -21,6 +21,8 @@ const NAME_RE = /^[A-Za-z0-9._-]+$/;
 const POLL_FAST_MS = 500;
 const POLL_SLOW_MS = 2000;
 const POLL_SWITCH_AFTER_MS = 30_000;
+/** picking 状态超过此秒数仍无 done/error/cancelled 时显示"对话框可能未显示"提示（fix-picker-hint） */
+const PICKING_HINT_AFTER_MS = 3000;
 
 function basenameOf(p: string): string {
   if (!p) return "";
@@ -46,6 +48,8 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
+  /** picking=true 持续 PICKING_HINT_AFTER_MS 后置 true；picking=false 时立即清掉（fix-picker-hint） */
+  const [pickingHint, setPickingHint] = useState(false);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const taskIdRef = useRef<string | null>(null);
 
@@ -89,6 +93,18 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
       /* ignore */
     }
   }, [open]);
+
+  // picking 持续过久提示（fix-picker-hint）：OS 对话框显示在 web server session，
+  // 用户可能看不到（headless / 远程 / 被挡）。picking=true 持续 PICKING_HINT_AFTER_MS
+  // 后给出"检查任务栏 / 直接输入路径"提示；picking=false 时立即清掉。
+  useEffect(() => {
+    if (!picking) {
+      setPickingHint(false);
+      return;
+    }
+    const t = setTimeout(() => setPickingHint(true), PICKING_HINT_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [picking]);
 
   async function handlePickFolder() {
     setPicking(true);
@@ -230,6 +246,14 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
         </header>
 
         {error && <div className={styles.wpErrorBanner}>{error}</div>}
+
+        {/* fix-picker-hint: picking 持续 >3s 时提示用户检查任务栏或手动输入路径 */}
+        {pickingHint && (
+          <div className={styles.wpHintBanner} data-testid="wp-pick-hint">
+            💡 已发送 OS 文件夹选择请求。如果 5 秒内没有看到弹窗，请检查任务栏 / Alt+Tab；
+            或直接点下方"取消"后在路径框里手动输入工作区目录。
+          </div>
+        )}
 
         <div className={styles.wpBody}>
           <div className={styles.wpRow}>

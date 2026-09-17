@@ -58,6 +58,16 @@
   border-bottom: 1px solid rgba(239, 68, 68, 0.2);
 }
 
+/* fix-picker-hint: picking 持续 >3s 提示用户检查任务栏或手动输入 */
+.wpHintBanner {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1e40af;
+  padding: 10px 20px;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.2);
+  line-height: 1.55;
+}
+
 .wpBody {
   padding: 24px 20px;
   display: flex;
