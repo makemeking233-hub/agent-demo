@@ -23,6 +23,7 @@ describe("WorkspacePickerModal (async)", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   function renderModal(overrides: Partial<Parameters<typeof WorkspacePickerModal>[0]> = {}) {
@@ -167,5 +168,31 @@ describe("WorkspacePickerModal (async)", () => {
     fireEvent.click(screen.getByTestId("wp-pick-folder"));
     await waitFor(() => expect(screen.getByTestId("wp-path-input")).toHaveValue("/Users/me/projects"));
     expect(localStorage.getItem("agent-demo.workspace-picker.last-path")).toBe("/Users/me/projects");
+  });
+
+  // ===== fix-picker-hint: picking 持续 >3s 显示提示 =====
+  it("shows hint banner after picking for 3 seconds without response", async () => {
+    fetchMock.mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) });
+    renderModal();
+    fireEvent.click(screen.getByTestId("wp-pick-folder"));
+    // 初始无提示
+    expect(screen.queryByTestId("wp-pick-hint")).toBeNull();
+    // 真实等 3.2s 触发 setTimeout（real timer 比 fake 更可靠地协调 React state）
+    await new Promise((r) => setTimeout(r, 3200));
+    expect(screen.getByTestId("wp-pick-hint")).toBeInTheDocument();
+    expect(screen.getByTestId("wp-pick-hint").textContent).toMatch(/任务栏|手动输入/);
+  });
+
+  it("hides hint banner once picking completes (status=done) within 3s", async () => {
+    // 第一次 POST 返回 task_id，第二次 poll 返回 done（poll 间隔 500ms，所以约 500ms 内完成）
+    fetchMock
+      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/Users/me/projects" }) });
+    renderModal();
+    fireEvent.click(screen.getByTestId("wp-pick-folder"));
+    // 等 done 触发（<1s 内，远小于 3s hint 阈值）
+    await waitFor(() => expect(screen.getByTestId("wp-path-input")).toHaveValue("/Users/me/projects"));
+    // 此时 picking=false，hint 不应出现
+    expect(screen.queryByTestId("wp-pick-hint")).toBeNull();
   });
 });
