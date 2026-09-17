@@ -13,6 +13,8 @@ import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
+import com.example.agent.permission.PermissionDecision;
+import com.example.agent.permission.PermissionMode;
 import com.example.agent.render.StreamingPrinter;
 import com.example.agent.tools.Tool;
 import com.example.agent.tools.ToolRegistry;
@@ -887,6 +889,113 @@ class AgentLoopTest {
         TurnResult r = loop.processTurn(new Message.User("hi")).block();
         assertEquals(null, r.delta().cacheHitTokens(), "provider 未返回缓存字段 → null(N/A)");
         assertEquals(null, r.delta().cacheMissTokens());
+    }
+
+    // ---- fix-full-access-bypass：FULL_ACCESS 短路工具级 ASK，但仍尊重工具级 DENY ----
+
+    @Test
+    void fullAccessBypassesToolAsk() {
+        // 工具自身 checkPermissions 返回 ASK；FULL_ACCESS 下应被短路为 ALLOW，工具应执行
+        // （验证：history 含 tool_result ok，而非 "用户拒绝执行" 错误）
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.ToolCallStart("1", "fake", null),
+                                new StreamChunk.ToolCallEnd("1", "fake", "{}"),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                // 第二轮：纯文本结束
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(FinishReason.STOP, null)));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        Tool<Object, Object> fakeTool = mock(Tool.class);
+        when(fakeTool.name()).thenReturn("fake");
+        when(fakeTool.description()).thenReturn("fake");
+        when(fakeTool.inputSchema()).thenReturn(java.util.Map.of());
+        when(fakeTool.parseArguments(any())).thenReturn("{}");
+        // 工具级 ASK（这是问题所在：之前会绕过 FULL_ACCESS）
+        when(fakeTool.checkPermissions(any(), any())).thenReturn(PermissionDecision.ask());
+        when(fakeTool.execute(any(), any())).thenReturn(Mono.just(ToolResult.ok("ran", "1")));
+        doReturn(fakeTool).when(tools).getRaw("fake");
+        when(tools.list()).thenReturn(List.of(fakeTool));
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+        // 切到 FULL_ACCESS：PermissionManager.decide 在该模式下短路为 allow
+        loop.setPermissionMode(PermissionMode.FULL_ACCESS);
+
+        TurnResult r = loop.processTurn(new Message.User("go")).block();
+        assertEquals("done", r.finalMessage());
+        // 工具成功执行 → history 中不应有 isError 的 tool_result
+        boolean hasErr =
+                hist.all().stream()
+                        .anyMatch(m -> m instanceof Message.ToolResult t && t.isError());
+        org.junit.jupiter.api.Assertions.assertFalse(hasErr,
+                "FULL_ACCESS 下工具级 ASK 应被短路，工具应执行成功（无错误 tool_result）");
+    }
+
+    @Test
+    void fullAccessPreservesToolDeny() {
+        // 工具自身 checkPermissions 返回 DENY；FULL_ACCESS 不应绕过 DENY 终态
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.ToolCallStart("1", "fake", null),
+                                new StreamChunk.ToolCallEnd("1", "fake", "{}"),
+                                new StreamChunk.Finished(FinishReason.TOOL_CALLS, null)))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("denied"),
+                                new StreamChunk.Finished(FinishReason.STOP, null)));
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        Tool<Object, Object> fakeTool = mock(Tool.class);
+        when(fakeTool.name()).thenReturn("fake");
+        when(fakeTool.description()).thenReturn("fake");
+        when(fakeTool.inputSchema()).thenReturn(java.util.Map.of());
+        when(fakeTool.parseArguments(any())).thenReturn("{}");
+        // 工具级 DENY（如路径越界 .. 兜底）：必须仍是终态
+        when(fakeTool.checkPermissions(any(), any())).thenReturn(PermissionDecision.deny());
+        when(fakeTool.execute(any(), any())).thenReturn(Mono.just(ToolResult.ok("should-not-run", "1")));
+        doReturn(fakeTool).when(tools).getRaw("fake");
+        when(tools.list()).thenReturn(List.of(fakeTool));
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        AgentLoop loop =
+                new AgentLoop(
+                        provider,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-chat",
+                        java.nio.file.Paths.get("."));
+        loop.setPermissionMode(PermissionMode.FULL_ACCESS);
+
+        loop.processTurn(new Message.User("go")).block();
+        // 工具应被拒绝 → history 含 isError tool_result（"权限拒绝: fake"）
+        boolean hasDeny =
+                hist.all().stream()
+                        .anyMatch(m -> m instanceof Message.ToolResult t && t.isError()
+                                && t.content().contains("权限拒绝"));
+        org.junit.jupiter.api.Assertions.assertTrue(hasDeny,
+                "FULL_ACCESS 不能绕过工具级 DENY（路径越界等终态必须保留）");
     }
 }
 

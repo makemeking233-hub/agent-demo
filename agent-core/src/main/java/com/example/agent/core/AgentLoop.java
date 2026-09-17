@@ -857,8 +857,18 @@ public class AgentLoop {
     /**
      * 合并全局策略（敏感路径 + 分类默认）与工具级 {@code checkPermissions}（含 {@code ..} 越界 deny）。
      *
-     * <p>deny 终态；任一 ask → ask；都 allow → allow。工具级 {@code checkPermissions} 为 {@code null}（mock
-     * 未 stub）时视作无意见。
+     * <p>裁决顺序：
+     *
+     * <ol>
+     *   <li>{@code DENY} 终态：任一为 DENY → DENY（含工具级 {@code ..} 越界兜底，FULL_ACCESS 也不绕过）
+     *   <li>{@code FULL_ACCESS} 短路：当前模式为 FULL_ACCESS 且全局 allow → ALLOW（工具默认 ASK 不再弹窗）
+     *   <li>任一 ASK → ASK（READ_ONLY / WORKSPACE_WRITE 维持原行为）
+     *   <li>其余 → ALLOW
+     * </ol>
+     *
+     * <p>fix-full-access-bypass：原逻辑把工具默认 ASK 与全局策略用 {@code OR} 合并，导致 FULL_ACCESS 仍弹窗。
+     *
+     * <p>工具级 {@code checkPermissions} 为 {@code null}（mock 未 stub）时视作无意见。
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private PermissionDecision resolvePermission(Tool tool, Object input) {
@@ -867,6 +877,12 @@ public class AgentLoop {
         if ((local != null && local.behavior() == PermissionDecision.Behavior.DENY)
                 || global.behavior() == PermissionDecision.Behavior.DENY) {
             return PermissionDecision.deny();
+        }
+        // FULL_ACCESS：PermissionManager 已短路敏感路径，global 在该模式下必为 allow；
+        // 工具默认 ASK 不再触发弹窗（与 PermissionManager 一致）。
+        if (mode == PermissionMode.FULL_ACCESS
+                && global.behavior() == PermissionDecision.Behavior.ALLOW) {
+            return PermissionDecision.allow();
         }
         if ((local != null && local.behavior() == PermissionDecision.Behavior.ASK)
                 || global.behavior() == PermissionDecision.Behavior.ASK) {
