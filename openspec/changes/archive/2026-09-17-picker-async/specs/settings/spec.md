@@ -1,6 +1,6 @@
 # settings Capability（delta for picker-async）
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: User can create a new workspace via OS native folder picker (async)
 
