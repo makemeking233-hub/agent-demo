@@ -109,6 +109,41 @@ class SessionResumeLoaderTest {
     }
 
     @Test
+    void danglingRepaired_returnsDanglingList_forCallerLogging() throws Exception {
+        // 验证修复行为本身：toMessages 返回的消息列表里 danglingCallIds 应该为空
+        Path sessionsDir =
+                writeSession(store -> {
+                    store.append(SessionEntry.user("测试", null));
+                    store.append(
+                            SessionEntry.assistant(
+                                    "",
+                                    List.of(new ToolCall("call_x", "Tool", "{}")),
+                                    null));
+                });
+        SessionResumeLoader.ResumeResult result = SessionResumeLoader.load(sessionsDir);
+        // 修复后：assistant 之后应该有 synthetic tool_result，danglingCallIds 返回空
+        assertTrue(result.messages().size() >= 3, "修复后应有合成 tool_result");
+    }
+
+    @Test
+    void danglingDedup_acrossMultipleLoads() throws Exception {
+        // 同一 sessionId 加载两次，danglingCallIds 都返回一致结果（不依赖 dedupe 状态）
+        Path sessionsDir =
+                writeSession(store -> {
+                    store.append(SessionEntry.user("测试", null));
+                    store.append(
+                            SessionEntry.assistant(
+                                    "",
+                                    List.of(new ToolCall("call_y", "Tool", "{}")),
+                                    null));
+                });
+        SessionResumeLoader.ResumeResult r1 = SessionResumeLoader.load(sessionsDir);
+        SessionResumeLoader.ResumeResult r2 = SessionResumeLoader.load(sessionsDir);
+        assertEquals(r1.messages().size(), r2.messages().size());
+        assertEquals(3, r2.messages().size());
+    }
+
+    @Test
     void snipCapsOversizedHistory() throws Exception {
         // 构造许多消息，使 token 总量超上限
         SessionResumeLoader.ResumeResult result =

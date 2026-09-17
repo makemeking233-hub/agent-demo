@@ -29,6 +29,14 @@ public final class SessionResumeLoader {
 
     private static final String ORPHAN_CALL_NAME = "resumed_tool";
 
+    /**
+     * 已记录"历史不配对"日志的 sessionId 集合（quiet-tool-pairing-warn）。
+     *
+     * <p>同一 session 多次加载时仅首次发现不配对才打日志；dedupe 在进程生命周期内有效。
+     */
+    private static final java.util.Set<String> seenRepairedSessions =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private SessionResumeLoader() {}
 
     /**
@@ -126,12 +134,13 @@ public final class SessionResumeLoader {
         List<Message> messages = new ArrayList<>(raw.messages());
         // 正向配对修复（repair-dangling-tool-calls）：某轮在「assistant 已落盘、tool_result 未落盘」
         // 之间被打断时，存档会停在有 tool_calls 无 tool_result 的中间态，此后每轮重放都会 400。
-        // 修复时打可检索告警（improve-failure-observability）：否则"这个会话曾被修复过"完全不可见。
+        // quiet-tool-pairing-warn：修复是正常数据恢复而非异常，INFO 级别 + dedupe 避免每次
+        // Sidebar 刷新都刷屏；同 sessionId 进程生命周期内仅首次打 INFO。
         List<String> dangling =
                 com.example.agent.core.ToolCallPairing.danglingCallIds(messages);
-        if (!dangling.isEmpty()) {
-            log.warn(
-                    "会话存档存在 tool_calls/tool_result 不配对，已自动补合成错误结果：sessionId={} 缺失 toolCallId={}",
+        if (!dangling.isEmpty() && sessionId != null && seenRepairedSessions.add(sessionId)) {
+            log.info(
+                    "首次发现历史不配对，已自动补合成错误结果：sessionId={} 缺失 toolCallId={}",
                     sessionId,
                     dangling);
         }
