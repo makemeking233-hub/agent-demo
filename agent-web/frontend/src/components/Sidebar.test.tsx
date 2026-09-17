@@ -112,12 +112,12 @@ describe("Sidebar 会话管理", () => {
     expect(p.onCreateWorkspace).not.toHaveBeenCalled();
   });
 
-  it("端到端：点击 + → 弹 Modal → 调 pick-folder → 选路径 → 改 name → 提交 → 调 onCreateWorkspace", async () => {
-    // mock POST /api/workspaces/pick-folder 返回固定路径
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ path: "/home/user/projects/agent-demo", reason: "" }),
-    });
+  it("端到端：点击 + → 弹 Modal → 调 pick-folder（异步 task_id）→ 轮询 → 选路径 → 改 name → 提交 → 调 onCreateWorkspace", async () => {
+    // mock POST → 202 + task_id；poll → done + path
+    const fetchMock = vi.fn();
+    fetchMock
+      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1", timeout_seconds: 300 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/home/user/projects/agent-demo" }) });
     vi.stubGlobal("fetch", fetchMock);
 
     const p = renderSidebar();
@@ -125,7 +125,7 @@ describe("Sidebar 会话管理", () => {
     fireEvent.click(screen.getByLabelText("新建工作区"));
     const dialog = await screen.findByRole("dialog", { name: "选择工作区目录" });
 
-    // 2. 点 "选择文件夹..." → fetch pick-folder → 路径自动填入 + name 默认 basename
+    // 2. 点 "选择文件夹..." → POST pick-folder → 轮询 → 路径自动填入 + name 默认 basename
     fireEvent.click(within(dialog).getByTestId("wp-pick-folder"));
     await waitFor(() =>
       expect(within(dialog).getByTestId("wp-path-input")).toHaveValue(

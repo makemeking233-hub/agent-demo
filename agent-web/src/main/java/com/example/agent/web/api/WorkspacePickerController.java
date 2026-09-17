@@ -1,33 +1,37 @@
 package com.example.agent.web.api;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 工作区文件夹选择器（native-folder-picker）。
+ * 工作区文件夹选择器（picker-async）。
  *
- * <p>调起 OS 原生文件夹选择对话框：
+ * <p>异步流程：
  * <ul>
- *   <li>Windows: PowerShell + System.Windows.Forms.FolderBrowserDialog
- *   <li>macOS: osascript "choose folder"
- *   <li>Linux: zenity --file-selection --directory
+ *   <li>POST /api/workspaces/pick-folder 立即返回 202 + task_id + timeout
+ *   <li>GET /api/workspaces/pick-folder/{id} 轮询返回状态
+ *   <li>DELETE /api/workspaces/pick-folder/{id} 中止进程
  * </ul>
- *
- * <p>阻塞等待用户操作（最多 5 分钟）；用户取消或失败返回 200 + path=""。
  */
 @RestController
 @RequestMapping("/api/workspaces")
@@ -35,38 +39,83 @@ import org.springframework.web.bind.annotation.RestController;
 public class WorkspacePickerController {
 
     private static final Logger log = LoggerFactory.getLogger(WorkspacePickerController.class);
-    private static final long TIMEOUT_MINUTES = 5;
+
+    private final PickerTaskStore tasks;
+
+    public WorkspacePickerController(PickerTaskStore tasks) {
+        this.tasks = tasks;
+    }
 
     @PostMapping("/pick-folder")
-    public ResponseEntity<Map<String, String>> pickFolder() throws IOException {
-        ProcessBuilder pb = buildCommand();
-        Process process = pb.start();
-        boolean finished;
+    public ResponseEntity<Map<String, Object>> pickFolder() throws IOException {
+        PickerTaskStore.Task task = tasks.submitWithProcess(outFile -> {
+            try {
+                return startDialogProcess(outFile);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("task_id", task.id());
+        body.put("timeout_seconds", 300);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(body);
+    }
+
+    @GetMapping("/pick-folder/{taskId}")
+    public ResponseEntity<Map<String, Object>> poll(@PathVariable String taskId) {
+        Optional<PickerTaskStore.Task> opt = tasks.get(taskId);
+        if (opt.isEmpty()) {
+            return ResponseEntity.ok(Map.of("status", "unknown"));
+        }
+        PickerTaskStore.Task task = opt.get();
+        CompletableFuture<String> future = task.future();
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        if (!future.isDone()) {
+            body.put("status", "running");
+            return ResponseEntity.ok(body);
+        }
         try {
-            finished = process.waitFor(TIMEOUT_MINUTES, TimeUnit.MINUTES);
+            String path = future.get(0, TimeUnit.SECONDS);
+            if (path == null) {
+                body.put("status", "cancelled");
+            } else {
+                body.put("status", "done");
+                body.put("path", path);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return ResponseEntity.ok(Map.of("path", "", "reason", "interrupted"));
+            body.put("status", "interrupted");
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            String msg = cause != null ? cause.getMessage() : e.getMessage();
+            if (msg != null && msg.contains("超时")) {
+                body.put("status", "timeout");
+            } else if (msg != null && msg.contains("选定路径无效")) {
+                body.put("status", "invalid_path");
+            } else {
+                body.put("status", "error");
+                body.put("reason", msg);
+            }
+        } catch (TimeoutException e) {
+            body.put("status", "running");
         }
-        if (!finished) {
-            log.warn("[picker] 5 分钟超时，强制结束进程");
-            process.destroyForcibly();
-            return ResponseEntity.ok(Map.of("path", "", "reason", "timeout"));
-        }
-        int code = process.exitValue();
-        if (code != 0) {
-            return ResponseEntity.ok(Map.of("path", "", "reason", "cancelled"));
-        }
-        String out = readOutput(process.getInputStream()).trim();
-        if (out.isEmpty()) {
-            return ResponseEntity.ok(Map.of("path", "", "reason", "cancelled"));
-        }
-        Path p = Paths.get(out);
-        if (!p.isAbsolute() || !Files.exists(p) || !Files.isDirectory(p)) {
-            log.warn("[picker] 选定路径无效: {}", out);
-            return ResponseEntity.ok(Map.of("path", "", "reason", "invalid_path"));
-        }
-        return ResponseEntity.ok(Map.of("path", p.toAbsolutePath().toString()));
+        return ResponseEntity.ok(body);
+    }
+
+    @DeleteMapping("/pick-folder/{taskId}")
+    public ResponseEntity<Void> cancel(@PathVariable String taskId) {
+        boolean ok = tasks.cancel(taskId);
+        return ok ? ResponseEntity.noContent().build()
+                : ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+    }
+
+    /**
+     * 启动 OS 文件夹选择对话框 process；stdout 重定向到 outFile（避免 reader 阻塞）。
+     */
+    static Process startDialogProcess(Path outFile) throws IOException {
+        ProcessBuilder pb = buildCommand();
+        pb.redirectOutput(outFile.toFile());
+        return pb.start();
     }
 
     /**
@@ -76,12 +125,6 @@ public class WorkspacePickerController {
         return buildCommand(System.getProperty("os.name", ""), System.getenv("DISPLAY"));
     }
 
-    /**
-     * 可注入 OS 名的 buildCommand（测试用）。
-     *
-     * @param osName System.getProperty("os.name")
-     * @param displayEnv DISPLAY env（Linux 桌面是否启动）
-     */
     static ProcessBuilder buildCommand(String osName, String displayEnv) throws IOException {
         String os = osName == null ? "" : osName.toLowerCase(Locale.ROOT);
         if (os.contains("win")) {
@@ -98,7 +141,6 @@ public class WorkspacePickerController {
             return new ProcessBuilder(
                     "osascript", "-e", "set f to choose folder with prompt \"Select Workspace Directory\"; return POSIX path of f");
         } else {
-            // Linux: zenity 优先；kdialog 备选
             if (displayEnv == null || displayEnv.isBlank()) {
                 throw new IOException("无 DISPLAY 环境变量，无法打开 GUI 对话框");
             }
@@ -106,10 +148,5 @@ public class WorkspacePickerController {
                     "zenity", "--file-selection", "--directory",
                     "--title=Select Workspace Directory");
         }
-    }
-
-    private static String readOutput(InputStream in) throws IOException {
-        byte[] buf = in.readAllBytes();
-        return new String(buf, StandardCharsets.UTF_8);
     }
 }
