@@ -118,6 +118,22 @@
   cursor: not-allowed;
 }
 
+.wpRevealButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: var(--bg, #fff);
+  color: var(--fg, #1f2937);
+  cursor: pointer;
+}
+
+.wpRevealButton:hover {
+  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+}
+
 .wpNameInput {
   flex: 1;
   padding: 8px 12px;
