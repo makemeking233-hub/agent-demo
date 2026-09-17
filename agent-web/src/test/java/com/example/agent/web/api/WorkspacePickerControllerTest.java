@@ -11,27 +11,42 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-/** WorkspacePickerController 单元测试 (picker-async). */
+/** WorkspacePickerController 单元测试 (picker-dsh-flow). */
 class WorkspacePickerControllerTest {
 
     @Test
-    void buildCommand_windows_powershell() throws Exception {
-        var pb = WorkspacePickerController.buildCommand("Windows 10", "");
+    void buildCommand_windows_legacy() throws Exception {
+        var pb = WorkspacePickerController.buildCommand("Windows 10", "", "legacy");
         assertThat(pb.command().get(0)).isEqualTo("powershell");
         assertThat(pb.command()).contains("-NoProfile", "-Command");
         assertThat(pb.command().get(3)).contains("FolderBrowserDialog");
     }
 
     @Test
+    void buildCommand_windows_modern_usesWpf() throws Exception {
+        var pb = WorkspacePickerController.buildCommand("Windows 10", "", "modern");
+        assertThat(pb.command().get(0)).isEqualTo("powershell");
+        assertThat(pb.command().get(3)).contains("OpenFolderDialog");
+        assertThat(pb.command().get(3)).contains("PresentationFramework");
+    }
+
+    @Test
+    void buildCommand_defaultIsModern() throws Exception {
+        // 不指定 kind → 默认 modern
+        var pb = WorkspacePickerController.buildCommand("Windows 10", "", null);
+        assertThat(pb.command().get(3)).contains("OpenFolderDialog");
+    }
+
+    @Test
     void buildCommand_macos_osascript() throws Exception {
-        var pb = WorkspacePickerController.buildCommand("Mac OS X", "");
+        var pb = WorkspacePickerController.buildCommand("Mac OS X", "", "modern");
         assertThat(pb.command().get(0)).isEqualTo("osascript");
         assertThat(pb.command().get(2)).contains("choose folder");
     }
 
     @Test
     void buildCommand_linux_zenity() throws Exception {
-        var pb = WorkspacePickerController.buildCommand("Linux", ":0");
+        var pb = WorkspacePickerController.buildCommand("Linux", ":0", "modern");
         assertThat(pb.command().get(0)).isEqualTo("zenity");
         assertThat(pb.command()).contains("--file-selection", "--directory");
     }
@@ -39,13 +54,13 @@ class WorkspacePickerControllerTest {
     @Test
     void buildCommand_linux_noDisplay_throws() {
         assertThrows(IOException.class,
-                () -> WorkspacePickerController.buildCommand("Linux", ""));
+                () -> WorkspacePickerController.buildCommand("Linux", "", "modern"));
     }
 
     @Test
     void buildCommand_linux_nullDisplay_throws() {
         assertThrows(IOException.class,
-                () -> WorkspacePickerController.buildCommand("Linux", null));
+                () -> WorkspacePickerController.buildCommand("Linux", null, "modern"));
     }
 
     @Test
@@ -59,11 +74,21 @@ class WorkspacePickerControllerTest {
     void pickFolder_returns202WithTaskId() throws Exception {
         PickerTaskStore store = new PickerTaskStore();
         var ctrl = new WorkspacePickerController(store);
-        ResponseEntity<Map<String, Object>> resp = ctrl.pickFolder();
+        ResponseEntity<Map<String, Object>> resp = ctrl.pickFolder(null);
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(resp.getBody()).containsKey("task_id");
         assertThat(resp.getBody()).containsKey("timeout_seconds");
-        // cleanup
+        assertThat(resp.getBody().get("kind")).isEqualTo("modern");
+        store.cancel((String) resp.getBody().get("task_id"));
+    }
+
+    @Test
+    void pickFolder_withKind_returnsCorrectCommand() throws Exception {
+        PickerTaskStore store = new PickerTaskStore();
+        var ctrl = new WorkspacePickerController(store);
+        // 用现代 kind 时 buildCommand 应该选 WPF；这里只验证 controller 不抛
+        ResponseEntity<Map<String, Object>> resp = ctrl.pickFolder("modern");
+        assertThat(resp.getBody().get("kind")).isEqualTo("modern");
         store.cancel((String) resp.getBody().get("task_id"));
     }
 
@@ -80,7 +105,6 @@ class WorkspacePickerControllerTest {
     void poll_runningTask_returnsRunning() throws Exception {
         PickerTaskStore store = new PickerTaskStore();
         var ctrl = new WorkspacePickerController(store);
-        // 注入一个长跑任务
         PickerTaskStore.Task task = store.submitWithProcess(outFile -> {
             ProcessBuilder pb = new ProcessBuilder();
             if (System.getProperty("os.name").toLowerCase().contains("win")) {
@@ -121,7 +145,6 @@ class WorkspacePickerControllerTest {
                 }
             });
             String id = task.id();
-            // 等 future 完成
             task.future().get(10, java.util.concurrent.TimeUnit.SECONDS);
             ResponseEntity<Map<String, Object>> resp = ctrl.poll(id);
             assertThat(resp.getBody().get("status")).isEqualTo("done");
