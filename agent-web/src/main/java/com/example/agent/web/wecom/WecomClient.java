@@ -27,7 +27,7 @@ import java.time.Instant;
  * <p>线程安全：{@link #cachedToken} 用 {@code synchronized} 保护；
  * HttpClient / ObjectMapper 线程安全可复用。
  */
-public class WecomClient {
+public class WecomClient implements WecomMessageSender {
 
     private static final String DEFAULT_BASE_URL = "https://qyapi.weixin.qq.com";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);

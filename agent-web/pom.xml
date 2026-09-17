@@ -60,6 +60,11 @@
             <version>3.6.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- add-wecom-channel: 解析企业微信回调 XML（消息 + 加密负载） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-xml</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
