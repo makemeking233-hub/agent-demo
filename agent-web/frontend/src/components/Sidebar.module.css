@@ -52,6 +52,57 @@
 
 .iconButton:hover { background: var(--dsw-static-surface-sunken); }
 
+/* picker-dsh-flow：workspace menu（对齐 dsh workspace picker） */
+.workspaceMenuWrap {
+  position: relative;
+}
+
+.workspaceMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 200px;
+  background: var(--dsw-alias-bg-raised);
+  border: 1px solid var(--dsw-alias-border);
+  border-radius: var(--dsw-alias-radius-md, 6px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  z-index: 50;
+  padding: 4px 0;
+}
+
+.workspaceMenuHeader {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.workspaceMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: inherit;
+}
+
+.workspaceMenuItem:hover {
+  background: var(--dsw-static-surface-sunken);
+}
+
+.workspaceMenuDivider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--dsw-alias-border);
+}
+
 .list {
   flex: 1;
   overflow-y: auto;
