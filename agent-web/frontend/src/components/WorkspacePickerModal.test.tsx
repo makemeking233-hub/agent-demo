@@ -1,12 +1,12 @@
 /**
- * WorkspacePickerModal 异步 picker 测试 (picker-async).
+ * WorkspacePickerModal 路径输入 + reveal 测试 (picker-reveal-only).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { WorkspacePickerModal } from "./WorkspacePickerModal";
 
-describe("WorkspacePickerModal (async)", () => {
+describe("WorkspacePickerModal (reveal-only)", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -15,7 +15,7 @@ describe("WorkspacePickerModal (async)", () => {
     fetchMock.mockImplementation(async () => ({
       status: 200,
       ok: true,
-      json: async () => ({ status: "running" }),
+      json: async () => ({}),
     }));
     vi.stubGlobal("fetch", fetchMock);
   });
@@ -23,7 +23,6 @@ describe("WorkspacePickerModal (async)", () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
-    vi.useRealTimers();
   });
 
   function renderModal(overrides: Partial<Parameters<typeof WorkspacePickerModal>[0]> = {}) {
@@ -42,70 +41,43 @@ describe("WorkspacePickerModal (async)", () => {
     expect(screen.getByText("Select Workspace Directory")).toBeInTheDocument();
   });
 
-  it("renders pick folder + reveal buttons; submit disabled initially", () => {
+  it("renders path + name inputs and reveal button; submit disabled when path empty", () => {
     renderModal();
-    expect(screen.getByTestId("wp-pick-folder")).toBeInTheDocument();
+    expect(screen.getByTestId("wp-path-input")).toBeInTheDocument();
+    expect(screen.getByTestId("wp-name-input")).toBeInTheDocument();
     expect(screen.getByTestId("wp-reveal")).toBeInTheDocument();
     expect((screen.getByTestId("wp-submit") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("clicking pick button sends POST and receives task_id", async () => {
-    fetchMock.mockResolvedValueOnce({
-      status: 202,
-      ok: true,
-      json: async () => ({ task_id: "task-1", timeout_seconds: 300 }),
-    });
+  it("does NOT render the pick folder button (picker dialog removed)", () => {
     renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/api/workspaces/pick-folder", expect.objectContaining({ method: "POST" })),
-    );
+    expect(screen.queryByTestId("wp-pick-folder")).toBeNull();
   });
 
-  it("polls until status=done and fills path + basename", async () => {
-    // 前两次：POST 返回 task_id + poll 返回 running；第三次：done
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1", timeout_seconds: 300 }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/Users/me/projects" }) });
+  it("restore last path from localStorage", () => {
+    localStorage.setItem("agent-demo.workspace-picker.last-path", "C:\\Users\\test\\projects");
     renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() =>
-      expect(screen.getByTestId("wp-path-input")).toHaveValue("/Users/me/projects"),
-    );
-    expect(screen.getByTestId("wp-name-input")).toHaveValue("projects");
+    expect(screen.getByTestId("wp-path-input")).toHaveValue("C:\\Users\\test\\projects");
   });
 
-  it("cancel status does not show error", async () => {
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "cancelled" }) });
+  it("typing path auto-fills basename as name (when name is empty)", () => {
     renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() =>
-      expect(screen.queryByText(/操作超时|操作失败/)).toBeNull(),
-    );
+    const pathInput = screen.getByTestId("wp-path-input") as HTMLInputElement;
+    fireEvent.change(pathInput, { target: { value: "C:\\Users\\test\\projects\\md-main" } });
+    expect(screen.getByTestId("wp-name-input")).toHaveValue("md-main");
   });
 
-  it("timeout status shows error", async () => {
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "timeout" }) });
+  it("does not overwrite user-edited name when path changes", () => {
     renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() => expect(screen.getByText(/操作超时/)).toBeInTheDocument());
-  });
-
-  it("invalid_path status shows error", async () => {
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "invalid_path" }) });
-    renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() => expect(screen.getByText(/选定路径无效/)).toBeInTheDocument());
+    const pathInput = screen.getByTestId("wp-path-input") as HTMLInputElement;
+    const nameInput = screen.getByTestId("wp-name-input") as HTMLInputElement;
+    fireEvent.change(pathInput, { target: { value: "C:\\x\\y" } });
+    fireEvent.change(nameInput, { target: { value: "my-name" } });
+    fireEvent.change(pathInput, { target: { value: "C:\\a\\b" } });
+    expect(nameInput).toHaveValue("my-name");
   });
 
   it("reveal button calls /api/settings/reveal", async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ revealed: true, path: "/x" }) });
     renderModal();
     fireEvent.click(screen.getByTestId("wp-reveal"));
     await waitFor(() =>
@@ -133,66 +105,34 @@ describe("WorkspacePickerModal (async)", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("user can override default name", async () => {
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/Users/me/projects" }) });
-    renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() => expect(screen.getByTestId("wp-path-input")).toHaveValue("/Users/me/projects"));
-    await waitFor(() => expect(screen.getByTestId("wp-name-input")).toHaveValue("projects"));
-    fireEvent.change(screen.getByTestId("wp-name-input"), { target: { value: "my-ws" } });
-    expect(screen.getByTestId("wp-name-input")).toHaveValue("my-ws");
-  });
-
   it("submit enables with valid name + path", async () => {
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/x/y" }) });
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
     renderModal({ onSubmit, onClose });
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() => expect(screen.getByTestId("wp-path-input")).toHaveValue("/x/y"));
-    fireEvent.change(screen.getByTestId("wp-name-input"), { target: { value: "my-ws" } });
+    fireEvent.change(screen.getByTestId("wp-path-input"), {
+      target: { value: "C:\\x\\y" },
+    });
+    fireEvent.change(screen.getByTestId("wp-name-input"), {
+      target: { value: "my-ws" },
+    });
     fireEvent.click(screen.getByTestId("wp-submit"));
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("my-ws", "/x/y"));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("my-ws", "C:\\x\\y"));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it("persists picked path to localStorage", async () => {
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/Users/me/projects" }) });
+  it("submit disabled with invalid name (contains space)", () => {
     renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    await waitFor(() => expect(screen.getByTestId("wp-path-input")).toHaveValue("/Users/me/projects"));
-    expect(localStorage.getItem("agent-demo.workspace-picker.last-path")).toBe("/Users/me/projects");
+    fireEvent.change(screen.getByTestId("wp-path-input"), { target: { value: "C:\\x\\y" } });
+    fireEvent.change(screen.getByTestId("wp-name-input"), { target: { value: "bad name" } });
+    expect((screen.getByTestId("wp-submit") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  // ===== fix-picker-hint: picking 持续 >3s 显示提示 =====
-  it("shows hint banner after picking for 3 seconds without response", async () => {
-    fetchMock.mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) });
-    renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    // 初始无提示
-    expect(screen.queryByTestId("wp-pick-hint")).toBeNull();
-    // 真实等 3.2s 触发 setTimeout（real timer 比 fake 更可靠地协调 React state）
-    await new Promise((r) => setTimeout(r, 3200));
-    expect(screen.getByTestId("wp-pick-hint")).toBeInTheDocument();
-    expect(screen.getByTestId("wp-pick-hint").textContent).toMatch(/任务栏|手动输入/);
-  });
-
-  it("hides hint banner once picking completes (status=done) within 3s", async () => {
-    // 第一次 POST 返回 task_id，第二次 poll 返回 done（poll 间隔 500ms，所以约 500ms 内完成）
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/Users/me/projects" }) });
-    renderModal();
-    fireEvent.click(screen.getByTestId("wp-pick-folder"));
-    // 等 done 触发（<1s 内，远小于 3s hint 阈值）
-    await waitFor(() => expect(screen.getByTestId("wp-path-input")).toHaveValue("/Users/me/projects"));
-    // 此时 picking=false，hint 不应出现
-    expect(screen.queryByTestId("wp-pick-hint")).toBeNull();
+  it("submit failure shows error", async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error("workspace_exists"));
+    renderModal({ onSubmit });
+    fireEvent.change(screen.getByTestId("wp-path-input"), { target: { value: "C:\\x\\y" } });
+    fireEvent.change(screen.getByTestId("wp-name-input"), { target: { value: "my-ws" } });
+    fireEvent.click(screen.getByTestId("wp-submit"));
+    await waitFor(() => expect(screen.getByText(/workspace_exists/)).toBeInTheDocument());
   });
 });

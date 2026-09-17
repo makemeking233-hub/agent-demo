@@ -112,26 +112,16 @@ describe("Sidebar 会话管理", () => {
     expect(p.onCreateWorkspace).not.toHaveBeenCalled();
   });
 
-  it("端到端：点击 + → 弹 Modal → 调 pick-folder（异步 task_id）→ 轮询 → 选路径 → 改 name → 提交 → 调 onCreateWorkspace", async () => {
-    // mock POST → 202 + task_id；poll → done + path
-    const fetchMock = vi.fn();
-    fetchMock
-      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1", timeout_seconds: 300 }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/home/user/projects/agent-demo" }) });
-    vi.stubGlobal("fetch", fetchMock);
-
+  it("端到端：点击 + → 弹 Modal → 直接输入路径 → 自动 basename → 提交 → 调 onCreateWorkspace", async () => {
     const p = renderSidebar();
     // 1. 点击 + 弹 Modal
     fireEvent.click(screen.getByLabelText("新建工作区"));
     const dialog = await screen.findByRole("dialog", { name: "选择工作区目录" });
 
-    // 2. 点 "选择文件夹..." → POST pick-folder → 轮询 → 路径自动填入 + name 默认 basename
-    fireEvent.click(within(dialog).getByTestId("wp-pick-folder"));
-    await waitFor(() =>
-      expect(within(dialog).getByTestId("wp-path-input")).toHaveValue(
-        "/home/user/projects/agent-demo",
-      ),
-    );
+    // 2. 输入路径 → name 自动填 basename
+    fireEvent.change(within(dialog).getByTestId("wp-path-input"), {
+      target: { value: "/home/user/projects/agent-demo" },
+    });
     expect(within(dialog).getByTestId("wp-name-input")).toHaveValue("agent-demo");
 
     // 3. 改成自定义 name
@@ -148,8 +138,6 @@ describe("Sidebar 会话管理", () => {
         "/home/user/projects/agent-demo",
       ),
     );
-
-    vi.unstubAllGlobals();
   });
 
   it("归档视图列出归档会话并可恢复", () => {
