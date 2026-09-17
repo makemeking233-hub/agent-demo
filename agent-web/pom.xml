@@ -53,6 +53,13 @@
             <version>5.9.2</version>
             <scope>test</scope>
         </dependency>
+        <!-- add-wecom-channel: WireMock 模拟企业微信 gettoken / send API -->
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.6.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
