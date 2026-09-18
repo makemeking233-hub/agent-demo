@@ -218,6 +218,128 @@ flowchart LR
 - ✅ **Plugin 生命周期**：`Plugin.init(PluginContext)` → `close()`；`ExtensionPoints` 提供 `Memory` / `Skills` / `Mcp` 等接入点
 - ✅ **配置驱动**：`AgentConfig.plugins[]` 在 `~/.agent-demo/config.yaml` 的 `plugins` 段声明，每条 `className + config` 自描述
 
+### 3.13 Memory 三 scope + 语义召回
+
+- ✅ **三 scope 隔离**：USER（`~/.agent-demo/memory/`，跨项目共享）/ PROJECT（`<cwd>/.agent-demo/memory/`，随仓库）/ LOCAL（本次会话临时，不落盘、不参与跨会话召回）
+- ✅ **MEMORY.md 索引**：每行 `- [标题](文件名) — 描述`，只存 title+filename+一行描述；正文在 `.md` 单文件里，由模型按需用文件工具读取
+- ✅ **两阶段混合召回**：字面 token 重叠（永远）+ LLM 二次筛选（sideQuery，可选）
+- ✅ **失败静默降级**：sideQuery 任一环节异常都退化为纯字面，**绝不**让记忆层故障影响主对话
+- ✅ **v0.1 升级路径**：v0.3 计划切到 embedding 粗排 + LLM 精排的 hybrid retrieval（见 §3.13.5）
+
+#### 3.13.1 三 scope 目录布局
+
+```mermaid
+flowchart TB
+    H["user.home"]
+    C["cwd 当前项目根目录"]
+    UD["~/.agent-demo/memory/<br/>USER scope"]
+    PD["<cwd>/.agent-demo/memory/<br/>PROJECT scope"]
+    LD["LOCAL scope<br/>本次会话内存, 不落盘"]
+    UI["MEMORY.md 索引"]
+    UF1["java17.md"]
+    UF2["deepseek-config.md"]
+    PI["MEMORY.md 索引"]
+    PF1["team-style.md"]
+
+    H --> UD
+    C --> PD
+    C -.运行时临时.-> LD
+    UD --> UI
+    UD --> UF1
+    UD --> UF2
+    PD --> PI
+    PD --> PF1
+```
+
+#### 3.13.2 一次召回的数据流
+
+```mermaid
+sequenceDiagram
+    participant Q as 用户 query
+    participant Factory as AgentLoopFactory
+    participant RT as MemoryRetriever
+    participant IDX as MemoryIndex
+    participant RC as MemoryRecall
+    participant SQ as SideQuerySelector
+    participant LLM as Provider 主对话
+    participant MPB as MemoryPromptBuilder
+
+    Q->>Factory: buildSystemPrompt(cfg, model, override, provider)
+    Factory->>MPB: builder.build(query, dirs, retriever, extra, k=5)
+    MPB->>RT: retrieve(query, dirs, 5)
+
+    loop 每个 scope 跳过 LOCAL
+        RT->>IDX: parse MEMORY.md -> entries
+        IDX-->>RT: List<MemoryEntry>
+        RT->>RC: recall(query, entries, 5, 0.3, scope)
+        RC-->>RT: hit 字面命中
+
+        alt 字面不满 k 且候选足够且 sideQuery 开启
+            RT->>SQ: select(query, candidates, 5)
+            SQ->>LLM: ChatRequest (temperature 0.2)
+            LLM-->>SQ: 流式文本
+            SQ-->>RT: extra filename 列表
+            RT->>RT: mergeByFilename 字面优先 + 去重 + 截断
+        else 否则
+            RT->>RT: 用字面 hit 当结果
+        end
+    end
+
+    RT-->>MPB: Map<MemoryScope, List<MemoryEntry>>
+    MPB-->>Factory: memorySection 拼到 system prompt
+```
+
+#### 3.13.3 评分公式与 sideQuery 触发条件
+
+字面召回：`score = |query tokens ∩ entry tokens| / |entry tokens|`，阈值 0.3，按分数降序取 top k。**分母是 entry token 数**，让短 query + 长 description 的 entry 容易命中。
+
+sideQuery 触发（**三个条件全部满足**才发 LLM 调用）：
+
+| 条件 | 默认 | 作用 |
+|------|------|------|
+| `hit.size() < k` | k = 5 | 字面没召回满，**值得再花一次 LLM 调用** |
+| `entries.size() >= minCandidates` | minCandidates = 3 | 候选池太少时 LLM 没得挑 |
+| `sideQuery.enabled()` | true | 配置开关 |
+
+#### 3.13.4 失败降级链（5 个降级点都不阻塞主对话）
+
+| # | 降级点 | 触发 | 降级动作 |
+|---|--------|------|---------|
+| 1 | `provider == null` | `buildSystemPrompt` 没传 provider | 跳过 sideQuery，纯字面 |
+| 2 | `sideQuery == null` 或 `enabled = false` | 配置缺失 / 关闭 | 跳过 sideQuery，纯字面 |
+| 3 | `hit.size() >= k` | 字面已召回满 | 跳过 sideQuery |
+| 4 | `entries.size() < minCandidates` | 候选太少 | 跳过 sideQuery |
+| 5 | LLM 调用 / 解析异常 | 网络错 / 超时 / 格式错 | `catch (Exception)` 返回空列表 |
+
+#### 3.13.5 关键设计决策与升级路径
+
+| 维度 | v0.1 现方案 | v0.3 计划（hybrid retrieval）|
+|------|------------|------------------------------|
+| 字面召回 | token 重叠（永远） | 保留做兜底 |
+| 语义召回 | LLM 二次筛选（一次小调用） | embedding 粗排 top N + LLM 精排 |
+| 额外成本 | 每次 1 次小 LLM 调用（~500 token） | embedding 计算（本地）+ 1 次小 LLM |
+| 离线可跑 | 是 | 是（需本地嵌入模型） |
+| 失败行为 | 静默降级 | 静默降级 |
+
+**为什么不用 embedding 向量召回**：embedding 路线需要本地模型（BGE-small ~100MB）或远程 API；当前用 chat 模型当 reranker，零依赖、可解释、与主对话模型一致。`MemoryRecall.java` 的 JavaDoc 已写明「embedding 见 design.md v0.3 升级路径」。
+
+**为什么字面优先不替换**：避免 LLM 幻觉（模型可能选"看起来相关但其实不沾边"的条目）覆盖字面真正命中的；字面信号是硬命中，LLM 只填空。
+
+#### 3.13.6 配置项
+
+`~/.agent-demo/config.yaml`：
+
+```yaml
+memory:
+  sideQuery:
+    enabled: true        # 是否启用 LLM 二次筛选
+    maxCandidates: 8     # sideQuery 时送给 LLM 的候选上限
+    minCandidates: 3     # 候选池至少几条才启用 sideQuery
+  recallMinScore: 0.3    # 字面评分阈值
+```
+
+源码入口：`AgentLoopFactory.buildSystemPrompt(cfg, model, override, provider)`（`core/AgentLoopFactory.java:161`）；详细设计见 `docs/design/memory-design.md`。
+
 ---
 
 ## 4. 工具扩展体系
