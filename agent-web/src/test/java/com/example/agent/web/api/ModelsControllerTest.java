@@ -148,4 +148,56 @@ class ModelsControllerTest {
         org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalStateException.class, svc::init);
     }
+
+    // ----- 默认 provider/model 必须存在于目录（fix-stale-model-fallback） -----
+
+    @Test
+    void startupValidationRejectsDefaultModelOutsideCatalog() {
+        // default-model 本身非法 → 未指定 model 的请求会把非法 id 透传给上游，必须启动即失败
+        ProviderCatalogProperties props = new ProviderCatalogProperties(
+                List.of(deepseekProvider()), "deepseek", "deepseek-chat");
+        ProviderCatalogService svc = new ProviderCatalogService(props);
+        IllegalStateException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                svc::init,
+                "default-model 不在目录中 → 启动必须失败");
+        assertThat(ex.getMessage()).contains("deepseek-chat").contains("default-model");
+    }
+
+    @Test
+    void startupValidationRejectsDefaultProviderOutsideCatalog() {
+        ProviderCatalogProperties props = new ProviderCatalogProperties(
+                List.of(deepseekProvider()), "minimax", "deepseek-v4-flash");
+        ProviderCatalogService svc = new ProviderCatalogService(props);
+        IllegalStateException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalStateException.class,
+                svc::init,
+                "default-provider 不在目录中 → 启动必须失败");
+        assertThat(ex.getMessage()).contains("minimax").contains("default-provider");
+    }
+
+    @Test
+    void startupValidationRejectsDefaultModelBelongingToAnotherProvider() {
+        // default-model 存在但属于别的 provider → 默认选择这一对无法解析，同样要拒
+        ProviderGroup openai = new ProviderGroup(
+                "openai",
+                "OpenAI",
+                List.of(new com.example.agent.web.api.dto.ModelEntry(
+                        "o1", "o1", true,
+                        List.of(new ReasoningEffort("low", "Low", null)))));
+        ProviderCatalogProperties props = new ProviderCatalogProperties(
+                List.of(deepseekProvider(), openai), "deepseek", "o1");
+        ProviderCatalogService svc = new ProviderCatalogService(props);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class, svc::init);
+    }
+
+    @Test
+    void startupValidationAcceptsDefaultModelInsideCatalog() {
+        ProviderCatalogProperties props = new ProviderCatalogProperties(
+                List.of(deepseekProvider()), "deepseek", "deepseek-v4-flash");
+        ProviderCatalogService svc = new ProviderCatalogService(props);
+        svc.init();
+        assertThat(svc.defaultModel()).isEqualTo("deepseek-v4-flash");
+        assertThat(svc.defaultProvider()).isEqualTo("deepseek");
+    }
 }
