@@ -338,6 +338,15 @@ public class AgentLoop {
     }
 
     /**
+     * 当前 model 名（add-provider-catalog-abstract：供 UI / 测试读取切换后的值）。
+     *
+     * @return 当前 model 名
+     */
+    public String model() {
+        return model;
+    }
+
+    /**
      * 运行时切换思考强度（add-models-dropdown-v0；{@code /effort} slash 命令 + 前端下拉用）。volatile 保证多线程可见。
      *
      * <p>仅影响切换之后的新 ChatRequest，正在进行的 turn 不受影响（流中不切）。
