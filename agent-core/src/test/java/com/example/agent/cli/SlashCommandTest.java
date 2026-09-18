@@ -137,8 +137,10 @@ class SlashCommandTest {
     var hist = new MessageHistory(new TokenEstimator());
     int[] p = {0}, c = {0};
     java.util.concurrent.atomic.AtomicReference<String> resolved = new java.util.concurrent.atomic.AtomicReference<>();
+    // add-provider-catalog-abstract task 12：改用真正无法推断前缀的 model
+    // （v0.1 用的 gpt-99 现在属于 gpt- 前缀 → 会被推断为 openai 而接受，见 SlashCommandModelPathTest）
     cmd.dispatch(
-        "/model gpt-99",
+        "/model gemini-99",
         hist,
         p,
         c,

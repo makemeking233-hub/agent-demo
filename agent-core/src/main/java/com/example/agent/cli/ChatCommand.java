@@ -210,6 +210,18 @@ public class ChatCommand implements Runnable {
         // add-models-dropdown-v0：/effort 切换 AgentLoop.setReasoningEffort，下一轮生效
         // (ctx 已 final，此处 lambda 安全捕获)
         slash.setOnEffort(newEffort -> ctx.loop().setReasoningEffort(newEffort));
+        // add-provider-catalog-abstract task 12.1：/model <provider>/<model> 复合切换
+        slash.setOnSelection(
+                (providerId, modelId) -> {
+                    ctx.loop().setProviderId(providerId);
+                    ctx.loop().setModel(modelId);
+                });
+        // add-provider-catalog-abstract task 12.1：默认 provider（无前缀且无法推断时兜底）
+        String configuredDefaultProvider = System.getenv("AGENT_DEFAULT_PROVIDER");
+        if (configuredDefaultProvider == null || configuredDefaultProvider.isBlank()) {
+            configuredDefaultProvider = "deepseek";
+        }
+        slash.setDefaultProvider(configuredDefaultProvider);
         try {
             runReplLoop(ctx, reader);
         } finally {
@@ -469,6 +481,7 @@ public class ChatCommand implements Runnable {
                         },
                         newModel -> {
                             // /model 回调：调 AgentLoop.setModel 切换 model，下一轮生效
+                            // （add-provider-catalog-abstract task 12：优先走 onSelection，见 setOnSelection）
                             ctx.loop().setModel(newModel);
                         });
     }

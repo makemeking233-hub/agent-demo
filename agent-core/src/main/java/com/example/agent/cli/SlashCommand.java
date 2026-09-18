@@ -3,12 +3,16 @@ package com.example.agent.cli;
 import com.example.agent.config.AgentConfig;
 import com.example.agent.core.Message;
 import com.example.agent.core.MessageHistory;
+import com.example.agent.provider.ProviderInference;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
 import com.example.agent.worktree.WorktreeManager;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -22,9 +26,25 @@ public class SlashCommand {
     private static final List<String> COMMANDS =
             List.of("/help", "/clear", "/quit", "/history", "/resume", "/model", "/effort");
 
-    /** v0.2 支持的 model 列表（DeepSeek 系） */
+    /** v0.2 支持的 model 列表（DeepSeek 系；无 `provider/` 前缀时的简写白名单） */
     private static final List<String> SUPPORTED_MODELS =
             List.of("deepseek-chat", "deepseek-reasoner");
+
+    /**
+     * add-provider-catalog-abstract task 12.1：已知 provider id（校验 `&lt;provider&gt;/&lt;model&gt;` 路径）。
+     */
+    private static final List<String> SUPPORTED_PROVIDERS =
+            List.of("deepseek", "openai", "anthropic", "minimax");
+
+    /**
+     * add-provider-catalog-abstract task 12.2：`/model` 简写别名 → `{provider, model}`。
+     *
+     * <p>向后兼容 v0.1 的 `/model chat` / `/model reasoning` 用法。
+     */
+    private static final Map<String, String[]> MODEL_ALIASES =
+            Map.of(
+                    "chat", new String[] {"deepseek", "deepseek-chat"},
+                    "reasoning", new String[] {"deepseek", "deepseek-reasoner"});
 
     /** add-models-dropdown-v0：合法的 reasoningEffort 白名单 */
     private static final List<String> SUPPORTED_EFFORTS = List.of("low", "medium", "high");
@@ -37,6 +57,19 @@ public class SlashCommand {
 
     /** add-models-dropdown-v0：/effort 回调（ChatCommand 启动时注入；null 时 /effort 退化为提示信息） */
     private Consumer<String> onEffort;
+
+    /**
+     * add-provider-catalog-abstract task 12.1：`/model` provider+model 复合回调。
+     *
+     * <p>注入后优先于 {@link #onModel}；接收 {@code (providerId, modelId)}。ChatCommand 用它同时调
+     * {@code AgentLoop.setProviderId} + {@code setModel}。
+     */
+    private BiConsumer<String, String> onSelection;
+
+    /**
+     * add-provider-catalog-abstract task 12.1：默认 provider（`/model foo` 无前缀且无法推断时兜底）。
+     */
+    private String defaultProvider = "deepseek";
 
     /**
      * 注入成本配置（ChatCommand 启动时调；v0.3+ 可 per-model 覆盖）。
@@ -63,6 +96,28 @@ public class SlashCommand {
      */
     public void setOnEffort(Consumer<String> onEffort) {
         this.onEffort = onEffort;
+    }
+
+    /**
+     * add-provider-catalog-abstract task 12.1：注入 `/model` provider+model 回调。
+     *
+     * <p>注入后优先于 `dispatch(...)` 里传入的单个 `onModel` 回调。
+     *
+     * @param onSelection 接收 (providerId, modelId) 的回调；{@code null} = 退回 onModel
+     */
+    public void setOnSelection(BiConsumer<String, String> onSelection) {
+        this.onSelection = onSelection;
+    }
+
+    /**
+     * add-provider-catalog-abstract task 12.1：注入默认 provider（无前缀且无法推断时兜底）。
+     *
+     * @param defaultProvider provider id（{@code null} / blank = 保持 deepseek）
+     */
+    public void setDefaultProvider(String defaultProvider) {
+        if (defaultProvider != null && !defaultProvider.isBlank()) {
+            this.defaultProvider = defaultProvider;
+        }
     }
 
     /**
@@ -178,9 +233,20 @@ public class SlashCommand {
     /**
      * /model 处理：列表（无参数）/ 切换（有参数）。
      *
+     * <p>add-provider-catalog-abstract task 12.1/12.2 起支持三种写法：
+     *
+     * <ol>
+     *   <li>`/model &lt;provider&gt;/&lt;model&gt;` — 完整路径（provider 必须在
+     *       {@link #SUPPORTED_PROVIDERS} 白名单内）
+     *   <li>`/model chat` / `/model reasoning` — v0.1 别名，内部映射到 `deepseek/deepseek-chat`
+     *       / `deepseek/deepseek-reasoner`（向后兼容）
+     *   <li>`/model &lt;model&gt;` — 简写；provider 用 {@code ProviderInference} 按前缀推断，
+     *       推断失败回退 {@link #defaultProvider}
+     * </ol>
+     *
      * @param trimmed 完整输入（已 trim）
      * @param currentModel 当前 model（用于无参数时显示）
-     * @param onModel setter 回调（null 时只 list 不调 setter）
+     * @param onModel 单 model setter 回调（null 时只 list 不调 setter；{@link #onSelection} 优先）
      */
     private void doModel(String trimmed, String currentModel, Consumer<String> onModel) {
         String[] parts = trimmed.split("\\s+", 2);
@@ -188,16 +254,57 @@ public class SlashCommand {
             // /model 无参数：列出当前 + 支持
             System.out.println("当前 model: " + currentModel);
             System.out.println("支持: " + String.join(", ", SUPPORTED_MODELS));
+            System.out.println(
+                    "也可用 <provider>/<model> 指定 provider（支持: "
+                            + String.join(", ", SUPPORTED_PROVIDERS)
+                            + "）；别名: "
+                            + String.join(", ", MODEL_ALIASES.keySet()));
             return;
         }
         String target = parts[1].trim();
-        if (!SUPPORTED_MODELS.contains(target)) {
-            System.out.println(
-                    "[未知 model: " + target + "] 支持: " + String.join(", ", SUPPORTED_MODELS));
-            return;
+        String providerId;
+        String modelId;
+
+        int slash = target.indexOf('/');
+        if (slash > 0) {
+            // 完整路径 <provider>/<model>
+            providerId = target.substring(0, slash).toLowerCase(Locale.ROOT);
+            modelId = target.substring(slash + 1).trim();
+            if (modelId.isEmpty()) {
+                System.out.println("[model 为空] 用法: /model <provider>/<model>");
+                return;
+            }
+            if (!SUPPORTED_PROVIDERS.contains(providerId)) {
+                System.out.println(
+                        "[未知 provider: " + providerId + "] 支持: "
+                                + String.join(", ", SUPPORTED_PROVIDERS));
+                return;
+            }
+        } else if (MODEL_ALIASES.containsKey(target.toLowerCase(Locale.ROOT))) {
+            // v0.1 别名向后兼容
+            String[] alias = MODEL_ALIASES.get(target.toLowerCase(Locale.ROOT));
+            providerId = alias[0];
+            modelId = alias[1];
+        } else {
+            // 简写：按前缀推断 provider
+            modelId = target;
+            String inferred = ProviderInference.inferProvider(modelId);
+            if (inferred == null && !SUPPORTED_MODELS.contains(modelId)) {
+                System.out.println(
+                        "[未知 model: " + modelId + "] 支持: "
+                                + String.join(", ", SUPPORTED_MODELS)
+                                + "，或用 <provider>/<model> 指定 provider");
+                return;
+            }
+            providerId = inferred != null ? inferred : defaultProvider;
         }
-        if (onModel != null) onModel.accept(target);
-        System.out.println("[/model] 切换到 " + target);
+
+        if (onSelection != null) {
+            onSelection.accept(providerId, modelId);
+        } else if (onModel != null) {
+            onModel.accept(modelId);
+        }
+        System.out.println("[/model] 切换到 " + providerId + "/" + modelId);
     }
 
     /**
