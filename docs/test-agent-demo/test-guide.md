@@ -27,6 +27,7 @@
 | `2026-09-18-fix-stale-model-fallback/` | fix-stale-model-fallback 模型选择单一真源（非法 model 改 400 fail-closed + 默认值启动校验 + 删除 ModelRegistry + 前端兜底改取服务端 defaultModel + 微信通道同源 + 成功回合补 model 日志） | 2026-09-18 | 43 新增（32 Java + 11 vitest；另 483 core + 320 web + 244 vitest 回归） | ✅ 本 change 用例全绿；jacoco 违规由 5 条降到 **1 条**（剩 security branches 0.63 既有，干净 main 9aae4f6 可复现 → 记录放行） | ✅ | 已归档 |
 | `2026-09-18-provider-catalog/` | add-provider-catalog-abstract provider 分层目录（ProviderInference 前缀推断 + DeepSeek/MiniMax validateProviderHook + ChatStreamService 6 参透传 + ChatController 推断兜底 + CLI /model &lt;provider&gt;/&lt;model&gt; + 前端 chat.ts 类型升级 + ModelSelect 两层菜单 + ReasoningEffortSelect options prop） | 2026-09-18 | 75 新增（45 Java + 30 vitest）；合并 main 后全量 892（Java）+ 290（前端）全绿 | 详见 §2.15 | ✅ | 已归档 |
 | `2026-09-18-fix-agent-home-isolation/` | fix-agent-home-isolation agent home 解析收敛（新增 AgentPaths 单一入口 + 14 处解析点全部改走它 + logback 同语义 + surefire 默认隔离），使「测试运行不污染真实 ~/.agent-demo」从纸面要求变为成立 | 2026-09-18 | 9 新增（AgentPathsTest）+ 2 探针 + 2 差分测量；全量 528 core + 373 web 全绿 | ✅ 本 change 用例全绿；jacoco 仅剩 security 0.63 既有（与合并前 main 逐位一致 → 记录放行）；真实 logs/sessions 跑前跑后 **7→7 不变** | ✅ | 已归档 |
+| `2026-09-18-fix-security-coverage/` | fix-security-coverage 修 main 上唯一遗留的 jacoco 违规（security 包 branches 0.63 → 0.755），定位 TrustedHostFilter 47/80=0.59 是被拉低的那极，加 6 条用例覆盖 HTTPS-localhost 兜底 / null trusted / 空白规则 / /25 CIDR / 127.x 范围 | 2026-09-18 | 6 新增（TrustedHostFilterTest +1 helper）；全量 528 core + 379 web 全绿 | ✅ **mvn verify BUILD SUCCESS**（合并前 BUILD FAILURE 仅因该违规）；TrustedHostFilter 60/80=0.75；security 包 83/110=0.755 ≥ 0.70 | ✅ | 已归档 |
 
 ---
 
@@ -160,6 +161,14 @@
 - **测试目标**：把 `openspec/specs/observability` 早已要求、却长期不成立的「测试日志与运行时日志隔离」做实——此前每次 maven 测试都在用户真实 `~/.agent-demo/logs/sessions/` 下建目录，2026-09-18 一次修复任务期间实测需手工清理 22 个。
 - **执行要点**：worktree `fix/fix-agent-home-isolation` 隔离作业（§2.7）；根因普查发现「agent home 在哪」有 **14 处独立解析**、覆盖链各不相同，而唯一的测试隔离开关（系统属性 `agent.demo.home`，因 `@SpringBootTest` 设不了环境变量）**只被 1 处认**；新增 `AgentPaths` 单一入口后逐点收敛 14 处 + `logback.xml` + 两个模块 surefire 默认隔离；验收用**跑前后差分测量**（真实 `logs/sessions` **7 → 7 不变**）叠加**内容归属**（`session.jsonl` 首行 `cwd` 字段），隔离产物 12 个目录全部落在 `agent-web/target/test-data*/` 内；另用**最小 JVM 探针**确认 logback 落点语义（见关键发现 1）；全量 528 core + 373 web 全绿，jacoco 仅剩 `security` 0.63 既有违规。
 - **关键发现**：（1）**探针抓到自造分叉**：第一版 `logback.xml` 写 `${agent.demo.home:-${user.home}/.agent-demo}/logs`，设属性时解析为 `<base>/logs`，而 Java 侧 `AgentPaths` 给的是 `<base>/.agent-demo/logs`——差一层目录，等于把刚要收敛掉的分叉又造一个；实测修正前后落点位置反转，符合预期。**若只看「真实目录没增长」，这个 bug 完全隐形**（它同样满足该条件）。（2）**必须区分「隔离对了」与「日志坏了」**：两者表象都是真实目录不增长，故增加了「隔离目录内必须有产物」的正向断言。（3）差分测量被干扰：用户正在 IntelliJ 里运行应用、实时写真实 `app.log` 与会话文件，故该指标不能单独作判据，改用 `cwd` 内容归属。（4）**未解项如实记录**：surefire JVM 内 logback 的 FILE appender 似乎未落盘（隔离目录下只有 `sessions/` 没有 `app.log`），该现象在本次任何改动**之前**就存在（第一次门禁跑时真实 `app.log` 字节数与 mtime 同样全程未变）→ 不影响「测试不写真实 app.log」成立，但不能用它主张隔离机制生效。（5）`AGENT_DEMO_HOME` 存在两种语义：多数位置当「基目录」，`SettingsFile.resolveDefaultHome` 当「完整路径」，会导致 settings.yaml 与 sessions 落在不同层级；本次只统一调用侧，该方法自身契约与测试保持不变。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.17 `2026-09-18-fix-security-coverage/` — 修 main 上唯一遗留的 jacoco 违规
+
+- **测试目标**：清掉 `com.example.agent.web.security` 包 branches 0.63 < 0.70——main 上唯一遗留的 `mvn verify` 失败原因，多次（前几次 change：fix-stale-model-fallback 把违规由 5 降到 1；fix-agent-home-isolation 维持该 1 条）记录放行。
+- **执行要点**：worktree `fix/security-coverage`；先读 jacoco csv 定位——`HomePathGuard` 23/30=0.77 已过阈值、`TrustedHostFilter` 47/80=0.59 是被拉低的那极；不加 production 代码改动，只往 `TrustedHostFilterTest` 加 6 条用例 + 1 helper（`propsHttps(trusted, enabled)`）；覆盖 HTTPS-localhost 兜底（覆盖 L60 复合短路 3 个子分支 + `isHttpsLocalhost` 4 项 OR）、null trusted、空白规则 trim 后跳过、`startsWith("127.")` 分支、`/25` CIDR `restBits > 0` 分支；全量 528 core + 379 web 全绿，**`mvn verify` BUILD SUCCESS**。
+- **关键发现**：（1）`HomePathGuard` 0.77 一直没动——先前记录放行时只粗看包级数字，**没看按类 csv**，错过「单类 0.59 拖累包级」的诊断；本次直接读 csv 一次到位。（2）`WebProperties` 的 compact constructor 把 `trustedHosts == null` 标准化为空集合，导致常规路径永远跑不到 `isTrusted` 的 null 分支；测试必须用 `new WebProperties(..., null, ...)` 绕过去才能覆盖。（3）`HomePathGuard` 的 IOException catch 分支没补——需要 OS 特定路径（Windows NUL 或符号链接环）才能可靠触发，跨平台测试得不偿失；该类已 0.77 单独提它风险不大。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
