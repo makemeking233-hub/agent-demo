@@ -1,6 +1,7 @@
 package com.example.agent.web.api;
 
 import com.example.agent.permission.PermissionMode;
+import com.example.agent.provider.ProviderInference;
 import com.example.agent.web.api.dto.AbortResponse;
 import com.example.agent.web.api.dto.PermissionModeRequest;
 import com.example.agent.web.api.dto.SendRequest;
@@ -54,9 +55,18 @@ public class ChatController {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "workspace_not_found")));
         }
         String model = resolveModel(req.model());
+        // add-provider-catalog-abstract task 6.3 + 7.3：按 model 名推断 provider；推断为 null
+        // 时从 yml agent.chat.default-provider 兜底（v0.1 fallback "deepseek"）。
+        String providerId = ProviderInference.inferProvider(model);
+        if (providerId == null) {
+            String defaultProvider = env.getProperty("agent.chat.default-provider");
+            providerId = (defaultProvider != null && !defaultProvider.isBlank())
+                    ? defaultProvider : "deepseek";
+        }
         // add-models-dropdown-v0：透传 reasoningEffort（null/blank = 不切换，沿用 Provider 默认）
+        // add-provider-catalog-abstract：6 参重载透传 providerId 到 AgentLoop.setProviderId
         ChatStreamService.ActiveStream meta =
-                streams.create(sessionId, model, mode, req.workspace(), req.reasoningEffort());
+                streams.create(providerId, sessionId, model, mode, req.workspace(), req.reasoningEffort());
         streams.start(meta.streamId(), req.content());
         return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, model)));
     }

@@ -102,6 +102,33 @@ public class ChatStreamService {
             PermissionMode mode,
             String workspace,
             String reasoningEffort) {
+        return create(null, sessionId, model, mode, workspace, reasoningEffort);
+    }
+
+    /**
+     * 创建一条活动流（add-provider-catalog-abstract task 7.1：新增 6 参重载）。
+     *
+     * <p>新增 {@code providerId} 字段透传到 {@code AgentLoop.setProviderId(providerId)}；多 provider 路由
+     * （v0.2）会在 {@code WebAgentRuntime.createLoop} 按 providerId 选 provider bean。当前 v0.1
+     * 仍只路由 DeepSeek，故 providerId 仅写到 AgentLoop 用于后续 validateProvider 校验，不影响
+     * 实际 HTTP 路由。
+     *
+     * @param providerId   provider 标识（{@code deepseek} / {@code openai} / {@code anthropic}）；
+     *                     {@code null} = 不切换（沿用 AgentLoop 默认）
+     * @param sessionId    会话 id
+     * @param model        模型名
+     * @param mode         初始权限模式
+     * @param workspace    工作区
+     * @param reasoningEffort 思考强度
+     * @return 活动流元数据
+     */
+    public ActiveStream create(
+            String providerId,
+            String sessionId,
+            String model,
+            PermissionMode mode,
+            String workspace,
+            String reasoningEffort) {
         String streamId = UUID.randomUUID().toString();
         // replay().all(): 延迟订阅者(客户端 turn 完成后再连)能收到全部事件 + complete,
         // 支撑 spec §resume/Last-Event-ID 与测试中 send→stream 的先后时序。
@@ -131,14 +158,14 @@ public class ChatStreamService {
         if (reasoningEffort != null && !reasoningEffort.isBlank()) {
             loop.setReasoningEffort(reasoningEffort);
         }
-        // add-provider-catalog-abstract：透传 model（AgentLoop.model 是 volatile 字段,setSelection 同步）
+        // add-provider-catalog-abstract task 7.2：透传 provider + model 到 AgentLoop
         // loop 可能在测试中 mock 为 null（只验证 createLoop 参数），用 null-check 跳过副作用调用
         if (loop != null) {
+            if (providerId != null && !providerId.isBlank()) {
+                loop.setProviderId(providerId);
+            }
             loop.setModel(model);
         }
-        // 注：当前 ChatStreamService 仍是单 provider 路由（DeepSeek）；多 provider 路由留 v0.2
-        // （需在 WebAgentRuntime.createLoop 选 provider bean，按 setSelection(provider, ...) 路由）。
-        // add-provider-catalog-abstract task 6.3 后置：ProviderInference.inferProvider 在 ChatController 层做。
         ActiveStream meta =
                 new ActiveStream(
                         streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted, workspace);
