@@ -441,6 +441,15 @@ public final class WorkspaceStore {
         Files.writeString(wsDir.resolve(META), JSON.writeValueAsString(root), StandardCharsets.UTF_8);
     }
 
+    /** 直接覆盖整个 durable order（用于拖拽重排时一次性应用新顺序）。 */
+    public static void replaceOrder(Path agentDataDir, List<String> order) {
+        try {
+            writeOrder(agentDataDir, List.copyOf(order));
+        } catch (IOException e) {
+            log.warn("replaceOrder 失败: {}", e.getMessage());
+        }
+    }
+
     /** 写 order.json。 */
     private static void writeOrder(Path agentDataDir, List<String> order) throws IOException {
         Path orderFile = agentDataDir.resolve("workspaces").resolve(ORDER);
