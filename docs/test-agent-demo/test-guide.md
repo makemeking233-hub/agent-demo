@@ -24,6 +24,7 @@
 | `2026-09-13-add-models-dropdown-v0/` | add-models-dropdown-v0 模型+思考强度下拉（AgentLoop 透传 + 三 Provider effort 适配 + Web 后端 reasoningEffort + CLI /effort + 前端 Dropdown/ModelSelect/ReasoningEffortSelect + localStorage 持久化） | 2026-09-13 | 17（10 Java 新增 + 7 vitest Dropdown；前端集成/localStorage 测试未写） | ✅ Java 全绿 / ⚠️ 前端 vitest 沙箱 npm ci 失败未跑 | ✅ | 已实施未归档 |
 | `2026-09-14-mermaid/` | add-mermaid-diagrams mermaid 围栏渲染成图（rehype 改写 + MermaidBlock 懒加载 + securityLevel strict + 闭合判定 + 失败兜底 + PWA 预缓存白名单） | 2026-09-14 | 8 新增（5 MermaidBlock + 3 markdown 分组；另 175 既有 vitest 回归） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-13-improve-voice-accuracy/` | 语音识别准确率改进（回声防护加固 + partial 状态机 + ASR 后处理 + Composer partial UI + 后端 /api/chat/voice-correction 端点 + 配置门禁 + 测试隔离） | 2026-09-13 → 2026-09-14 | 53 新增（32 Java + 21 vitest；另 390 既有回归） | ✅ 全绿；jacoco security 包 0.62 既有 fail 在 main HEAD (637ec43) 可复现 → 记录放行 | ✅ | 已归档 |
+| `2026-09-18-provider-catalog/` | add-provider-catalog-abstract provider 分层目录（ProviderInference 前缀推断 + DeepSeek/MiniMax validateProviderHook + ChatStreamService 6 参透传 + ChatController 推断兜底 + CLI /model &lt;provider&gt;/&lt;model&gt; + 前端 chat.ts 类型升级 + ModelSelect 两层菜单 + ReasoningEffortSelect options prop） | 2026-09-18 | 75 新增（45 Java + 30 vitest；另 674 Java + 211 vitest 回归） | ✅ 全绿（Java 719 + 前端 241 = 960）；tsc 6 ≤ 基线 7；3 个 web 包 jacoco 既有违规未恶化 | ✅ | 已归档 |
 
 ---
 
@@ -133,9 +134,15 @@
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
----
+### 2.14 `2026-09-18-provider-catalog/` — provider 分层目录
 
-## 3. 如何登记下一次测试
+- **测试目标**：验证 v0.1 平铺模型列表升级为 v0.2 分层 provider 目录后的六条主线——provider 前缀推断正确性、provider 校验一致性（providerId 不匹配抛错且向后兼容）、provider 透传链路（ChatController → ChatStreamService 6 参 → AgentLoop.setProviderId）、**BREAKING 迁移安全性**（旧 localStorage 无 provider 不炸）、前端两层菜单交互、CLI `/model` 兼容性。
+- **执行要点**：worktree `.worktrees/add-provider-catalog-abstract` 隔离作业（§2.7），承接前一 session 已落地的 13/62 task；本次补完 task 5-12。门禁 1 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` → agent-core 461/461 + agent-web 258/258 全绿；前端 `npx vitest run` 241/241 全绿（25 文件）；`npx tsc --noEmit` 6 个错误（**低于**基线 7，且 `web.api` 包因新增 ChatController 推断测试从 jacoco 违规 → 通过）。
+- **关键发现**：（1）**模板方法优于继承覆盖**——给 DeepSeek/MiniMax 加 provider 校验时发现基类 `streamChat` 是 `final`；改为基类引入 `validateProviderHook` 默认放过、子类只覆盖钩子，协议逻辑保持单一份，也顺带把「为测试放宽封装」的诱惑挡掉。（2）**不可达分支要记下来而不是绕过去**——`default-provider` 兜底因 `resolveModel` 先做白名单回退而实际不可达（当前 `SUPPORTED_MODELS` 全是 `deepseek-` 前缀）；测试改为 mock `supported-models=abab6.5s-chat` 构造可达场景，并在 `provider-catalog.md` §10 与测试注释显式记录该事实。（3）**行为变更要认**——`/model gpt-99` 从 v0.1 拒绝变为 v0.2 接受（`gpt-` 前缀推断为 openai）；处理方式是改旧断言（改 `gemini-99`）+ 新增用例显式记录新行为 + 文档与 commit message 写明，而非偷偷改测试。（4）**多 provider 路由尚未实现**——`providerId` 目前仅用于 `validateProviderHook` 校验与 `ChatRequest.extra` 透传，`WebAgentRuntime.createLoop` 仍注入单一 DeepSeek provider bean；这是 v0.2 已知限制，已在 `provider-catalog.md` §10 明确列出，避免后人误判「provider 已生效」。（5）组件测试重复文案陷阱——`ReasoningEffortSelect` trigger 与下拉项文案相同，`getByText` 会匹配 2 个元素；改用 `getAllByRole("option")` 定位。（6）`--reporter=basic` 在本机 vitest 版本不被识别，改用默认 reporter。
+- **deferred（2 项）**：Playwright 两层菜单真实点击 E2E（task 9.4，沙箱浏览器不可跑，与 agent-web 既有 3 个 E2E 同因）；真实多 provider HTTP 路由验证（v0.2 未实现）。
+- **数据隔离**：75 个新增用例均为纯单元测试（Java Mockito mock / 前端 jsdom + mock api），不启真实 Spring 应用、不写 `~/.agent-demo`；**未产生需清理的用户数据**。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
 
 新测试完成后按以下步骤登记（遵守 `AGENTS.md §2.6`）：
 
