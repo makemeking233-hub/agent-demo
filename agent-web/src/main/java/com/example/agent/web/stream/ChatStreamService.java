@@ -131,6 +131,14 @@ public class ChatStreamService {
         if (reasoningEffort != null && !reasoningEffort.isBlank()) {
             loop.setReasoningEffort(reasoningEffort);
         }
+        // add-provider-catalog-abstract：透传 model（AgentLoop.model 是 volatile 字段,setSelection 同步）
+        // loop 可能在测试中 mock 为 null（只验证 createLoop 参数），用 null-check 跳过副作用调用
+        if (loop != null) {
+            loop.setModel(model);
+        }
+        // 注：当前 ChatStreamService 仍是单 provider 路由（DeepSeek）；多 provider 路由留 v0.2
+        // （需在 WebAgentRuntime.createLoop 选 provider bean，按 setSelection(provider, ...) 路由）。
+        // add-provider-catalog-abstract task 6.3 后置：ProviderInference.inferProvider 在 ChatController 层做。
         ActiveStream meta =
                 new ActiveStream(
                         streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted, workspace);
