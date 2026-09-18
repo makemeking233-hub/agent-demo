@@ -9,7 +9,11 @@ export interface SendRequest {
   content: string;
   session_id?: string;
   permission_mode?: PermissionMode;
-  /** add-models-dropdown-v0: 可选模型名（如 deepseek-reasoner）；缺省 deepseek-chat */
+  /**
+   * 可选模型名。留空/不传 → 服务端用 `agent.chat.default-model`；
+   * 传了但不在服务端目录中 → 400 `invalid_model`（不再静默兜底）。
+   * 合法取值见 `listModels()`。
+   */
   model?: string;
   /** add-models-dropdown-v0: 可选思考强度（low / medium / high）；缺省由 Provider 内部 fallback */
   reasoning_effort?: string;
@@ -29,9 +33,17 @@ export interface ModelEntry {
   reasoningEfforts: string[];
 }
 
-/** add-models-dropdown-v0: /api/chat/models 响应包装 */
+/**
+ * add-models-dropdown-v0: /api/chat/models 响应包装。
+ *
+ * `defaultModel` / `defaultProvider` 为 fix-stale-model-fallback 新增：
+ * 前端据此兜底，不必再硬编码模型 id（此前硬编码的 `deepseek-chat` 已被上游停用
+ * 且不在服务端目录中）。可选是因为连到旧版后端时这两个字段不存在。
+ */
 export interface ModelsResponse {
   models: ModelEntry[];
+  defaultModel?: string;
+  defaultProvider?: string;
 }
 
 export interface SlashResult {

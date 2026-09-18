@@ -8,6 +8,7 @@ import { Sidebar, type SidebarSession } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { OnlineProvider } from "./hooks/useOnline";
 import { useThemeApplication } from "./hooks/useThemeApplication";
+import { resolveModelSelection } from "./lib/model-selection";
 import styles from "./App.module.css";
 
 function toSidebar(s: SessionSummary): SidebarSession {
@@ -27,16 +28,19 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsTriggerRef = useRef<HTMLElement | null>(null);
   // add-models-dropdown-v0：模型/思考强度全局状态（App 持有，TopBar 和 ChatPanel 共享）
-  const [model, setModel] = useState<string>("deepseek-chat");
+  // fix-stale-model-fallback：初值留空，不再硬编码模型 id。空串在请求体里表示
+  // 「未指定」，由服务端回落到 agent.chat.default-model —— 那个值必然是合法的。
+  const [model, setModel] = useState<string>("");
   const [reasoningEffort, setReasoningEffort] = useState<string>("medium");
   const [currentModelEntry, setCurrentModelEntry] = useState<ModelEntry | null>(null);
 
   const api = new ChatApi();
 
-  // 拉 supported-models 用于校验 localStorage 持久化的 model + reasoningEffort
+  // 拉模型目录用于校验 localStorage 持久化的 model + reasoningEffort
   useEffect(() => {
     let cancelled = false;
-    let savedModel = "deepseek-chat";
+    // 空串 = 没有可用的历史选择，最终由服务端默认值决定
+    let savedModel = "";
     let savedEffort = "medium";
     try {
       const raw = window.localStorage.getItem("agent-demo:model-selection");
@@ -53,30 +57,30 @@ export function App() {
       .listModels()
       .then((resp) => {
         if (cancelled) return;
-        const valid = resp.models.find((m) => m.id === savedModel);
-        const finalModel = valid ? savedModel : "deepseek-chat";
-        const entry =
-          valid ?? resp.models.find((m) => m.id === "deepseek-chat") ?? resp.models[0] ?? null;
-        const finalEffort =
-          entry && entry.reasoningEfforts.includes(savedEffort)
-            ? savedEffort
-            : entry && entry.reasoningEfforts.length > 0
-              ? entry.reasoningEfforts[0]
-              : "medium";
-        setModel(finalModel);
-        setReasoningEffort(finalEffort);
-        setCurrentModelEntry(entry);
+        // fix-stale-model-fallback：兜底值来自服务端 defaultModel，不再硬编码模型 id。
+        // 解析规则与不变量见 lib/model-selection.ts（同目录有单测锁死）。
+        const resolved = resolveModelSelection(
+          resp.models,
+          resp.defaultModel,
+          savedModel,
+          savedEffort
+        );
+        setModel(resolved.model);
+        setReasoningEffort(resolved.effort);
+        setCurrentModelEntry(resolved.entry);
         try {
           window.localStorage.setItem(
             "agent-demo:model-selection",
-            JSON.stringify({ model: finalModel, reasoningEffort: finalEffort })
+            JSON.stringify({ model: resolved.model, reasoningEffort: resolved.effort })
           );
         } catch {
           /* ignore */
         }
       })
       .catch(() => {
-        setModel(savedModel);
+        // 拉不到目录就无法校验历史选择，因此不发未经校验的 id：
+        // 置空让服务端用配置默认值，而不是把一个可能已下线的模型发出去。
+        setModel("");
         setReasoningEffort(savedEffort);
       });
     return () => {
