@@ -94,14 +94,8 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
         return MAX_OUTPUT;
     }
 
-    /**
-     * add-provider-catalog-abstract：校验 {@code req.extra().get("provider")} 等于本 provider id。
-     *
-     * <p>多 provider 共存时,前端 ModelSelect 选择的 provider 必须与 AgentLoop 实际路由的 provider
-     * 一致,避免误把 DeepSeek 请求发到其他 provider。若 {@code req.extra} 为空或不含 "provider" 字段,
-     * 跳过校验(向后兼容 v0.1 调用方)。
-     */
-    static void validateProvider(ChatRequest req) {
+    @Override
+    protected void validateProviderHook(ChatRequest req) {
         if (req.extra() == null) return;
         Object v = req.extra().get("provider");
         if (v == null) return;
@@ -110,12 +104,5 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
                     "DeepSeekProvider expected provider=\"" + PROVIDER_ID
                             + "\" but req.extra.provider=\"" + v + "\"");
         }
-    }
-
-    @Override
-    public Flux<StreamChunk> streamChat(ChatRequest req) {
-        // add-provider-catalog-abstract: 校验 req.extra 中的 provider 与本实例一致
-        validateProvider(req);
-        return super.streamChat(req);
     }
 }

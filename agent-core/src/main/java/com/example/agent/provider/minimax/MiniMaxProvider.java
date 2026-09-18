@@ -1,6 +1,9 @@
 package com.example.agent.provider.minimax;
 
+import com.example.agent.llm.ChatRequest;
+import com.example.agent.llm.StreamChunk;
 import com.example.agent.provider.openai.OpenAiCompatibleProvider;
+import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 
@@ -13,8 +16,14 @@ import java.time.Duration;
  * <p>所有协议细节（HTTP client / SSE 解析 / 请求体构造）继承自 {@link OpenAiCompatibleProvider}。
  *
  * <p>详见 https://platform.minimaxi.com/docs/api-reference/text-chat-openai
+ *
+ * <p>add-provider-catalog-abstract：与 {@link com.example.agent.provider.deepseek.DeepSeekProvider} 同模式,
+ * 覆盖 {@link #validateProviderHook(ChatRequest)} 校验 req.extra.provider 与本 provider id 一致。
  */
 public class MiniMaxProvider extends OpenAiCompatibleProvider {
+
+    /** add-provider-catalog-abstract：本 provider 对应的 providerId */
+    private static final String PROVIDER_ID = "minimax";
 
     /**
      * MiniMax 中国版 API base URL
@@ -70,7 +79,7 @@ public class MiniMaxProvider extends OpenAiCompatibleProvider {
 
     @Override
     public String name() {
-        return "minimax";
+        return PROVIDER_ID;
     }
 
     @Override
@@ -91,5 +100,17 @@ public class MiniMaxProvider extends OpenAiCompatibleProvider {
     @Override
     public int maxOutputTokens() {
         return MAX_OUTPUT;
+    }
+
+    @Override
+    protected void validateProviderHook(ChatRequest req) {
+        if (req.extra() == null) return;
+        Object v = req.extra().get("provider");
+        if (v == null) return;
+        if (!PROVIDER_ID.equals(v.toString())) {
+            throw new IllegalArgumentException(
+                    "MiniMaxProvider expected provider=\"" + PROVIDER_ID
+                            + "\" but req.extra.provider=\"" + v + "\"");
+        }
     }
 }
