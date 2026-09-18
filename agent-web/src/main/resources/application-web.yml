@@ -75,3 +75,21 @@ agent:
   voice:
     post-process:
       enabled: true
+  # add-wecom-channel: 企业微信（WeCom）自建应用 bot 通道（默认关；启用前需
+  # 在企业微信管理后台配回调 URL = callback-base-url + /wecom/callback，并填
+  # 同样的 token + EncodingAESKey）。WecomConfig 启动时 fail-fast 校验字段。
+  # 已知限制：企业微信拒自签证书，dev 环境需 ngrok/cloudflared 或自备公网域名。
+  wecom:
+    enabled: ${WECOM_ENABLED:false}
+    corp-id: ${WECOM_CORP_ID:}
+    agent-id: ${WECOM_AGENT_ID:}
+    secret: ${WECOM_SECRET:}
+    token: ${WECOM_TOKEN:}
+    encoding-aes-key: ${WECOM_AES_KEY:} # 43 字符 Base64
+    callback-base-url: ${WECOM_CALLBACK_BASE_URL:}
+    # 流式 markdown 回复推送限频（add-wecom-channel task 1.1）
+    reply:
+      flush-interval-ms: 3000 # 累积窗口（毫秒）
+      flush-min-chars: 500    # 累积字符阈值
+      max-chars: 4000         # 单条 markdown 上限（字节，UTF-8）
+      retry-backoff-ms: 30000 # API 限频（45009）退避时长
