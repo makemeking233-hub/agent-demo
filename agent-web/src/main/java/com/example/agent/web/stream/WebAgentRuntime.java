@@ -430,7 +430,7 @@ public class WebAgentRuntime {
     private Path workspaceDir(String workspace) {
         if (workspace == null || workspace.isBlank()) return null;
         WorkspaceStore.Workspace ws = WorkspaceStore.get(agentDataDir, workspace);
-        return ws != null ? ws.dir() : null;
+        return ws != null ? ws.path() : null;
     }
 
     /** map 复合 key（工作区 + ":" + 会话 id）。 */
