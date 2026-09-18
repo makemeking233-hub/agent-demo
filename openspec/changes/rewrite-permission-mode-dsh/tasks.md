@@ -4,7 +4,7 @@
 
 - [x] 1.1 新建 `SandboxMode` 枚举（PLAN / ASK / DANGER_FULL / DONT_ASK）+ `wireValue()` + `from(String)` + `DEFAULT = PLAN`
 - [x] 1.2 新建 `Capability` 枚举（FS / BASH / TERMINAL）+ `SandboxPolicy` record（mode + workspaceRoot + tempRoots + capability）
-- [ ] 1.3 新建 `FsDenialKind` 枚举（READ_OUT_OF_BOUNDS / WRITE_OUT_OF_BOUNDS / SENSITIVE_PATH / TOOL_DENY / MODE_REJECTED）
+- [x] 1.3 新建 `FsDenialKind` 枚举（READ_OUT_OF_BOUNDS / WRITE_OUT_OF_BOUNDS / SENSITIVE_PATH / TOOL_DENY / MODE_REJECTED）
 - [ ] 1.4 新建 `WritableRoots` 工具类（单一 `writableRoots(SandboxPolicy)` 函数 + `canonicalize(Path)` 私有方法 + IOException 回退原拼写）
 - [ ] 1.5 新建 `SandboxPolicyService`（@Component 单例 + `AtomicReference<SandboxMode> mode` + `Path workspaceRoot` + `resolve(ctx, capability): SandboxPolicy` + `setMode` + `escalate` + `restoreOnTurnEnd` + `createForTest()` 工厂）
 
