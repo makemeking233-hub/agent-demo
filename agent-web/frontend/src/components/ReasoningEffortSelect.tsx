@@ -1,37 +1,34 @@
-import type { ModelEntry } from "../api/chat";
+import type { ReasoningEffort } from "../api/chat";
 import { Dropdown } from "./Dropdown";
 
 /**
- * 思考强度下拉框（add-models-dropdown-v0）。
+ * 思考强度下拉框（add-models-dropdown-v0；add-provider-catalog-abstract task 10 升级 prop）。
  *
- * <p>仅当 {@code model.supportsReasoning=true} 且 {@code model.reasoningEfforts.length > 0} 时渲染；
- * 否则返回 {@code null}(从 DOM 移除)。
+ * <p>prop 从 `model: ModelEntry` 改为 `options: ReasoningEffort[]`（对齐 dsh web
+ * `ModelReasoningEffort[]` 数据形态）：调用方只需下发当前模型的档位数组，
+ * 组件自己不再感知 `supportsReasoning`。
+ *
+ * <p>`options` 为空数组时返回 `null`（从 DOM 移除）。
  */
 export interface ReasoningEffortSelectProps {
-  model: ModelEntry | null;
+  options: ReasoningEffort[];
   value: string;
   onChange: (effort: string) => void;
 }
 
-const LABELS: Record<string, string> = {
-  low: "低",
-  medium: "中",
-  high: "高",
-};
-
-export function ReasoningEffortSelect({ model, value, onChange }: ReasoningEffortSelectProps) {
-  if (!model || !model.supportsReasoning || model.reasoningEfforts.length === 0) {
+export function ReasoningEffortSelect({ options, value, onChange }: ReasoningEffortSelectProps) {
+  if (!options || options.length === 0) {
     return null;
   }
 
-  const options = model.reasoningEfforts.map((e) => ({
-    label: `思考 ${LABELS[e] ?? e}`,
-    value: e,
+  const dropdownOptions = options.map((e) => ({
+    label: `思考 ${e.name}`,
+    value: e.id,
   }));
 
   return (
     <Dropdown
-      options={options}
+      options={dropdownOptions}
       value={value}
       onChange={onChange}
       placeholder="思考强度"

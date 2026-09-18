@@ -235,6 +235,8 @@ export function ChatPanel(props: {
   currentSessionId?: string | null;
   workspace?: string;
   // add-models-dropdown-v0：model/reasoningEffort 由 App 持有并传入（避免 ChatPanel 与 TopBar 状态不同步）
+  /** add-provider-catalog-abstract task 11.4：随 send 透传到后端的 provider id（可为空串） */
+  provider: string;
   model: string;
   reasoningEffort: string;
   currentModelEntry: ModelEntry | null;
@@ -248,7 +250,7 @@ export function ChatPanel(props: {
   // 权限模式（add-permission-mode-dropdown）：缺省 read_only；切换即调后端 setPermission；随 send 透传初始模式。
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("read_only");
   // add-models-dropdown-v0：model/reasoningEffort/currentModelEntry 由 props 传入（App.tsx 持有，避免双 state 不同步）
-  const { model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
+  const { provider, model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
   // （React 闭包捕获的是函数创建时的值；SSE 异步到达时闭包里的 streamId 可能仍是 null → 权限提交被跳过）。
   const streamIdRef = useRef<string | null>(null);
@@ -381,6 +383,8 @@ export function ChatPanel(props: {
         session_id: sessionIdRef.current ?? undefined,
         permission_mode: permissionMode,
         // add-models-dropdown-v0：透传 model + reasoningEffort 到后端
+        // add-provider-catalog-abstract task 11.4：透传 provider（空串时不发，后端按 model 前缀推断）
+        provider: provider || undefined,
         model,
         reasoning_effort: reasoningEffort,
       });

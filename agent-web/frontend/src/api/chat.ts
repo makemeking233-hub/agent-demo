@@ -9,6 +9,11 @@ export interface SendRequest {
   content: string;
   session_id?: string;
   permission_mode?: PermissionMode;
+  /**
+   * add-provider-catalog-abstract: 可选 provider id（如 `deepseek` / `openai` / `anthropic`）；
+   * 缺省由后端 `ProviderInference` 按 model 前缀推断，推断失败回退 `agent.chat.default-provider`。
+   */
+  provider?: string;
   /** add-models-dropdown-v0: 可选模型名（如 deepseek-reasoner）；缺省 deepseek-chat */
   model?: string;
   /** add-models-dropdown-v0: 可选思考强度（low / medium / high）；缺省由 Provider 内部 fallback */
@@ -21,17 +26,111 @@ export interface SendResponse {
   model: string;
 }
 
-/** add-models-dropdown-v0: /api/chat/models 返回的模型条目 */
+/**
+ * 推理强度档位条目（add-provider-catalog-abstract）。
+ *
+ * <p>对齐 dsh web `ModelReasoningEffort`：每个推理模型可选档位的 `{id, name, description?}`。
+ */
+export interface ReasoningEffort {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+/** add-provider-catalog-abstract: /api/chat/models 嵌套结构里的模型条目 */
 export interface ModelEntry {
   id: string;
   name: string;
   supportsReasoning: boolean;
-  reasoningEfforts: string[];
+  reasoningEfforts: ReasoningEffort[];
 }
 
-/** add-models-dropdown-v0: /api/chat/models 响应包装 */
-export interface ModelsResponse {
+/**
+ * Provider 分组（add-provider-catalog-abstract）。
+ *
+ * <p>两层菜单外层：列出 provider（如 "DeepSeek" / "OpenAI" / "Anthropic"），
+ * 每个 provider 嵌套其下的所有 {@link ModelEntry}。对齐 dsh web `ModelProviderGroup`。
+ */
+export interface ProviderGroup {
+  id: string;
+  name: string;
   models: ModelEntry[];
+}
+
+/**
+ * `/api/chat/models` 响应（add-provider-catalog-abstract）。
+ *
+ * <p>**BREAKING**：v0.1（add-models-dropdown-v0）是平铺 `models[]`；
+ * v0.2 升级为嵌套 `providers[]`。平铺字段已移除。
+ */
+export interface ModelsResponse {
+  providers: ProviderGroup[];
+}
+
+/**
+ * 模型选择三元组（add-provider-catalog-abstract）。
+ *
+ * <p>对齐 dsh web `ModelSelection`：provider + model + 可选 reasoningEffort。
+ */
+export interface ModelSelection {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
+
+/** localStorage key（add-models-dropdown-v0 沿用，v0.2 起 value 含 provider）。 */
+export const MODEL_SELECTION_KEY = "agent-demo:model-selection";
+
+/**
+ * 按 model 名前缀推断 provider（add-provider-catalog-abstract；对齐后端 `ProviderInference`）。
+ *
+ * <p>用于旧格式 localStorage（无 provider 字段）的 fallback。推断失败返回 `null`。
+ */
+export function inferProvider(model: string | null | undefined): string | null {
+  if (!model) return null;
+  const m = model.toLowerCase();
+  if (m.startsWith("o1") || m.startsWith("o3") || m.startsWith("o4") || m.startsWith("gpt-")) {
+    return "openai";
+  }
+  if (m.startsWith("claude-")) return "anthropic";
+  if (m.startsWith("deepseek-")) return "deepseek";
+  return null;
+}
+
+/**
+ * 读 localStorage 里的模型选择（add-provider-catalog-abstract task 8.4）。
+ *
+ * <p>兼容旧格式（add-models-dropdown-v0 只有 `{model, reasoningEffort}`）：读到旧格式时
+ * `provider` 返回空串，调用方应走 {@link inferProvider} 推断。
+ *
+ * @returns 解析成功的选择；无记录 / 格式非法（缺 model）/ JSON 损坏时返回 `null`
+ */
+export function readModelSelection(): ModelSelection | null {
+  try {
+    const raw = window.localStorage.getItem(MODEL_SELECTION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ModelSelection>;
+    if (typeof parsed.model !== "string" || parsed.model.length === 0) return null;
+    return {
+      provider: typeof parsed.provider === "string" ? parsed.provider : "",
+      model: parsed.model,
+      reasoningEffort:
+        typeof parsed.reasoningEffort === "string" && parsed.reasoningEffort.length > 0
+          ? parsed.reasoningEffort
+          : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 写 localStorage（add-provider-catalog-abstract task 8.4）；失败静默忽略（隐私模式等）。 */
+export function writeModelSelection(selection: ModelSelection): void {
+  try {
+    window.localStorage.setItem(MODEL_SELECTION_KEY, JSON.stringify(selection));
+  } catch {
+    /* ignore */
+  }
 }
 
 export interface SlashResult {

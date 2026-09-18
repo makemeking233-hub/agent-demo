@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { ChatApi, type ModelEntry, type SessionSummary, type Workspace } from "./api/chat";
+import {
+  ChatApi,
+  inferProvider,
+  readModelSelection,
+  writeModelSelection,
+  type ModelEntry,
+  type ModelSelection,
+  type ProviderGroup,
+  type SessionSummary,
+  type Workspace,
+} from "./api/chat";
 import { ChatPanel } from "./components/ChatPanel";
 import { OfflineBanner } from "./components/OfflineBanner";
 import { PwaUpdatePrompt } from "./components/PwaUpdatePrompt";
@@ -12,6 +22,69 @@ function toSidebar(s: SessionSummary): SidebarSession {
   return { id: s.id, title: s.title, preview: s.preview, workspace: s.workspace, time: s.time };
 }
 
+const DEFAULT_SELECTION: ModelSelection = {
+  provider: "deepseek",
+  model: "deepseek-chat",
+  reasoningEffort: undefined,
+};
+
+/** 在嵌套 providers 里找 model（返回 provider id + entry）。 */
+function findModel(
+  providers: ProviderGroup[],
+  modelId: string
+): { providerId: string; entry: ModelEntry } | null {
+  for (const p of providers) {
+    const hit = p.models.find((m) => m.id === modelId);
+    if (hit) return { providerId: p.id, entry: hit };
+  }
+  return null;
+}
+
+/**
+ * 按已加载的 providers 校验并规整一个 {@link ModelSelection}（add-provider-catalog-abstract task 11.2）。
+ *
+ * <p>规整规则：
+ *
+ * <ol>
+ *   <li>model 不在目录里 → 回退 default（deepseek-chat，再退到第一个 provider 的第一个 model）
+ *   <li>provider 为空（旧格式 localStorage）→ 用 {@link inferProvider} 按 model 前缀推断，
+ *       推断失败用 model 实际所属 provider
+ *   <li>reasoningEffort 不在该 model 档位里 → 取第一档，model 不支持则置 undefined
+ * </ol>
+ */
+function normalizeSelection(
+  providers: ProviderGroup[],
+  raw: ModelSelection
+): { selection: ModelSelection; entry: ModelEntry | null } {
+  const hit = findModel(providers, raw.model);
+  if (!hit) {
+    const fallbackHit =
+      findModel(providers, "deepseek-chat") ??
+      (providers[0]?.models[0]
+        ? { providerId: providers[0].id, entry: providers[0].models[0] }
+        : null);
+    if (!fallbackHit) return { selection: raw, entry: null };
+    return { selection: regularize(providers, fallbackHit.providerId, fallbackHit.entry, raw), entry: fallbackHit.entry };
+  }
+  return { selection: regularize(providers, hit.providerId, hit.entry, raw), entry: hit.entry };
+}
+
+function regularize(
+  providers: ProviderGroup[],
+  actualProviderId: string,
+  entry: ModelEntry,
+  raw: ModelSelection
+): ModelSelection {
+  const inferred = raw.provider && raw.provider.length > 0 ? raw.provider : inferProvider(entry.id);
+  const provider = inferred ?? actualProviderId;
+  let effort: string | undefined;
+  if (entry.supportsReasoning && entry.reasoningEfforts.length > 0) {
+    const keep = entry.reasoningEfforts.some((e) => e.id === raw.reasoningEffort);
+    effort = keep ? raw.reasoningEffort : entry.reasoningEfforts[0].id;
+  }
+  return { provider, model: entry.id, reasoningEffort: effort };
+}
+
 export function App() {
   const [sessions, setSessions] = useState<SidebarSession[]>([]);
   const [archived, setArchived] = useState<SidebarSession[]>([]);
@@ -19,109 +92,63 @@ export function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<string>("agent-demo");
   const [currentSessionId, setCurrentSessionId] = useState<string | null>("1");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // add-models-dropdown-v0：模型/思考强度全局状态（App 持有，TopBar 和 ChatPanel 共享）
-  const [model, setModel] = useState<string>("deepseek-chat");
-  const [reasoningEffort, setReasoningEffort] = useState<string>("medium");
+  // add-provider-catalog-abstract task 11：模型选择从 {model, reasoningEffort} 升级为
+  // ModelSelection（含 provider）。App 持有并下发给 TopBar（完整 selection）+
+  // ChatPanel（拆开的 model / effort / entry，供 Composer 用）。
+  const [selection, setSelection] = useState<ModelSelection>(DEFAULT_SELECTION);
   const [currentModelEntry, setCurrentModelEntry] = useState<ModelEntry | null>(null);
 
   const api = new ChatApi();
 
-  // 拉 supported-models 用于校验 localStorage 持久化的 model + reasoningEffort
+  // 拉 provider 目录用于校验 localStorage 持久化的 selection（task 11.2）
   useEffect(() => {
     let cancelled = false;
-    let savedModel = "deepseek-chat";
-    let savedEffort = "medium";
-    try {
-      const raw = window.localStorage.getItem("agent-demo:model-selection");
-      if (raw) {
-        const parsed = JSON.parse(raw) as { model?: string; reasoningEffort?: string };
-        if (typeof parsed.model === "string" && parsed.model.length > 0) savedModel = parsed.model;
-        if (typeof parsed.reasoningEffort === "string" && parsed.reasoningEffort.length > 0)
-          savedEffort = parsed.reasoningEffort;
-      }
-    } catch {
-      /* ignore */
-    }
+    const saved = readModelSelection() ?? DEFAULT_SELECTION;
     api
       .listModels()
       .then((resp) => {
         if (cancelled) return;
-        const valid = resp.models.find((m) => m.id === savedModel);
-        const finalModel = valid ? savedModel : "deepseek-chat";
-        const entry =
-          valid ?? resp.models.find((m) => m.id === "deepseek-chat") ?? resp.models[0] ?? null;
-        const finalEffort =
-          entry && entry.reasoningEfforts.includes(savedEffort)
-            ? savedEffort
-            : entry && entry.reasoningEfforts.length > 0
-              ? entry.reasoningEfforts[0]
-              : "medium";
-        setModel(finalModel);
-        setReasoningEffort(finalEffort);
+        const { selection: normalized, entry } = normalizeSelection(resp.providers ?? [], saved);
+        setSelection(normalized);
         setCurrentModelEntry(entry);
-        try {
-          window.localStorage.setItem(
-            "agent-demo:model-selection",
-            JSON.stringify({ model: finalModel, reasoningEffort: finalEffort })
-          );
-        } catch {
-          /* ignore */
-        }
+        writeModelSelection(normalized);
       })
       .catch(() => {
-        setModel(savedModel);
-        setReasoningEffort(savedEffort);
+        // 拉取失败：乐观采用持久化值（provider 空时按 model 前缀推断）
+        if (cancelled) return;
+        const provider = saved.provider || inferProvider(saved.model) || DEFAULT_SELECTION.provider;
+        setSelection({ ...saved, provider });
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  function handleModelChange(newModel: string) {
-    setModel(newModel);
+  /** 切换模型选择（ModelSelect 两层菜单回调）→ 落 localStorage + 刷新 model entry。 */
+  function handleSelectionChange(next: ModelSelection) {
+    setSelection(next);
+    writeModelSelection(next);
     api
       .listModels()
       .then((resp) => {
-        const entry = resp.models.find((m) => m.id === newModel) ?? null;
+        const { selection: normalized, entry } = normalizeSelection(resp.providers ?? [], next);
         setCurrentModelEntry(entry);
-        const nextEffort =
-          entry && entry.reasoningEfforts.includes(reasoningEffort)
-            ? reasoningEffort
-            : entry && entry.reasoningEfforts.length > 0
-              ? entry.reasoningEfforts[0]
-              : reasoningEffort;
-        setReasoningEffort(nextEffort);
-        try {
-          window.localStorage.setItem(
-            "agent-demo:model-selection",
-            JSON.stringify({ model: newModel, reasoningEffort: nextEffort })
-          );
-        } catch {
-          /* ignore */
+        // provider 空时 normalize 会补上推断值，回写保持一致
+        if (normalized.provider !== next.provider) {
+          setSelection(normalized);
+          writeModelSelection(normalized);
         }
       })
       .catch(() => {
-        try {
-          window.localStorage.setItem(
-            "agent-demo:model-selection",
-            JSON.stringify({ model: newModel, reasoningEffort })
-          );
-        } catch {
-          /* ignore */
-        }
+        setCurrentModelEntry(null);
       });
   }
 
+  /** Composer 里只改 effort（保持当前 provider / model）。 */
   function handleReasoningEffortChange(newEffort: string) {
-    setReasoningEffort(newEffort);
-    try {
-      window.localStorage.setItem(
-        "agent-demo:model-selection",
-        JSON.stringify({ model, reasoningEffort: newEffort })
-      );
-    } catch {
-      /* ignore */
-    }
+    const next: ModelSelection = { ...selection, reasoningEffort: newEffort };
+    setSelection(next);
+    writeModelSelection(next);
   }
 
   const refresh = () => {
@@ -192,8 +219,8 @@ export function App() {
       <div className={styles.app}>
         <TopBar
           api={api}
-          model={model}
-          onModelChange={handleModelChange}
+          selection={selection}
+          onSelectionChange={handleSelectionChange}
           onOpenSettings={() => alert("设置 v0.2 接入")}
         />
         <div
@@ -222,8 +249,9 @@ export function App() {
             <ChatPanel
               currentSessionId={currentSessionId}
               workspace={activeWorkspace}
-              model={model}
-              reasoningEffort={reasoningEffort}
+              provider={selection.provider}
+              model={selection.model}
+              reasoningEffort={selection.reasoningEffort ?? ""}
               currentModelEntry={currentModelEntry}
               onReasoningEffortChange={handleReasoningEffortChange}
             />

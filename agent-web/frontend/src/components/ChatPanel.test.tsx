@@ -28,13 +28,14 @@ describe("ChatPanel 会话重进恢复", () => {
   afterEach(() => cleanup());
 
   /**
-   * add-models-dropdown-v0 之后 ChatPanel 新增了 4 个必填 props（model / reasoningEffort /
-   * currentModelEntry / onReasoningEffortChange）。本文件只关心历史恢复与空态，与模型选择无关，
-   * 故统一给固定桩值，避免 4 处重复。
+   * add-models-dropdown-v0 之后 ChatPanel 新增了必填 props（provider / model / reasoningEffort /
+   * currentModelEntry / onReasoningEffortChange；provider 为 add-provider-catalog-abstract task 11.4 新增）。
+   * 本文件只关心历史恢复与空态，与模型选择无关，故统一给固定桩值，避免多处重复。
    */
   function renderPanel() {
     return render(
       <ChatPanel
+        provider="deepseek"
         model="deepseek-chat"
         reasoningEffort="medium"
         currentModelEntry={null}
