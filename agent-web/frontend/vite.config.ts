@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
 
 // frontend-maven-plugin: mvn package 阶段跑 `npm run build` 调到这里.
 // 产物输出到 agent-web/src/main/resources/static/, 让 Spring Boot 直接托管.
@@ -106,6 +107,11 @@ export default defineConfig({
     outDir: '../src/main/resources/static',
     emptyOutDir: true,
     sourcemap: true,
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(process.cwd(), 'src'),
+    },
   },
   server: {
     port: 5173,
