@@ -1,6 +1,7 @@
 package com.example.agent.web.api;
 
 import com.example.agent.web.api.catalog.ModelCatalog;
+import com.example.agent.web.api.catalog.ProviderCatalogProperties;
 import com.example.agent.web.api.dto.ModelsResponse;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,24 +10,29 @@ import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
 /**
- * 模型列表端点（add-provider-catalog-abstract）。
+ * 模型列表端点（add-provider-catalog-abstract + fix-stale-model-fallback）。
  *
  * <p>{@code GET /api/chat/models} 返回 {@link ModelCatalog} 启动加载的嵌套目录
- * ({@code providers[]} 结构,每个 provider 含其 models[] 与每个 model 的 reasoningEfforts[])。
- * 前端 ModelSelect 两层菜单(外层 provider / 内层 model + effort 联动)消费此结构。
+ * ({@code providers[]} 结构,每个 provider 含其 models[] 与每个 model 的 reasoningEfforts[]),
+ * 并附带配置的 {@code defaultProvider} / {@code defaultModel}。前端 ModelSelect 两层菜单
+ * (外层 provider / 内层 model + effort 联动)消费此结构，前端兜底值取 {@code defaultModel}
+ * 而非硬编码模型 id。
  */
 @RestController
 @RequestMapping("/api/chat")
 @Profile("web")
 public class ModelsController {
     private final ModelCatalog catalog;
+    private final ProviderCatalogProperties props;
 
-    public ModelsController(ModelCatalog catalog) {
+    public ModelsController(ModelCatalog catalog, ProviderCatalogProperties props) {
         this.catalog = catalog;
+        this.props = props;
     }
 
     @GetMapping("/models")
     public Mono<ModelsResponse> list() {
-        return Mono.just(new ModelsResponse(catalog.providers()));
+        return Mono.just(new ModelsResponse(
+                catalog.providers(), props.defaultProvider(), props.defaultModel()));
     }
 }

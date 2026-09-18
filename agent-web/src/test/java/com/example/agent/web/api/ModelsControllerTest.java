@@ -22,6 +22,15 @@ class ModelsControllerTest {
         return new ModelCatalog(List.of(groups));
     }
 
+    /**
+     * 单元测试不跑 {@link ProviderCatalogService#init()}，故 props 的默认值仅供 {@code list()} 回填，
+     * 无需与传入的 catalog 严格一致；默认值合法性由
+     * {@code startupValidationRejectsDefault*} 三个用例单独覆盖。
+     */
+    private static ProviderCatalogProperties defaultProps() {
+        return new ProviderCatalogProperties(List.of(), "deepseek", "deepseek-v4-flash");
+    }
+
     private static ProviderGroup deepseekProvider() {
         return new ProviderGroup(
                 "deepseek",
@@ -42,7 +51,7 @@ class ModelsControllerTest {
     @Test
     void listsNestedProvidersWithDeepseekV4Flash() {
         ModelCatalog catalog = catalogFrom(deepseekProvider());
-        ModelsController c = new ModelsController(catalog);
+        ModelsController c = new ModelsController(catalog, defaultProps());
         ModelsResponse resp = c.list().block();
         assertThat(resp).isNotNull();
         assertThat(resp.providers()).hasSize(1);
@@ -61,7 +70,7 @@ class ModelsControllerTest {
     @Test
     void reasonerExposesThreeEffortLevels() {
         ModelCatalog catalog = catalogFrom(deepseekProvider());
-        ModelsController c = new ModelsController(catalog);
+        ModelsController c = new ModelsController(catalog, defaultProps());
         ModelsResponse resp = c.list().block();
         var reasoner = resp.providers().get(0).models().stream()
                 .filter(m -> "deepseek-reasoner".equals(m.id()))
@@ -76,7 +85,7 @@ class ModelsControllerTest {
     @Test
     void emptyCatalogReturnsEmptyProviders() {
         ModelCatalog catalog = new ModelCatalog(List.of());
-        ModelsController c = new ModelsController(catalog);
+        ModelsController c = new ModelsController(catalog, defaultProps());
         ModelsResponse resp = c.list().block();
         assertThat(resp.providers()).isEmpty();
     }
@@ -86,7 +95,7 @@ class ModelsControllerTest {
         // add-provider-catalog-abstract 过渡期:前端 chat.ts 还在读 models[],
         // 后端同时输出 providers + flat models,前端不报错
         ModelCatalog catalog = catalogFrom(deepseekProvider());
-        ModelsController c = new ModelsController(catalog);
+        ModelsController c = new ModelsController(catalog, defaultProps());
         ModelsResponse resp = c.list().block();
         assertThat(resp.providers()).hasSize(1);
         assertThat(resp.models()).hasSize(2);
@@ -107,9 +116,25 @@ class ModelsControllerTest {
                         "o1", "o1", true,
                         List.of(new ReasoningEffort("low", "Low", null)))));
         ModelCatalog catalog = catalogFrom(deepseekProvider(), openai);
-        ModelsController c = new ModelsController(catalog);
+        ModelsController c = new ModelsController(catalog, defaultProps());
         ModelsResponse resp = c.list().block();
         assertThat(resp.providers()).extracting("id").containsExactly("deepseek", "openai");
+    }
+
+    // ----- 默认 provider/model 随响应下发（fix-stale-model-fallback T2） -----
+
+    @Test
+    void responseCarriesConfiguredDefaultsForFrontendFallback() {
+        // 前端兜底值必须来自服务端配置，而不是硬编码模型 id
+        ProviderCatalogProperties props = new ProviderCatalogProperties(
+                List.of(deepseekProvider()), "deepseek", "deepseek-v4-flash");
+        ModelsController c = new ModelsController(catalogFrom(deepseekProvider()), props);
+        ModelsResponse resp = c.list().block();
+        assertThat(resp).isNotNull();
+        assertThat(resp.defaultProvider()).isEqualTo("deepseek");
+        assertThat(resp.defaultModel()).isEqualTo("deepseek-v4-flash");
+        // 默认值必须真的在目录里（否则前端会拿到一个发不出去的 id）
+        assertThat(resp.models()).extracting("id").contains(resp.defaultModel());
     }
 
     // ----- ProviderCatalogService 启动校验 -----
