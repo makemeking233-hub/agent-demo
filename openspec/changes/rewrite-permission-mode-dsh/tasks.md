@@ -10,10 +10,10 @@
 
 ## 2. TDD 验证基础抽象
 
-- [ ] 2.1 `SandboxModeTest`：4 档枚举值、`wireValue()` 往返、`from()` 非法值抛错、DEFAULT
-- [ ] 2.2 `SandboxPolicyTest`：record 字段访问、capability 误用抛错
-- [ ] 2.3 `WritableRootsTest`：PLAN/ASK/DANGER_FULL 空列表、DONT_ASK 三个根 canonicalize 去重、IOException 回退
-- [ ] 2.4 `SandboxPolicyServiceTest`：per-call resolve、capability null 抛错、workingDirectory null 抛错、单例保证、setMode 立即生效、escalate/restoreOnTurnEnd 配对
+- [x] 2.1 `SandboxModeTest`：4 档枚举值、`wireValue()` 往返、`from()` 非法值抛错、DEFAULT
+- [x] 2.2 `SandboxPolicyTest`：record 字段访问、capability 误用抛错
+- [x] 2.3 `WritableRootsTest`：PLAN/ASK/DANGER_FULL 空列表、DONT_ASK 三个根 canonicalize 去重、IOException 回退
+- [x] 2.4 `SandboxPolicyServiceTest`：per-call resolve、capability null 抛错、workingDirectory null 抛错、单例保证、setMode 立即生效、escalate/restoreOnTurnEnd 配对
 
 ## 3. FileTool 集成（3 个 task）
 
