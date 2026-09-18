@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // frontend-maven-plugin: mvn package 阶段跑 `npm run build` 调到这里.
@@ -12,6 +13,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       // 默认 autoUpdate：新 SW 安装后自动 skipWaiting 接管
       registerType: 'autoUpdate',
