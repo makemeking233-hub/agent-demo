@@ -1,6 +1,7 @@
 import {
   Archive,
   Check,
+  ChevronDown,
   Folder,
   MessageSquare,
   MoreHorizontal,
@@ -12,7 +13,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WorkspacePickerModal } from "./WorkspacePickerModal";
 import styles from "./Sidebar.module.css";
 
@@ -112,12 +113,26 @@ export function Sidebar(props: SidebarProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [showPicker, setShowPicker] = useState(false);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
 
   function toggle() {
     const next = !collapsed;
     setCollapsed(next);
     props.onCollapseToggle(next);
   }
+
+  // 点击 workspaceMenu 外部关闭
+  useEffect(() => {
+    if (!workspaceMenuOpen) return;
+    function onMouseDown(e: MouseEvent) {
+      if (workspaceMenuRef.current && !workspaceMenuRef.current.contains(e.target as Node)) {
+        setWorkspaceMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [workspaceMenuOpen]);
 
   if (collapsed) {
     return (
@@ -168,6 +183,11 @@ export function Sidebar(props: SidebarProps) {
     setRenameValue("");
   }
 
+  function handleWorkspaceMenuItem(action: () => void) {
+    setWorkspaceMenuOpen(false);
+    action();
+  }
+
   const source = archiveView ? props.archived : props.sessions;
 
   return (
@@ -195,7 +215,7 @@ export function Sidebar(props: SidebarProps) {
         </div>
       </div>
 
-      {/* 工作区切换条 + 新建工作区入口（仿 DSH 头部 +） */}
+      {/* 工作区切换条 + Menu（对齐 dsh：列已有 workspaces + 「Add workspace...」项） */}
       <div className={styles.workspaceBar}>
         <div className={styles.workspaceList}>
           {props.workspaces.map((ws) => (
@@ -217,15 +237,62 @@ export function Sidebar(props: SidebarProps) {
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          className={styles.iconButton}
-          onClick={() => setShowPicker(true)}
-          aria-label="新建工作区"
-          title="新建工作区"
-        >
-          <Plus size={16} />
-        </button>
+        <div className={styles.workspaceMenuWrap} ref={workspaceMenuRef}>
+          <button
+            type="button"
+            className={styles.iconButton}
+            onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
+            aria-label="新建工作区"
+            aria-expanded={workspaceMenuOpen}
+            aria-haspopup="menu"
+            title="新建工作区"
+            data-testid="workspace-add-button"
+          >
+            <Plus size={16} />
+            <ChevronDown size={10} />
+          </button>
+          {workspaceMenuOpen && (
+            <div className={styles.workspaceMenu} role="menu" data-testid="workspace-add-menu">
+              {props.workspaces.length > 0 && (
+                <div className={styles.workspaceMenuHeader}>
+                  <span>选择工作区</span>
+                </div>
+              )}
+              {props.workspaces.map((ws) => (
+                <button
+                  key={ws.name}
+                  type="button"
+                  className={styles.workspaceMenuItem}
+                  role="menuitem"
+                  onClick={() =>
+                    handleWorkspaceMenuItem(() => {
+                      setArchiveView(false);
+                      props.onWorkspaceChange(ws.name);
+                    })
+                  }
+                >
+                  {ws.name === props.activeWorkspace ? (
+                    <Check size={12} />
+                  ) : (
+                    <Folder size={12} />
+                  )}
+                  <span>{ws.name}</span>
+                </button>
+              ))}
+              {props.workspaces.length > 0 && <div className={styles.workspaceMenuDivider} />}
+              <button
+                type="button"
+                className={styles.workspaceMenuItem}
+                role="menuitem"
+                onClick={() => handleWorkspaceMenuItem(() => setShowPicker(true))}
+                data-testid="workspace-add-new"
+              >
+                <Plus size={12} />
+                <span>Add workspace...</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {showPicker && (

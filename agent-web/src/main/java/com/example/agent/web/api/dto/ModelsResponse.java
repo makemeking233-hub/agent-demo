@@ -21,8 +21,18 @@ import java.util.List;
  *
  * <p>task 8 (前端 chat.ts 类型升级 + ModelSelect 两层菜单) 完成后会移除 {@code models}
  * 平铺字段,正式 BREAKING。当前为过渡态。
+ *
+ * <p>fix-stale-model-fallback 增 {@code defaultProvider} / {@code defaultModel}:前端据此兜底，
+ * 不必再硬编码任何模型 id（此前硬编码 {@code deepseek-chat} 已是被上游停用的 id）。
+ *
+ * @param providers       嵌套 provider 目录（真源：{@code agent.chat.providers}）
+ * @param defaultProvider 配置的默认 provider id（{@code agent.chat.default-provider}）
+ * @param defaultModel    配置的默认 model id（{@code agent.chat.default-model}，必属于 defaultProvider）
  */
-public record ModelsResponse(@JsonProperty("providers") List<ProviderGroup> providers) {
+public record ModelsResponse(
+        @JsonProperty("providers") List<ProviderGroup> providers,
+        @JsonProperty("defaultProvider") String defaultProvider,
+        @JsonProperty("defaultModel") String defaultModel) {
 
     /** 平铺 {@code models} 字段(过渡期兼容)。{@code @JsonInclude.ALWAYS} 强制输出,即便 providers 非空。 */
     @JsonInclude(JsonInclude.Include.ALWAYS)

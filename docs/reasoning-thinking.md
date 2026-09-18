@@ -42,12 +42,17 @@
 
 | 端点 / 事件 | 行为 |
 |---|---|
-| `POST /api/chat/send` body | 新增 `model` 字段（可选；null/空 → `deepseek-chat`；非法 → 回退默认） |
-| `GET /api/chat/models` | 返回 `{models: [{id, name, supportsReasoning}]}`（从 `agent.chat.supported-models` 读） |
+| `POST /api/chat/send` body | `model` 字段（可选；null/空 → `agent.chat.default-model`；非空但不在目录中 → 400 `invalid_model`，不创建流） |
+| `GET /api/chat/models` | 返回 `{providers: [...], defaultProvider, defaultModel}`；真源为 `agent.chat.providers`（平铺 `models[]` 为过渡期兼容字段） |
 | SSE `message_delta` | 增 `delta_type: "thinking"`（与 `"text"` 平级） |
 | SSE `message_stop` | `finish_reason: "aborted"` 时停止 thinking + text（已实现） |
 
-`ModelRegistry`（新建）从 `agent.chat.supported-models`（YAML 配置）解析 + 校验 `isSupported`。
+> 上表前两行于 2026-09-18 由 `fix-stale-model-fallback` 更新。原文写的是
+> 「null/空 → `deepseek-chat`；非法 → 回退默认」与「从 `agent.chat.supported-models` 读」，
+> 两者描述的行为已废弃：`deepseek-chat` 被上游停用且不在目录中，而
+> `agent.chat.supported-models` 是当时的第二个真源（前端列表读 `providers`、服务端校验读它），
+> 两者不一致时非法 id 会被静默透传给上游。现由 `ModelCatalog` 单真源校验，非法值当场 400。
+> 原 `ModelRegistry` 类已删除。
 
 ## 6. 前端 UI
 

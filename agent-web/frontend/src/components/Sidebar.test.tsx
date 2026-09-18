@@ -2,50 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Sidebar, type SidebarSession } from "./Sidebar";
 
-// 嵌入的 WorkspacePickerModal 会调 /api/fs/*；mock 掉避免真实 fetch
-// vi.hoisted 让 fsMock 在 vi.mock factory 里可见
-const fsMock = vi.hoisted(() => ({
-  getHome: vi.fn(),
-  listDir: vi.fn(),
-  mkdir: vi.fn(),
-  getDrives: vi.fn(),
-}));
-
-vi.mock("../api/fs", async () => {
-  const actual = await vi.importActual<typeof import("../api/fs")>("../api/fs");
-  return {
-    ...actual,
-    getHome: fsMock.getHome,
-    listDir: fsMock.listDir,
-    mkdir: fsMock.mkdir,
-    getDrives: fsMock.getDrives,
-  };
-});
+// native-folder-picker: WorkspacePickerModal 不再调 /api/fs/*
+// 改为 fetch /api/workspaces/pick-folder（在具体测试用例内 stub fetch）
 
 beforeEach(() => {
-  fsMock.getHome.mockReset();
-  fsMock.listDir.mockReset();
-  fsMock.mkdir.mockReset();
-  fsMock.getDrives.mockReset();
-  fsMock.getHome.mockResolvedValue({ path: "/home/user", platform: "linux" });
-  fsMock.listDir.mockImplementation(async (p: string) => ({
-    path: p,
-    parent: p === "/home/user" ? null : "/home/user",
-    entries:
-      p === "/home/user"
-        ? [
-            { name: "projects", path: "/home/user/projects", isDir: true, size: 0, mtime: 1 },
-            { name: "README.md", path: "/home/user/README.md", isDir: false, size: 100, mtime: 2 },
-          ]
-        : p === "/home/user/projects"
-          ? [
-              { name: "agent-demo", path: "/home/user/projects/agent-demo", isDir: true, size: 0, mtime: 3 },
-              { name: "md-main", path: "/home/user/projects/md-main", isDir: true, size: 0, mtime: 4 },
-            ]
-          : [],
-  }));
-  fsMock.mkdir.mockResolvedValue({ path: "/home/user/new" });
-  fsMock.getDrives.mockResolvedValue({ drives: [] });
+  localStorage.clear();
+  vi.unstubAllGlobals();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
 });
 
 function sess(id: string, title: string, time: number, workspace = "agent-demo"): SidebarSession {
@@ -130,14 +97,24 @@ describe("Sidebar 会话管理", () => {
     expect(p.onRename).toHaveBeenCalledWith("s1", "改标题");
   });
 
-  it("点击新建工作区 + 弹出 WorkspacePickerModal", async () => {
+  it("点击 + 弹出 menu，含 'Add workspace...' 项；点 Add workspace 触发 WorkspacePickerModal", async () => {
     const p = renderSidebar();
-    fireEvent.click(screen.getByLabelText("新建工作区"));
-    // Modal 出现，含 "选择工作区目录" 标题
+    // 点击 + 弹出 menu
+    fireEvent.click(screen.getByTestId("workspace-add-button"));
+    await waitFor(() =>
+      expect(screen.getByTestId("workspace-add-menu")).toBeInTheDocument(),
+    );
+    // menu 含 "Add workspace..." 项
+    expect(screen.getByTestId("workspace-add-new")).toBeInTheDocument();
+    // 点 "Add workspace..." 关闭 menu + 弹 picker modal
+    fireEvent.click(screen.getByTestId("workspace-add-new"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("workspace-add-menu")).toBeNull(),
+    );
     await waitFor(() =>
       expect(screen.getByRole("dialog", { name: "选择工作区目录" })).toBeInTheDocument(),
     );
-    // 关闭 Modal → dialog 消失
+    // 关闭 picker modal → dialog 消失
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "选择工作区目录" })).not.toBeInTheDocument(),
@@ -145,29 +122,60 @@ describe("Sidebar 会话管理", () => {
     expect(p.onCreateWorkspace).not.toHaveBeenCalled();
   });
 
-  it("端到端：点击 + → 弹 Modal → 浏览 → 选中 → 改 name → 提交 → 调 onCreateWorkspace", async () => {
+  it("menu 默认隐藏，点 + 才打开", () => {
+    renderSidebar();
+    expect(screen.queryByTestId("workspace-add-menu")).toBeNull();
+  });
+
+  it("menu 列已有 workspaces + 选中调 onWorkspaceChange", () => {
+    const p = renderSidebar({
+      workspaces: [
+        { name: "agent-demo", dir: "/x", sessionCount: 1 },
+        { name: "md-main", dir: "/y", sessionCount: 2 },
+      ],
+      activeWorkspace: "agent-demo",
+    });
+    fireEvent.click(screen.getByTestId("workspace-add-button"));
+    const menu = screen.getByTestId("workspace-add-menu");
+    expect(within(menu).getByText("agent-demo")).toBeInTheDocument();
+    expect(within(menu).getByText("md-main")).toBeInTheDocument();
+    // 选 md-main
+    fireEvent.click(within(menu).getByText("md-main"));
+    expect(p.onWorkspaceChange).toHaveBeenCalledWith("md-main");
+  });
+
+  it("点击 menu 外部关闭 menu", () => {
+    renderSidebar({
+      workspaces: [{ name: "agent-demo", dir: "/x", sessionCount: 1 }],
+    });
+    fireEvent.click(screen.getByTestId("workspace-add-button"));
+    expect(screen.getByTestId("workspace-add-menu")).toBeInTheDocument();
+    // 点击 document body 任意位置
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId("workspace-add-menu")).toBeNull();
+  });
+
+  it("端到端：点 + → menu → Add workspace → picker modal → 输入路径 → 自动 basename → 提交 → 调 onCreateWorkspace", async () => {
     const p = renderSidebar();
-    // 1. 点击 + 弹 Modal
-    fireEvent.click(screen.getByLabelText("新建工作区"));
+    // 1. 点 + 弹 menu
+    fireEvent.click(screen.getByTestId("workspace-add-button"));
+    // 2. 点 "Add workspace..." 关闭 menu + 弹 picker
+    fireEvent.click(screen.getByTestId("workspace-add-new"));
     const dialog = await screen.findByRole("dialog", { name: "选择工作区目录" });
 
-    // 2. 等 home 目录条目渲染（限定到 dialog 内避免跟 Sidebar 工作区列表冲突）
-    await within(dialog).findByText("projects");
+    // 3. 输入路径 → name 自动填 basename
+    fireEvent.change(within(dialog).getByTestId("wp-path-input"), {
+      target: { value: "/home/user/projects/agent-demo" },
+    });
+    expect(within(dialog).getByTestId("wp-name-input")).toHaveValue("agent-demo");
 
-    // 3. 双击进入 projects 目录
-    fireEvent.doubleClick(within(dialog).getByText("projects"));
-    await within(dialog).findByText("agent-demo");
+    // 4. 改成自定义 name
+    fireEvent.change(within(dialog).getByTestId("wp-name-input"), {
+      target: { value: "ws-from-picker" },
+    });
 
-    // 4. 单击 agent-demo 选中（footer 自动填 basename）
-    fireEvent.click(within(dialog).getByText("agent-demo"));
-    const nameInput = within(dialog).getByLabelText("工作区名称") as HTMLInputElement;
-    expect(nameInput.value).toBe("agent-demo");
-
-    // 5. 改成自定义 name
-    fireEvent.change(nameInput, { target: { value: "ws-from-picker" } });
-
-    // 6. 点击 "选择此目录" 调 onCreateWorkspace
-    fireEvent.click(within(dialog).getByText("选择此目录"));
+    // 5. 点击 "选择此目录" 调 onCreateWorkspace
+    fireEvent.click(within(dialog).getByTestId("wp-submit"));
 
     await waitFor(() =>
       expect(p.onCreateWorkspace).toHaveBeenCalledWith(

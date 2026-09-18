@@ -24,7 +24,8 @@
 | `2026-09-13-add-models-dropdown-v0/` | add-models-dropdown-v0 模型+思考强度下拉（AgentLoop 透传 + 三 Provider effort 适配 + Web 后端 reasoningEffort + CLI /effort + 前端 Dropdown/ModelSelect/ReasoningEffortSelect + localStorage 持久化） | 2026-09-13 | 17（10 Java 新增 + 7 vitest Dropdown；前端集成/localStorage 测试未写） | ✅ Java 全绿 / ⚠️ 前端 vitest 沙箱 npm ci 失败未跑 | ✅ | 已实施未归档 |
 | `2026-09-14-mermaid/` | add-mermaid-diagrams mermaid 围栏渲染成图（rehype 改写 + MermaidBlock 懒加载 + securityLevel strict + 闭合判定 + 失败兜底 + PWA 预缓存白名单） | 2026-09-14 | 8 新增（5 MermaidBlock + 3 markdown 分组；另 175 既有 vitest 回归） | ✅ 全绿 | ✅ | 已归档 |
 | `2026-09-13-improve-voice-accuracy/` | 语音识别准确率改进（回声防护加固 + partial 状态机 + ASR 后处理 + Composer partial UI + 后端 /api/chat/voice-correction 端点 + 配置门禁 + 测试隔离） | 2026-09-13 → 2026-09-14 | 53 新增（32 Java + 21 vitest；另 390 既有回归） | ✅ 全绿；jacoco security 包 0.62 既有 fail 在 main HEAD (637ec43) 可复现 → 记录放行 | ✅ | 已归档 |
-| `2026-09-18-provider-catalog/` | add-provider-catalog-abstract provider 分层目录（ProviderInference 前缀推断 + DeepSeek/MiniMax validateProviderHook + ChatStreamService 6 参透传 + ChatController 推断兜底 + CLI /model &lt;provider&gt;/&lt;model&gt; + 前端 chat.ts 类型升级 + ModelSelect 两层菜单 + ReasoningEffortSelect options prop） | 2026-09-18 | 75 新增（45 Java + 30 vitest；另 674 Java + 211 vitest 回归） | ✅ 全绿（Java 719 + 前端 241 = 960）；tsc 6 ≤ 基线 7；3 个 web 包 jacoco 既有违规未恶化 | ✅ | 已归档 |
+| `2026-09-18-fix-stale-model-fallback/` | fix-stale-model-fallback 模型选择单一真源（非法 model 改 400 fail-closed + 默认值启动校验 + 删除 ModelRegistry + 前端兜底改取服务端 defaultModel + 微信通道同源 + 成功回合补 model 日志） | 2026-09-18 | 43 新增（32 Java + 11 vitest；另 483 core + 320 web + 244 vitest 回归） | ✅ 本 change 用例全绿；jacoco 违规由 5 条降到 **1 条**（剩 security branches 0.63 既有，干净 main 9aae4f6 可复现 → 记录放行） | ✅ | 已归档 |
+| `2026-09-18-provider-catalog/` | add-provider-catalog-abstract provider 分层目录（ProviderInference 前缀推断 + DeepSeek/MiniMax validateProviderHook + ChatStreamService 6 参透传 + ChatController 推断兜底 + CLI /model &lt;provider&gt;/&lt;model&gt; + 前端 chat.ts 类型升级 + ModelSelect 两层菜单 + ReasoningEffortSelect options prop） | 2026-09-18 | 75 新增（45 Java + 30 vitest） | 见 §2.15（合并 main 后复验） | ✅ | 已归档 |
 
 ---
 
@@ -134,7 +135,15 @@
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
-### 2.14 `2026-09-18-provider-catalog/` — provider 分层目录
+### 2.14 `2026-09-18-fix-stale-model-fallback/` — 模型选择单一真源
+
+- **测试目标**：修掉「已被上游停用的 `deepseek-chat` 被原样发给 DeepSeek」——根因不是常量写错，而是「哪些模型合法」存在**两个真源**（前端列表读 `agent.chat.providers`、服务端校验读 `agent.chat.supported-models`）。本次收敛为 `ModelCatalog` 单真源，并把非法 model 从「静默兜底」改为 **400 fail-closed**。
+- **执行要点**：worktree `fix/stale-model-fallback` 隔离作业（§2.7）；后端 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` → agent-core **483/0**、agent-web **359/0**（本次新增 32 Java：`ModelCatalogTest` 9 + `ChatControllerModelResolutionTest` 10 + `ChatSendModelHttpTest` 4 + `ChatStreamServiceSuccessObservabilityTest` 2 + `WecomMessageDispatcherModelTest` 2 + `ModelsControllerTest` +5）；新增 `@SpringBootTest(RANDOM_PORT)` 的 `ChatSendModelHttpTest` 专门验证**给三个类新增构造器依赖后 Spring 能装配**（单元测试手工 `new` 证明不了这点）；前端 `npx vitest run` 35 文件 / 255 用例全绿（新增 `model-selection.test.ts` 11），`npx tsc --noEmit` 2 条（与合并前 main 的 2 条完全一致）；基线对照在游离 worktree `--detach 9aae4f6` 上取（不在主工作区跑构建 —— 应用正从它的 `target/classes` 运行，§2.7.1 记过事故），基线 agent-web 327/0、jacoco **5 条违规** → 本分支 **1 条**；delta spec 已并入 `openspec/specs/web-ui/spec.md`（改 2 条 + 新增「模型选择真源单一」「非法模型被拒绝」）、`openspec/specs/observability/spec.md`（新增「回合结果上报成功与失败对称」）、`openspec/specs/wecom-channel/spec.md`（新增「微信通道默认模型来自目录」），change 已 archive。
+- **关键发现**：（1）用户给的线索是「两处硬编码」，实查为 **6 处**（多出 `WecomMessageDispatcher.DEFAULT_MODEL`）；按不变量而非按报错点搜索才能找全。（2）只改常量不能根治：yaml 换一个模型，前端列出的就会是服务端要拒的 id，然后被静默兜回另一个同样非法的值。（3）「静默降级」让缺陷潜伏——成功回合原本不记 `model` 日志，无法对照「前端选择 vs 上游实际收到」，只能浏览器抓包；已补成功路径 INFO 并与失败路径字段对齐。（4）**测试方法学教训**：`-Dtest=A+B` 用 `+` 作分隔符会让 surefire **一个用例都不跑**却报 `BUILD SUCCESS`（假绿），必须显式核对 `Tests run:` 计数。（5）自写断言两次被抓：一次是实现与自述契约不一致（空目录 + 有 defaultModel），一次是断言越界（「绝不返回 deepseek-chat」忽略了「服务端自己声明它为默认值」这一合法情形）——均已收窄为可辩护的不变量。（6）**测试卫生缺口（既有，非本次引入）**：maven 测试会向真实 `~/.agent-demo/logs/sessions/<uuid>/` 写目录，因为日志根由 logback 解析到真实 `user.home`，`AGENT_DEMO_HOME_PROPERTY` 只覆盖数据目录；本次按 `session.jsonl` 首行 `cwd` 字段精确归属，删本人的 10 个、保留他人 41 个，并导出审计 CSV `~/.agent-demo/test-log-dirs-removed-20260918.csv`；真实 `sessions/` 未被触碰（最新写入早于本次全部运行）。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.15 `2026-09-18-provider-catalog/` — provider 分层目录
 
 - **测试目标**：验证 v0.1 平铺模型列表升级为 v0.2 分层 provider 目录后的六条主线——provider 前缀推断正确性、provider 校验一致性（providerId 不匹配抛错且向后兼容）、provider 透传链路（ChatController → ChatStreamService 6 参 → AgentLoop.setProviderId）、**BREAKING 迁移安全性**（旧 localStorage 无 provider 不炸）、前端两层菜单交互、CLI `/model` 兼容性。
 - **执行要点**：worktree `.worktrees/add-provider-catalog-abstract` 隔离作业（§2.7），承接前一 session 已落地的 13/62 task；本次补完 task 5-12。门禁 1 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` → agent-core 461/461 + agent-web 258/258 全绿；前端 `npx vitest run` 241/241 全绿（25 文件）；`npx tsc --noEmit` 6 个错误（**低于**基线 7，且 `web.api` 包因新增 ChatController 推断测试从 jacoco 违规 → 通过）。

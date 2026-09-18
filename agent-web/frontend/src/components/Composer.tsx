@@ -1,7 +1,8 @@
 import { Loader2, Mic, MicOff, Send, Square, Volume2, VolumeX, WifiOff } from "lucide-react";
-import { KeyboardEvent, useState } from "react";
+import { KeyboardEvent, useEffect, useState } from "react";
 import { type ModelEntry, type PermissionMode } from "../api/chat";
 import { OnlineProvider, useOnline } from "../hooks/useOnline";
+import { useSettingsStore } from "../hooks/useSettingsStore";
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 import styles from "./Composer.module.css";
 
@@ -67,14 +68,54 @@ function ComposerInner({
 }: ComposerProps) {
   const [value, setValue] = useState("");
   const [showSlashHint, setShowSlashHint] = useState(false);
+  // add-settings-general-items M2: enterBehavior 三种模式 + 内存 queue
+  const enterMode =
+    (useSettingsStore(
+      (s) => (s.snapshot?.general?.enterBehavior as { mode?: "send" | "queue" | "newSession" } | undefined)?.mode,
+    ) ?? "send") as "send" | "queue" | "newSession";
+  const [queue, setQueue] = useState<string[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2000);
+  }
 
   function submit() {
     const text = value.trim();
-    if (!text || busy) return;
-    onSend(text);
-    setValue("");
-    setShowSlashHint(false);
+    if (!text) return;
+    if (!busy) {
+      onSend(text);
+      setValue("");
+      setShowSlashHint(false);
+      return;
+    }
+    // 繁忙：根据 enterBehavior 决定
+    if (enterMode === "send") {
+      showToast("agent 还在跑");
+    } else if (enterMode === "queue") {
+      setQueue((q) => [...q, text]);
+      setValue("");
+      setShowSlashHint(false);
+      showToast(`已加入队列（${queue.length + 1}）`);
+    } else {
+      // newSession：弹确认
+      if (window.confirm("agent 还在跑。是否新建会话？")) {
+        onSend(text);
+        setValue("");
+        setShowSlashHint(false);
+      }
+    }
   }
+
+  // 当 busy 从 true 变 false 时，drain queue（仅 queue 模式生效）
+  useEffect(() => {
+    if (!busy && queue.length > 0 && enterMode === "queue") {
+      const [next, ...rest] = queue;
+      setQueue(rest);
+      onSend(next);
+    }
+  }, [busy, queue, enterMode, onSend]);
 
   function onKey(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -98,6 +139,8 @@ function ComposerInner({
 
   return (
     <div className={styles.composer}>
+      {/* M2: toast 显示（agent 还在跑 / 已加入队列） */}
+      {toast && <div className={styles.partial}>{toast}</div>}
       {/* T6：partial display（输入框正上方，半透明灰色，语音循环未启动不渲染） */}
       {showPartial && <div className={styles.partial}>{partialText}</div>}
       {showSlashHint && (

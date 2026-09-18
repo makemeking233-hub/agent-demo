@@ -34,7 +34,10 @@ agent:
   # add-provider-catalog-abstract: provider/model 分层目录（对齐 dsh web ModelProviderGroup）。
   # 每个 provider 含其 models[],每个 model 含 supportsReasoning + reasoningEfforts[] 数组。
   # ProviderCatalogService 启动校验 supportsReasoning=false 时 reasoning-efforts 必须为空。
-  # 旧 key supported-models 兼容：通过 System property -Dagent.chat.supported-models=... 兜底（task 3.3）。
+  # 旧 key agent.chat.supported-models 自 fix-stale-model-fallback 起**已废弃**：
+  # 它曾是「哪些模型合法」的第二个真源（与 providers 并存），导致前端列出的模型与
+  # 服务端校验的模型可能不一致。现在唯一真源是本节的 providers + default-provider/default-model，
+  # 该 key 不再被任何代码读取，配了也不生效。
   chat:
     providers:
       - id: deepseek
@@ -75,3 +78,21 @@ agent:
   voice:
     post-process:
       enabled: true
+  # add-wecom-channel: 企业微信（WeCom）自建应用 bot 通道（默认关；启用前需
+  # 在企业微信管理后台配回调 URL = callback-base-url + /wecom/callback，并填
+  # 同样的 token + EncodingAESKey）。WecomConfig 启动时 fail-fast 校验字段。
+  # 已知限制：企业微信拒自签证书，dev 环境需 ngrok/cloudflared 或自备公网域名。
+  wecom:
+    enabled: ${WECOM_ENABLED:false}
+    corp-id: ${WECOM_CORP_ID:}
+    agent-id: ${WECOM_AGENT_ID:}
+    secret: ${WECOM_SECRET:}
+    token: ${WECOM_TOKEN:}
+    encoding-aes-key: ${WECOM_AES_KEY:} # 43 字符 Base64
+    callback-base-url: ${WECOM_CALLBACK_BASE_URL:}
+    # 流式 markdown 回复推送限频（add-wecom-channel task 1.1）
+    reply:
+      flush-interval-ms: 3000 # 累积窗口（毫秒）
+      flush-min-chars: 500    # 累积字符阈值
+      max-chars: 4000         # 单条 markdown 上限（字节，UTF-8）
+      retry-backoff-ms: 30000 # API 限频（45009）退避时长

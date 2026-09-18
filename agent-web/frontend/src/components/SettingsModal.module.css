@@ -1,0 +1,129 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  width: 1080px;
+  max-width: calc(100vw - 48px);
+  height: 700px;
+  max-height: calc(100vh - 48px);
+  background: var(--bg, #fff);
+  color: var(--fg, #1f2937);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.nav {
+  width: 200px;
+  border-right: 1px solid var(--border, #e5e7eb);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  gap: 4px;
+}
+
+.navTitle {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px 8px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.navItem:hover {
+  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+}
+
+.navItem.active {
+  background: var(--active-bg, rgba(59, 130, 246, 0.12));
+  color: var(--accent, #2563eb);
+  font-weight: 500;
+}
+
+.navIcon {
+  flex-shrink: 0;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  gap: 8px;
+}
+
+.actions {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 6px;
+  color: inherit;
+  font-size: 14px;
+}
+
+.close:hover {
+  background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+}
+
+.closeLabel {
+  font-size: 12px;
+}
+
+.options {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--muted, #6b7280);
+  font-size: 14px;
+}

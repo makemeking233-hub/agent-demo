@@ -14,7 +14,11 @@ export interface SendRequest {
    * 缺省由后端 `ProviderInference` 按 model 前缀推断，推断失败回退 `agent.chat.default-provider`。
    */
   provider?: string;
-  /** add-models-dropdown-v0: 可选模型名（如 deepseek-reasoner）；缺省 deepseek-chat */
+  /**
+   * 可选模型名。留空/不传 → 服务端用 `agent.chat.default-model`；
+   * 传了但不在服务端目录中 → 400 `invalid_model`（不再静默兜底）。
+   * 合法取值见 `listModels()`。
+   */
   model?: string;
   /** add-models-dropdown-v0: 可选思考强度（low / medium / high）；缺省由 Provider 内部 fallback */
   reasoning_effort?: string;
@@ -62,9 +66,14 @@ export interface ProviderGroup {
  *
  * <p>**BREAKING**：v0.1（add-models-dropdown-v0）是平铺 `models[]`；
  * v0.2 升级为嵌套 `providers[]`。平铺字段已移除。
+ *
+ * <p>`defaultProvider` / `defaultModel` 为 fix-stale-model-fallback 新增（merge main 后保留）：
+ * 前端据此兜底，不必再硬编码模型 id。可选是因为连到旧版后端时这两个字段不存在。
  */
 export interface ModelsResponse {
   providers: ProviderGroup[];
+  defaultProvider?: string;
+  defaultModel?: string;
 }
 
 /**

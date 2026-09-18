@@ -12,7 +12,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param providers        嵌套 provider 列表
  * @param defaultProvider  前端未选时 fallback 用的 provider id（如 "deepseek"）
- * @param defaultModel     前端未选时 fallback 用的 model id（如 "deepseek-chat"）
+ * @param defaultModel     前端未选时 fallback 用的 model id（如 "deepseek-v4-flash"）；
+ *                         必须属于 {@code defaultProvider}，由 {@link ProviderCatalogService}
+ *                         启动校验（fix-stale-model-fallback）。示例原先写作 "deepseek-chat"，
+ *                         那是个已被上游停用、也不在目录中的 id，照抄会复现同类缺陷。
  */
 @ConfigurationProperties(prefix = "agent.chat")
 public record ProviderCatalogProperties(
