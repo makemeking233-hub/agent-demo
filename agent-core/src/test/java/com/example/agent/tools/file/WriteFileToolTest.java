@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.agent.permission.PermissionManager;
+import com.example.agent.permission.SandboxMode;
+import com.example.agent.permission.SandboxPolicyService;
 import com.example.agent.tools.Tool;
 
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,9 @@ class WriteFileToolTest {
     @TempDir Path tmp;
 
     private Tool.ToolContext ctx() {
-        return new Tool.ToolContext(tmp, new PermissionManager(), () -> false);
+        // PLAN mode: workspace 外拒绝 (保留 v0.1 行为, 验证 AbstractFileTool 边界检查)
+        var svc = SandboxPolicyService.createForTest(SandboxMode.PLAN, tmp);
+        return new Tool.ToolContext(tmp, new PermissionManager(), () -> false, null, svc);
     }
 
     @Test

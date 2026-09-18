@@ -17,18 +17,18 @@
 
 ## 3. FileTool 集成（3 个 task）
 
-- [ ] 3.1 改造 `AbstractFileTool.resolve`：根列表从 `SandboxPolicyService.resolve(ctx, FS).writableRoots()` 取，删除原硬编码 2 根
-- [ ] 3.2 在 `AbstractFileTool.writeFile` / `editFile` 加 TOCTOU re-canonicalize：调用 `target.toRealPath()` 重新解析，捕获 symlink swap
-- [ ] 3.3 改造 `PathResult.ok(...)` 扩展 `PathResult.denied(FsDenialKind, currentMode, suggestedMode, message)`，拒绝时返回结构化 denial
+- [x] 3.1 改造 `AbstractFileTool.resolve`：根列表从 `SandboxPolicyService.resolve(ctx, FS).writableRoots()` 取，删除原硬编码 2 根
+- [x] 3.2 在 `AbstractFileTool.writeFile` / `editFile` 加 TOCTOU re-canonicalize：调用 `target.toRealPath()` 重新解析，捕获 symlink swap
+- [x] 3.3 改造 `PathResult.ok(...)` 扩展 `PathResult.denied(FsDenialKind, currentMode, suggestedMode, message)`，拒绝时返回结构化 denial
 
 ## 3.5 FileTool 乐观 CAS 写入（Q3 决策，1 个 task）
 
-- [ ] 3.5.1 `AbstractFileTool` 新增 `writeWithCas(target, content)`：tmp 文件 + `Files.move(ATOMIC_MOVE)` 两阶段；写之前 re-canonicalize；冲突时 retry 一次（最多 1 次）；跨 fs 退化为非原子 move
+- [x] 3.5.1 `AbstractFileTool` 新增 `writeWithCas(target, content)`：tmp 文件 + `Files.move(ATOMIC_MOVE)` 两阶段；写之前 re-canonicalize；冲突时 retry 一次（最多 1 次）；跨 fs 退化为非原子 move
 
 ## 4. FileTool TDD 与场景覆盖
 
-- [ ] 4.1 `AbstractFileToolTest`：workspace 内 write 放行、workspace 外 write 拒绝、sensitive path 拒绝、TOCTOU symlink swap 拒绝、乐观 CAS 冲突 retry
-- [ ] 4.2 `AbstractFileToolTest`：DANGER_FULL 下任意路径允许、DONT_ASK 下 workspace + temp 允许但其他拒绝
+- [x] 4.1 `AbstractFileToolTest`：workspace 内 write 放行、workspace 外 write 拒绝、sensitive path 拒绝、TOCTOU symlink swap 拒绝、乐观 CAS 冲突 retry
+- [x] 4.2 `AbstractFileToolTest`：DANGER_FULL 下任意路径允许、DONT_ASK 下 workspace + temp 允许但其他拒绝
 
 ## 5. PermissionManager 拆分（3 个 task）
 

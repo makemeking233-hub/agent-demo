@@ -3,6 +3,7 @@ package com.example.agent.tools;
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.permission.PermissionDecision;
 import com.example.agent.permission.PermissionManager;
+import com.example.agent.permission.SandboxPolicyService;
 
 import reactor.core.publisher.Mono;
 
@@ -109,15 +110,23 @@ public interface Tool<I, O> {
      * @param permissions 权限管理器
      * @param abortSignal 中断信号（M9 InterruptController 接入 Ctrl+C）
      * @param agentDataDir agent 数据目录（{@code ~/.agent-demo}，memory/logs/sessions 所在；文件工具额外放行，可空）
+     * @param sandboxPolicy sandbox policy 服务（rewrite-permission-mode-dsh 引入；fs / bash / terminal
+     *                      三个 capability 共享，可空 → 工具自己 fallback 到 DANGER_FULL 全部放行）
      */
     record ToolContext(
             Path workingDirectory,
             PermissionManager permissions,
             AbortSignal abortSignal,
-            Path agentDataDir) {
-        /** 3 参便捷构造：{@code agentDataDir} 为 {@code null}（不额外放行任何目录）。 */
+            Path agentDataDir,
+            SandboxPolicyService sandboxPolicy) {
+        /** 3 参便捷构造：{@code agentDataDir} 与 {@code sandboxPolicy} 均为 {@code null}。 */
         public ToolContext(Path workingDirectory, PermissionManager permissions, AbortSignal abortSignal) {
-            this(workingDirectory, permissions, abortSignal, null);
+            this(workingDirectory, permissions, abortSignal, null, null);
+        }
+
+        /** 4 参便捷构造：{@code sandboxPolicy} 为 {@code null}。 */
+        public ToolContext(Path workingDirectory, PermissionManager permissions, AbortSignal abortSignal, Path agentDataDir) {
+            this(workingDirectory, permissions, abortSignal, agentDataDir, null);
         }
     }
 }
