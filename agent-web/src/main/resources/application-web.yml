@@ -34,7 +34,10 @@ agent:
   # add-provider-catalog-abstract: provider/model 分层目录（对齐 dsh web ModelProviderGroup）。
   # 每个 provider 含其 models[],每个 model 含 supportsReasoning + reasoningEfforts[] 数组。
   # ProviderCatalogService 启动校验 supportsReasoning=false 时 reasoning-efforts 必须为空。
-  # 旧 key supported-models 兼容：通过 System property -Dagent.chat.supported-models=... 兜底（task 3.3）。
+  # 旧 key agent.chat.supported-models 自 fix-stale-model-fallback 起**已废弃**：
+  # 它曾是「哪些模型合法」的第二个真源（与 providers 并存），导致前端列出的模型与
+  # 服务端校验的模型可能不一致。现在唯一真源是本节的 providers + default-provider/default-model，
+  # 该 key 不再被任何代码读取，配了也不生效。
   chat:
     providers:
       - id: deepseek

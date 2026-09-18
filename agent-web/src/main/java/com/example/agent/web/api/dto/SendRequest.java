@@ -14,7 +14,11 @@ public record SendRequest(
         @JsonProperty("session_id") String sessionId,
         @JsonProperty("permission_mode") String permissionMode,
         @JsonProperty("workspace") String workspace,
-        /** add-reasoning-thinking-streaming: 可选模型名（如 {@code deepseek-reasoner}）；null/缺省用 {@code deepseek-chat} */
+        /**
+         * 可选模型名。null/缺省/空白 → 用 {@code agent.chat.default-model}；非空但不在
+         * {@code agent.chat.providers} 目录中 → 400 {@code invalid_model}（不静默兜底）。
+         * 合法取值见 {@code GET /api/chat/models}。
+         */
         @JsonProperty("model") String model,
         /** add-models-dropdown-v0: 可选思考强度（{@code low} / {@code medium} / {@code high}）；null/缺省由 Provider 内部 fallback（如 OAI 默认 medium、Anthropic 默认 4096 token） */
         @JsonProperty("reasoning_effort") String reasoningEffort) {}
