@@ -2,6 +2,7 @@ package com.example.agent.web.api;
 
 import com.example.agent.session.SessionDiagnostics;
 import com.example.agent.web.api.dto.DiagnosticsDto;
+import com.example.agent.config.AgentPaths;
 import com.example.agent.web.stream.WebAgentRuntime;
 import java.nio.file.Path;
 import org.springframework.context.annotation.Profile;
@@ -38,11 +39,9 @@ public class DiagnosticsController {
     public DiagnosticsDto get(
             @RequestParam(name = "workspace", required = false) String workspace) {
         Path sessionsDir = runtime.sessionsDirFor(workspace);
-        Path logsDir =
-                Path.of(
-                        System.getProperty("user.home"),
-                        ".agent-demo",
-                        "logs");
+        // fix-agent-home-isolation：诊断页读的日志根必须与写入侧同源，
+        // 否则测试隔离下会去扫用户真实 ~/.agent-demo/logs
+        Path logsDir = Path.of(AgentPaths.logsDir());
         return DiagnosticsDto.from(SessionDiagnostics.scan(sessionsDir, logsDir));
     }
 }

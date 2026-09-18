@@ -1,14 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
+    <!-- fix-agent-home-isolation：日志根改为可由系统属性 agent.demo.home 覆盖，
+         与 java 侧 com.example.agent.config.AgentPaths 同优先级、**同语义**：
+         agent.demo.home 是「基目录」（user.home 语义），其下才拼 .agent-demo。
+         故默认值写成 ${user.home}（而非 ${user.home}/.agent-demo），.agent-demo 放在外面
+         统一拼一次 —— 否则设了属性时会落到 <base>/logs，与 Java 侧的 <base>/.agent-demo/logs
+         差一层目录，等于把刚收敛掉的分叉又造一个出来。
+         未设置属性时结果为 ${user.home}/.agent-demo/logs，与改造前逐字一致。
+         动机：此前日志根写死 ${user.home}，唯一的测试隔离开关盖不住它，
+         于是每次跑 maven 测试都在用户真实 ~/.agent-demo/logs/ 下创建 sessions/<uuid>/。 -->
+    <property name="AGENT_LOGS_DIR" value="${agent.demo.home:-${user.home}}/.agent-demo/logs"/>
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <!-- 日志根固定为 ~/.agent-demo/logs：与 InitCommand 约定、LogController 读取一致。
+        <!-- 日志根固定为 <agent 数据目录>/logs：与 InitCommand 约定、LogController 读取一致。
              此前用 ${user.dir}/logs，日志位置随进程工作目录漂移（web 从仓库根启动写 logs/、
              CLI 从模块目录启动写 agent-core/logs/），而 /api/logs 读的是 ~/.agent-demo/logs，
              等于长期读一份再没人写过的旧目录。 -->
-        <file>${user.home}/.agent-demo/logs/app.log</file>
+        <file>${AGENT_LOGS_DIR}/app.log</file>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
             <!-- 按天 + 大小轮转：app.log.2026-08-29.0.log ... -->
-            <fileNamePattern>${user.home}/.agent-demo/logs/app.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <fileNamePattern>${AGENT_LOGS_DIR}/app.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
             <maxFileSize>10MB</maxFileSize>
             <maxHistory>7</maxHistory>
             <totalSizeCap>100MB</totalSizeCap>

@@ -1,6 +1,7 @@
 package com.example.agent.web.stream;
 
 import com.example.agent.config.AgentConfig;
+import com.example.agent.config.AgentPaths;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
 import com.example.agent.core.AgentLoopFactory;
@@ -133,15 +134,9 @@ public class WebAgentRuntime {
      * @return 数据目录
      */
     static Path resolveDataDir() {
-        String override = System.getProperty(AGENT_DEMO_HOME_PROPERTY);
-        if (override == null || override.isBlank()) {
-            override = System.getenv("AGENT_DEMO_HOME");
-        }
-        String home =
-                override != null && !override.isBlank()
-                        ? override
-                        : System.getProperty("user.home");
-        return Paths.get(home, ".agent-demo");
+        // fix-agent-home-isolation：解析逻辑已收敛到 AgentPaths（全仓唯一入口）。
+        // 本方法保留为兼容入口，语义与改造前逐字一致（属性 → env → user.home）。
+        return AgentPaths.agentHome();
     }
 
     /** 解析默认 agent 数据目录（保持既有调用点语义）。 */

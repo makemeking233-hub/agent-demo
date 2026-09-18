@@ -177,6 +177,17 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!-- fix-agent-home-isolation：测试 JVM 默认隔离（同 agent-core/pom.xml 的说明）。
+                 使「跑测试不污染真实 ~/.agent-demo」不再依赖各测试自觉设置。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <agent.demo.home>${project.build.directory}/test-home</agent.demo.home>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
 
         </plugins>
     </build>

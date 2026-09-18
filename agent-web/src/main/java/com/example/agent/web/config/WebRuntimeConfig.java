@@ -37,11 +37,8 @@ public class WebRuntimeConfig {
         this.env = env;
         this.cfg =
                 new ConfigLoader()
-                        .load(
-                                Paths.get(
-                                        System.getProperty("user.home"),
-                                        ".agent-demo",
-                                        "config.yaml"));
+                        .load(com.example.agent.config.AgentPaths.agentHome()
+                                .resolve("config.yaml"));
     }
 
     @Bean

@@ -66,10 +66,8 @@ public class SkillsPlugin implements Plugin, ExtensionPoints.ToolProvider, Exten
 
     /** 默认技能根目录（与 buildTools 一致）。 */
     public static List<Path> defaultRoots() {
-        String userHome = System.getenv("AGENT_DEMO_HOME") != null
-                        && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                ? System.getenv("AGENT_DEMO_HOME")
-                : System.getProperty("user.home");
+        // fix-agent-home-isolation：基目录统一走 AgentPaths（原先不认系统属性 agent.demo.home）
+        String userHome = com.example.agent.config.AgentPaths.homeBase();
         String cwd = System.getProperty("user.dir");
         return List.of(
                 Paths.get(userHome, ".agent-demo", "skills"),

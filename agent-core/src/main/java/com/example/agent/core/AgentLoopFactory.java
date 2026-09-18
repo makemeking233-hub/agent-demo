@@ -1,6 +1,7 @@
 package com.example.agent.core;
 
 import com.example.agent.config.AgentConfig;
+import com.example.agent.config.AgentPaths;
 import com.example.agent.core.Message;
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.llm.LlmProvider;
@@ -109,10 +110,9 @@ public final class AgentLoopFactory {
         tools.register(new ShellTool(adapter, timeoutSec, cfg.shell().maxOutputBytes(), true));
         tools.register(new LsTool());
         // Skills：发现用户级 + 项目级技能并注册为工具
-        String userHome = System.getenv("AGENT_DEMO_HOME") != null
-                        && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                ? System.getenv("AGENT_DEMO_HOME")
-                : System.getProperty("user.home");
+        // fix-agent-home-isolation：基目录统一走 AgentPaths，使其与 WebAgentRuntime 同源
+        // （原先只认 env，不认系统属性 agent.demo.home，测试隔离盖不住这里）
+        String userHome = AgentPaths.homeBase();
         String cwd = System.getProperty("user.dir");
         java.util.List<Path> skillRoots = java.util.List.of(
                 Paths.get(userHome, ".agent-demo", "skills"),
@@ -163,10 +163,9 @@ public final class AgentLoopFactory {
         String providerName = cfg.provider().type() == null
                 ? "deepseek"
                 : cfg.provider().type().toLowerCase();
-        String userHome = System.getenv("AGENT_DEMO_HOME") != null
-                        && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                ? System.getenv("AGENT_DEMO_HOME")
-                : System.getProperty("user.home");
+        // fix-agent-home-isolation：基目录统一走 AgentPaths，使其与 WebAgentRuntime 同源
+        // （原先只认 env，不认系统属性 agent.demo.home，测试隔离盖不住这里）
+        String userHome = AgentPaths.homeBase();
         // 三 scope 记忆：USER（跨项目）+ PROJECT（随项目仓库）+ LOCAL（本次会话）
         String cwd = System.getProperty("user.dir");
         java.util.List<MemoryDir> memoryDirs = java.util.List.of(
@@ -362,8 +361,9 @@ public final class AgentLoopFactory {
     public static String buildStorageSection(AgentConfig cfg, String userHome) {
         String logsDir = cfg.logging() != null && cfg.logging().dir() != null
                 ? cfg.logging().dir()
-                // 与 AgentConfig 缺省一致：固定 ~/.agent-demo/logs，不随工作目录漂移
-                : Paths.get(System.getProperty("user.home"), ".agent-demo", "logs").toString();
+                // 与 AgentConfig 缺省一致：固定 <agent 数据目录>/logs，不随工作目录漂移
+                // fix-agent-home-isolation：改走 AgentPaths，与 AgentConfig.logging.dir 同源
+                : AgentPaths.logsDir();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")

@@ -35,7 +35,36 @@ public final class AgentPaths {
     private AgentPaths() {}
 
     /**
-     * 解析 agent 数据目录（{@code <home>/.agent-demo}）。
+     * 解析「基目录」（即 {@code user.home} 语义的位置，其下才是 {@value #DEFAULT_DIR_NAME}）。
+     *
+     * <p>存在的理由：多处调用点自己拼 {@code .agent-demo/xxx}（如 skills、memory、sessions、
+     * storage 说明）。改造时只统一**基目录解析**、保留它们原有的拼接，语义零变化——
+     * 换掉整条路径反而容易在拼错一层目录时静默改掉落盘位置。
+     *
+     * @return 基目录
+     */
+    public static String homeBase() {
+        return homeBase(
+                System.getProperty(HOME_PROPERTY),
+                System.getenv(HOME_ENV),
+                System.getProperty("user.home"));
+    }
+
+    /**
+     * 纯函数重载：按给定的三个来源解析基目录。
+     *
+     * @param propertyOverride 系统属性值（可空/空白 = 未设置）
+     * @param envOverride      环境变量值（可空/空白 = 未设置）
+     * @param userHome         {@code user.home} 值
+     * @return 基目录
+     */
+    public static String homeBase(String propertyOverride, String envOverride, String userHome) {
+        String base = firstNonBlank(propertyOverride, envOverride);
+        return base != null ? base : userHome;
+    }
+
+    /**
+     * 解析 agent 数据目录（{@code <基目录>/.agent-demo}）。
      *
      * @return 数据目录
      */
@@ -47,7 +76,7 @@ public final class AgentPaths {
     }
 
     /**
-     * 纯函数重载：按给定的三个来源解析，便于测试三条优先级。
+     * 纯函数重载：按给定的三个来源解析数据目录。
      *
      * <p>{@link System#getenv} 无法在进程内注入，故环境变量分支只能通过本重载覆盖。
      *
@@ -57,8 +86,7 @@ public final class AgentPaths {
      * @return 数据目录
      */
     public static Path agentHome(String propertyOverride, String envOverride, String userHome) {
-        String base = firstNonBlank(propertyOverride, envOverride);
-        return Paths.get(base != null ? base : userHome, DEFAULT_DIR_NAME);
+        return Paths.get(homeBase(propertyOverride, envOverride, userHome), DEFAULT_DIR_NAME);
     }
 
     /** 日志根目录（{@code <agentHome>/logs}）。 */

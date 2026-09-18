@@ -1,6 +1,7 @@
 package com.example.agent.cli;
 
 import com.example.agent.config.AgentConfig;
+import com.example.agent.config.AgentPaths;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
@@ -93,8 +94,9 @@ public class InitCommand implements Runnable {
      */
     private Path resolveHome() {
         if (homeOverride != null) return Paths.get(homeOverride);
-        String env = System.getenv("AGENT_DEMO_HOME");
-        return Paths.get(env != null && !env.isBlank() ? env : System.getProperty("user.home"), ".agent-demo");
+        // fix-agent-home-isolation：env 与 user.home 的分支统一走 AgentPaths，
+        // 并额外获得系统属性 agent.demo.home 覆盖（CLI flag 仍最优先）
+        return AgentPaths.agentHome();
     }
 
     /**

@@ -28,11 +28,11 @@ public class WebConfig {
     private final Environment env;
     private final AgentConfig cfg;
 
-    /** Spring 注入入口: 从 ~/.agent-demo/config.yaml + env 加载 AgentConfig. */
+    /** Spring 注入入口: 从 <agent 数据目录>/config.yaml + env 加载 AgentConfig. */
     @Autowired
     public WebConfig(WebProperties props, Environment env) {
         this(props, env, new ConfigLoader()
-                .load(Paths.get(System.getProperty("user.home"), ".agent-demo", "config.yaml")));
+                .load(com.example.agent.config.AgentPaths.agentHome().resolve("config.yaml")));
     }
 
     /** 测试入口: 直接注入 AgentConfig. */

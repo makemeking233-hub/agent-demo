@@ -2,6 +2,7 @@ package com.example.agent.cli;
 
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.config.AgentConfig;
+import com.example.agent.config.AgentPaths;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
 import com.example.agent.core.AgentLoopFactory;
@@ -138,11 +139,8 @@ public class ChatCommand implements Runnable {
         // baseUrl 由具体 Provider 内部决定（DeepSeek / MiniMax 各自硬编码），此处不再读 cfg
         // 环境变量 base URL 暂时未使用（v0.2 可加 provider-specific 覆盖）
 
-        String userHome =
-                System.getenv("AGENT_DEMO_HOME") != null
-                                && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                        ? System.getenv("AGENT_DEMO_HOME")
-                        : System.getProperty("user.home");
+        // fix-agent-home-isolation：基目录统一走 AgentPaths（原先不认系统属性 agent.demo.home）
+        String userHome = AgentPaths.homeBase();
 
         // 按 provider.type() 路由到具体实现（CLI 与 web 共用 AgentLoopFactory）
         LlmProvider provider = AgentLoopFactory.buildProvider(cfg, resolvedKey);
@@ -288,9 +286,9 @@ public class ChatCommand implements Runnable {
         String logsDir =
                 cfg.logging() != null && cfg.logging().dir() != null
                         ? cfg.logging().dir()
-                        // 与 AgentConfig 缺省一致：固定 ~/.agent-demo/logs，不随工作目录漂移
-                        : Paths.get(System.getProperty("user.home"), ".agent-demo", "logs")
-                                .toString();
+                        // 与 AgentConfig 缺省一致：固定 <agent 数据目录>/logs，不随工作目录漂移
+                        // fix-agent-home-isolation：改走 AgentPaths，与 AgentConfig.logging.dir 同源
+                        : AgentPaths.logsDir();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")
@@ -324,7 +322,8 @@ public class ChatCommand implements Runnable {
      * Load user config (extracted to reduce run() nesting)
      */
     private AgentConfig loadConfig() {
-        Path cfgPath = Paths.get(System.getProperty("user.home"), ".agent-demo", "config.yaml");
+        // fix-agent-home-isolation：配置路径也走 AgentPaths，使测试隔离能盖住 config.yaml
+        Path cfgPath = AgentPaths.agentHome().resolve("config.yaml");
         return new ConfigLoader().load(cfgPath);
     }
 
