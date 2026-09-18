@@ -141,19 +141,19 @@ public record AgentConfig(
                 List.of(),
                 new Logging(
                         true,
-                        // 日志根固定为 ~/.agent-demo/logs（improve-failure-observability）：
-                        // 此前是 ${user.dir}/logs，随进程工作目录漂移，且与 /api/logs 读取的
-                        // ~/.agent-demo/logs 不一致。
-                        System.getProperty("user.home") + "/.agent-demo/logs/",
+                        // 日志根固定为 <agent 数据目录>/logs（improve-failure-observability）：
+                        // 此前是 ${user.dir}/logs，随进程工作目录漂移，且与 /api/logs 读取位置不一致。
+                        // fix-agent-home-isolation：改由 AgentPaths 单一入口解析，使系统属性
+                        // agent.demo.home 也能覆盖日志根（此前只有 WebAgentRuntime 认它，
+                        // 导致测试日志照样写进用户真实 ~/.agent-demo/logs）。
+                        AgentPaths.logsDir(),
                         30_000,
                         2_000,
                         30,
                         50),
                 new Memory(new SideQuery(true, 8, 3)),
                 new Mcp(List.of()),
-                new Worktree(
-                        false,
-                        System.getProperty("user.home") + "/.agent-demo/worktrees"),
+                new Worktree(false, AgentPaths.worktreesDir()),
                 List.of(),
                 new Search("", 5, 60_000),
                 // improve-voice-accuracy T8: 默认开启 ASR 后处理（语义纠错）；DeepSeek key 由启动门禁校验。
