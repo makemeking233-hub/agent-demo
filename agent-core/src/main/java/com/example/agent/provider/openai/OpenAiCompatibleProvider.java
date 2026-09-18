@@ -122,7 +122,7 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
     }
 
     @Override
-    public final Flux<StreamChunk> streamChat(ChatRequest req) {
+    public Flux<StreamChunk> streamChat(ChatRequest req) {
         var body = mapper.toRequestBody(req);
         return client.post()
                 .uri(chatEndpoint())

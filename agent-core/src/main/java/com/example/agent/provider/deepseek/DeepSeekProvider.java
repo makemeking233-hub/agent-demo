@@ -1,6 +1,9 @@
 package com.example.agent.provider.deepseek;
 
+import com.example.agent.llm.ChatRequest;
+import com.example.agent.llm.StreamChunk;
 import com.example.agent.provider.openai.OpenAiCompatibleProvider;
+import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 
@@ -15,8 +18,14 @@ import java.time.Duration;
  * 由于 {@code OpenAiCompatibleMapper.isOpenAiReasonerModel()} 仅识别 {@code o1/o3/o4} 系列，{@code deepseek-*}
  * 模型永远不会被注入 reasoning_effort 到 body。AgentLoop.toRequest() 写入 ChatRequest.extra 的
  * {@code reasoning_effort} 字段对 DeepSeek 无副作用（putAll 到 body 是无害的多余字段，上游忽略）。
+ *
+ * <p>add-provider-catalog-abstract：{@link #PROVIDER_ID} 用于校验 {@code req.extra().get("provider")}；
+ * 与 {@link com.example.agent.provider.anthropic.AnthropicProvider#validateProvider} 同模式。
  */
 public class DeepSeekProvider extends OpenAiCompatibleProvider {
+
+    /** add-provider-catalog-abstract：本 provider 对应的 providerId */
+    private static final String PROVIDER_ID = "deepseek";
 
     /**
      * DeepSeek API base URL
@@ -67,7 +76,7 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
 
     @Override
     public String name() {
-        return "deepseek";
+        return PROVIDER_ID;
     }
 
     @Override
@@ -83,5 +92,30 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
     @Override
     public int maxOutputTokens() {
         return MAX_OUTPUT;
+    }
+
+    /**
+     * add-provider-catalog-abstract：校验 {@code req.extra().get("provider")} 等于本 provider id。
+     *
+     * <p>多 provider 共存时,前端 ModelSelect 选择的 provider 必须与 AgentLoop 实际路由的 provider
+     * 一致,避免误把 DeepSeek 请求发到其他 provider。若 {@code req.extra} 为空或不含 "provider" 字段,
+     * 跳过校验(向后兼容 v0.1 调用方)。
+     */
+    static void validateProvider(ChatRequest req) {
+        if (req.extra() == null) return;
+        Object v = req.extra().get("provider");
+        if (v == null) return;
+        if (!PROVIDER_ID.equals(v.toString())) {
+            throw new IllegalArgumentException(
+                    "DeepSeekProvider expected provider=\"" + PROVIDER_ID
+                            + "\" but req.extra.provider=\"" + v + "\"");
+        }
+    }
+
+    @Override
+    public Flux<StreamChunk> streamChat(ChatRequest req) {
+        // add-provider-catalog-abstract: 校验 req.extra 中的 provider 与本实例一致
+        validateProvider(req);
+        return super.streamChat(req);
     }
 }
