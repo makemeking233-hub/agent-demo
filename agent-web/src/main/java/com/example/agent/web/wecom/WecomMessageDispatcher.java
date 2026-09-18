@@ -7,6 +7,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -27,6 +28,7 @@ import reactor.core.scheduler.Schedulers;
  * </ol>
  */
 @Component
+@ConditionalOnProperty(name = "agent.wecom.enabled", havingValue = "true")
 public class WecomMessageDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(WecomMessageDispatcher.class);
