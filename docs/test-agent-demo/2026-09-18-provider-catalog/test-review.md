@@ -81,21 +81,32 @@ task 9.4（Playwright 两层菜单 E2E）在沙箱内不可跑，与 agent-web �
 同样受阻。**建议**：把 E2E 拆成独立 CI job（有真实浏览器时跑），本地门禁明确排除，
 并在 `test-guide.md` 里登记为「需真实环境补跑」。
 
+### 3.5 合并 `main` 时的「面宽代价」（门禁 4 补记）
+
+本 change 在分支上挂了 12 个提交，期间 `main` 被并行 change 推进了 **63 个提交**，
+同步时一次性撞出 **4 处代码冲突 + 1 处 spec 冲突**（`ChatController.java`、`api/chat.ts`、
+`App.tsx`、`docs/test-agent-demo/test-guide.md`、`openspec/specs/web-ui/spec.md`），
+其中 `App.tsx` / `ChatController.java` 的冲突需要重新理解「main 的模型真源单一化」才能解干净
+（顺带发现 main 已把 `reasoningEfforts` 加进 `ModelEntry`，本次的两层菜单必须与其共存）。
+**建议**：分支寿命控制在 1-2 天内，或每天至少 `git merge main` 一次——冲突成本随
+`main` 的前进速度非线性增长；本次能一次解干净，靠的是解冲突时坚持「两边行为都保留、
+不丢 main 的校验也不丢本 change 的推断」。
+
 ## 4. 交付物
 
 | 类型 | 路径 |
 |------|------|
 | 测试设计 | `test-design.md` |
 | 用例表 | `test-cases.md`（75 用例） |
-| 测试报告 | `test-report.md` |
+| 测试报告 | `test-report.md`（含 §1.1 合并 main 后复验） |
 | 过程复盘 | `test-review.md`（本文） |
 | 功能文档 | `docs/provider-catalog.md` |
 | 旧文档升级注记 | `docs/model-and-effort-dropdown.md` §0 |
 
 ## 5. 结论
 
-- **75 个新增用例全部落地并通过**；Java 719 + 前端 241 = 960 全绿
-- tsc 6 个错误 < 基线 7
+- **75 个新增用例全部落地并通过**；合并 `main` 后复验 **Java 892（519 + 373）+ 前端 290 全绿**
+- tsc 合并后 2 个错误 < 基线 7
 - 8 个开发期缺陷（D1-D8）全部在提交前修复并补充用例
-- 4 项遗留（L1-L4）已归因或明确 deferred，未掩盖
+- 4 项遗留（L1-L4）已归因或明确 deferred，未掩盖；jacoco 既有违规由 3 个收敛为 1 个
 - 无用户数据污染（未产生需清理的记录）
