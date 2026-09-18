@@ -156,6 +156,15 @@ public class ChatStreamService {
                     try {
                         loop.processTurn(new Message.User(content))
                                 .block(Duration.ofMinutes(30));
+                        // fix-stale-model-fallback：成功路径也记 model。此前**只有失败路径**记，
+                        // 于是「前端选了什么模型 vs 上游实际收到什么模型」无法靠日志对照，
+                        // 只能靠浏览器抓包。字段与下面的 turn failed 逐字对齐，便于直接比对。
+                        log.info(
+                                "turn completed stream={} session={} workspace={} model={}",
+                                streamId,
+                                meta.sessionId(),
+                                meta.workspace(),
+                                meta.model());
                     } catch (Throwable t) {
                         // JVM 级致命错误（OOM / StackOverflow）原样抛出，不降级为回合失败
                         com.example.agent.core.Throwables.reraiseIfJvmFatal(t);
