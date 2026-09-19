@@ -29,6 +29,7 @@
 | `2026-09-18-fix-agent-home-isolation/` | fix-agent-home-isolation agent home 解析收敛（新增 AgentPaths 单一入口 + 14 处解析点全部改走它 + logback 同语义 + surefire 默认隔离），使「测试运行不污染真实 ~/.agent-demo」从纸面要求变为成立 | 2026-09-18 | 9 新增（AgentPathsTest）+ 2 探针 + 2 差分测量；全量 528 core + 373 web 全绿 | ✅ 本 change 用例全绿；jacoco 仅剩 security 0.63 既有（与合并前 main 逐位一致 → 记录放行）；真实 logs/sessions 跑前跑后 **7→7 不变** | ✅ | 已归档 |
 | `2026-09-18-fix-security-coverage/` | fix-security-coverage 修 main 上唯一遗留的 jacoco 违规（security 包 branches 0.63 → 0.755），定位 TrustedHostFilter 47/80=0.59 是被拉低的那极，加 6 条用例覆盖 HTTPS-localhost 兜底 / null trusted / 空白规则 / /25 CIDR / 127.x 范围 | 2026-09-18 | 6 新增（TrustedHostFilterTest +1 helper）；全量 528 core + 379 web 全绿 | ✅ **mvn verify BUILD SUCCESS**（合并前 BUILD FAILURE 仅因该违规）；TrustedHostFilter 60/80=0.75；security 包 83/110=0.755 ≥ 0.70 | ✅ | 已归档 |
 | `2026-09-19-fix-provider-baseurl/` | fix-provider-baseurl 修 DEEPSEEK_BASE_URL 与 provider.baseUrl 死路径（AgentLoopFactory.buildProvider 用单参构造器 + DeepSeekProvider.baseUrl() 返回硬编码常量，自部署/代理/本地桩全失效），改为 buildProvider 选 1/2 参 ctor + baseUrl() 返回构造器值 | 2026-09-18（合并 09-19） | 2 新增（DeepSeekProviderBaseUrlTest）；分支 533 core / 合并后 main 530 core + 379 web | ✅ mvn verify BUILD SUCCESS | ✅ | 已归档 |
+| `2026-09-19-fix-cli-residue/` | fix-cli-residue 清 CLI 路径残留的 deepseek-chat 默认值（AgentConfig.defaults() / AgentLoop.DEFAULT_MODEL / ChatCommand 错误消息 / ChatRequest javadoc），与 web profile 的 deepseek-v4-flash 对齐；不动 SlashCommand 的 /model chat 别名（spec 锁死向后兼容） | 2026-09-19 | 2 新增（AgentConfigDefaultsModelTest + AgentLoopDefaultModelTest）+ 2 fixture 同步；分支 535 core / 合并后 main 532 core + 379 web | ✅ mvn verify BUILD SUCCESS | ✅ | 已归档 |
 
 ---
 
@@ -180,6 +181,14 @@
 - **测试目标**：修 `DEEPSEEK_BASE_URL` 与 `provider.baseUrl` 在 CLI/web 上完全失效——`AgentLoopFactory.buildProvider` 用单参构造器，`cfg.provider().baseUrl()` 被读后丢弃；`DeepSeekProvider.baseUrl()` / `MiniMaxProvider.baseUrl()` 无论构造器传什么都返回硬编码常量。两层各自为政，自部署/代理/本地桩上游全走不通。
 - **执行要点**：worktree `fix/fix-provider-baseurl` 隔离作业（§2.7）；TDD 先写 `DeepSeekProviderBaseUrlTest.baseUrlReturnsValuePassedToConstructor` 跑红（期望 `customUrl` 拿到 `BASE_URL` 常量），再实现：父类 `OpenAiCompatibleProvider` 把 baseUrl 存为 `protected final` 字段、`baseUrl()` 由 abstract 改非抽象返该字段；子类 `DeepSeekProvider`/`MiniMaxProvider` 改 `return super.baseUrl()`；`AgentLoopFactory.buildProvider` 引入 `baseUrlOf(cfg)`，cfg.baseUrl 非空时选 2 参 ctor；分支 agent-core 533/0、合并后 main 530/0、agent-web 379/0、`mvn verify` BUILD SUCCESS。
 - **关键发现**：（1）**OpenSpec 归档时同名 Requirement 头冲突**：并行 agent 把 `/api/chat/send 发送聊天消息` 改名为 `发送聊天消息`，第一次 archive 报头找不到；修正 delta 头对齐、场景内容不变，按「同一 Requirement 的场景补充」处理。（2）**final 字段必须显式赋值**：把 `baseUrl()` 从 abstract 改非抽象后忘了在 ctor 给 `protected final String baseUrl` 赋值，编译报「变量 baseUrl 可能尚未初始化」；在 4 参 ctor 加 `this.baseUrl = baseUrl;` 即可。（3）**未补 `AgentLoopFactory` 的端到端集成测试**：依赖既有 `DeepSeekProviderTest.streamsTextAndUsage` 用 WireMock 间接覆盖（它构造 2 参 ctor 并断言 SSE chunks 抵达）——这是省事，但显式的「buildProvider 选 2 参 ctor」断言缺失；若后续有人改回单参 ctor，这套间接覆盖仍然绿。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+### 2.19 `2026-09-19-fix-cli-residue/` — 清 CLI 路径残留的 deepseek-chat 默认值
+
+- **测试目标**：把 `AgentLoop.DEFAULT_MODEL = "deepseek-chat"` 与 `AgentConfig.defaults().provider().model = "deepseek-chat"` 这两个已停用 id 的残留清掉，与 web profile `application-web.yml` 的 `deepseek-v4-flash` 对齐。`SlashCommand` 的 `/model chat` 别名虽然也含 `deepseek-chat`，但被 `cli/spec.md §/model 别名向后兼容` 与 `web-ui/spec.md §/model reasoning slash 命令` 锁死为向后兼容语义，不在本次范围。
+- **执行要点**：worktree `fix/fix-cli-residue` 隔离作业（§2.7）；TDD 先写 `AgentConfigDefaultsModelTest.defaultsModelIsDeepseekV4Flash` 与 `AgentLoopDefaultModelTest.defaultModelConstantsAlignWithWebProfile`（后者反射读 `private static final`），两者先红后绿；同步 `InitCommandTest.createsConfigFile` 与 `ConfigLoaderTest.defaultsWhenNoFile` 的 fixture 断言（前者生成 yaml 的内容变了，后者 defaults() 返回变了）；分支 agent-core 535/0、合并后 main 532/0、agent-web 379/0、`mvn verify` BUILD SUCCESS。
+- **关键发现**：（1）**OpenSpec delta 头类型错**：第一次 archive 把 ADDED 写成 MODIFIED，cli/spec.md 没有同名 Requirement → archive 报错；改为 `## ADDED Requirements` 即可。（2）`InitCommandTest.createsConfigFile` 自动连带坏了——它断言生成的 yaml 含 `deepseek-chat`，改了 defaults 后生成的 yaml 不再含 `deepseek-chat`；这是 fixture 同步，不是覆盖缺失。（3）`AgentLoop.DEFAULT_MODEL` 用反射读没改可见性：测试只读一次不破坏 prod API。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
