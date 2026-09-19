@@ -108,6 +108,7 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
                         .clientConnector(new ReactorClientHttpConnector(httpClient))
                         .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_BYTES))
                         .build();
+        this.baseUrl = baseUrl; // fix-provider-baseurl：baseUrl() 默认实现返回该字段
         this.mapper = new OpenAiCompatibleMapper();
     }
 
@@ -163,9 +164,16 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
     }
 
     /**
-     * 抽象：API base URL（子类必填）
+     * 构造器传入的 API base URL（fix-provider-baseurl）。
+     *
+     * <p>{@link #baseUrl()} 默认返回此值；子类可选择 override（如需注入路径前缀）。
      */
-    protected abstract String baseUrl();
+    protected final String baseUrl;
+
+    /** 返回构造器传入的 base URL。 */
+    protected String baseUrl() {
+        return baseUrl;
+    }
 
     /**
      * 抽象：上下文窗口 token 数

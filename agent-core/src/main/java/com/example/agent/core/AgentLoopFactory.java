@@ -60,15 +60,32 @@ public final class AgentLoopFactory {
      * @return 对应 provider 实例
      */
     public static LlmProvider buildProvider(AgentConfig cfg, String resolvedKey) {
+        String baseUrl = baseUrlOf(cfg);
         return switch (cfg.provider().type() == null
                 ? "deepseek"
                 : cfg.provider().type().toLowerCase()) {
-            case "deepseek" -> new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey);
-            case "minimax" -> new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey);
+            case "deepseek" -> baseUrl == null
+                    ? new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey)
+                    : new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey, baseUrl);
+            case "minimax" -> baseUrl == null
+                    ? new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey)
+                    : new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey, baseUrl);
             default ->
                     throw new IllegalArgumentException(
                             "未知 provider 类型: " + cfg.provider().type() + "（支持 deepseek / minimax）");
         };
+    }
+
+    /**
+     * 取 cfg.provider().baseUrl，空白视为未设置（fallback 到子类的默认常量）。
+     * fix-provider-baseurl：此前 buildProvider 完全不读此值，
+     * {@code DEEPSEEK_BASE_URL} 与 yml 的 {@code provider.baseUrl} 在 CLI/web 上都是死路径。
+     */
+    private static String baseUrlOf(AgentConfig cfg) {
+        if (cfg.provider() == null) return null;
+        String url = cfg.provider().baseUrl();
+        if (url == null || url.isBlank()) return null;
+        return url.trim();
     }
 
     /**

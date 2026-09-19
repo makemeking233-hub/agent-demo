@@ -28,9 +28,10 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
     private static final String PROVIDER_ID = "deepseek";
 
     /**
-     * DeepSeek API base URL
+     * 默认 base URL（AgentLoopFactory.buildProvider 在 cfg.provider().baseUrl 未设时选用单参 ctor，
+     * 触发此常量）。
      */
-    private static final String BASE_URL = "https://api.deepseek.com";
+    static final String BASE_URL = "https://api.deepseek.com";
 
     /**
      * DeepSeek-chat 上下文窗口（128K tokens）
@@ -81,7 +82,7 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
 
     @Override
     protected String baseUrl() {
-        return BASE_URL;
+        return super.baseUrl();
     }
 
     @Override
