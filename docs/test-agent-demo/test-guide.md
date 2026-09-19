@@ -28,6 +28,7 @@
 | `2026-09-18-provider-catalog/` | add-provider-catalog-abstract provider 分层目录（ProviderInference 前缀推断 + DeepSeek/MiniMax validateProviderHook + ChatStreamService 6 参透传 + ChatController 推断兜底 + CLI /model &lt;provider&gt;/&lt;model&gt; + 前端 chat.ts 类型升级 + ModelSelect 两层菜单 + ReasoningEffortSelect options prop） | 2026-09-18 | 75 新增（45 Java + 30 vitest）；合并 main 后全量 892（Java）+ 290（前端）全绿 | 详见 §2.15 | ✅ | 已归档 |
 | `2026-09-18-fix-agent-home-isolation/` | fix-agent-home-isolation agent home 解析收敛（新增 AgentPaths 单一入口 + 14 处解析点全部改走它 + logback 同语义 + surefire 默认隔离），使「测试运行不污染真实 ~/.agent-demo」从纸面要求变为成立 | 2026-09-18 | 9 新增（AgentPathsTest）+ 2 探针 + 2 差分测量；全量 528 core + 373 web 全绿 | ✅ 本 change 用例全绿；jacoco 仅剩 security 0.63 既有（与合并前 main 逐位一致 → 记录放行）；真实 logs/sessions 跑前跑后 **7→7 不变** | ✅ | 已归档 |
 | `2026-09-18-fix-security-coverage/` | fix-security-coverage 修 main 上唯一遗留的 jacoco 违规（security 包 branches 0.63 → 0.755），定位 TrustedHostFilter 47/80=0.59 是被拉低的那极，加 6 条用例覆盖 HTTPS-localhost 兜底 / null trusted / 空白规则 / /25 CIDR / 127.x 范围 | 2026-09-18 | 6 新增（TrustedHostFilterTest +1 helper）；全量 528 core + 379 web 全绿 | ✅ **mvn verify BUILD SUCCESS**（合并前 BUILD FAILURE 仅因该违规）；TrustedHostFilter 60/80=0.75；security 包 83/110=0.755 ≥ 0.70 | ✅ | 已归档 |
+| `2026-09-19-fix-provider-baseurl/` | fix-provider-baseurl 修 DEEPSEEK_BASE_URL 与 provider.baseUrl 死路径（AgentLoopFactory.buildProvider 用单参构造器 + DeepSeekProvider.baseUrl() 返回硬编码常量，自部署/代理/本地桩全失效），改为 buildProvider 选 1/2 参 ctor + baseUrl() 返回构造器值 | 2026-09-18（合并 09-19） | 2 新增（DeepSeekProviderBaseUrlTest）；分支 533 core / 合并后 main 530 core + 379 web | ✅ mvn verify BUILD SUCCESS | ✅ | 已归档 |
 
 ---
 
@@ -169,6 +170,16 @@
 - **测试目标**：清掉 `com.example.agent.web.security` 包 branches 0.63 < 0.70——main 上唯一遗留的 `mvn verify` 失败原因，多次（前几次 change：fix-stale-model-fallback 把违规由 5 降到 1；fix-agent-home-isolation 维持该 1 条）记录放行。
 - **执行要点**：worktree `fix/security-coverage`；先读 jacoco csv 定位——`HomePathGuard` 23/30=0.77 已过阈值、`TrustedHostFilter` 47/80=0.59 是被拉低的那极；不加 production 代码改动，只往 `TrustedHostFilterTest` 加 6 条用例 + 1 helper（`propsHttps(trusted, enabled)`）；覆盖 HTTPS-localhost 兜底（覆盖 L60 复合短路 3 个子分支 + `isHttpsLocalhost` 4 项 OR）、null trusted、空白规则 trim 后跳过、`startsWith("127.")` 分支、`/25` CIDR `restBits > 0` 分支；全量 528 core + 379 web 全绿，**`mvn verify` BUILD SUCCESS**。
 - **关键发现**：（1）`HomePathGuard` 0.77 一直没动——先前记录放行时只粗看包级数字，**没看按类 csv**，错过「单类 0.59 拖累包级」的诊断；本次直接读 csv 一次到位。（2）`WebProperties` 的 compact constructor 把 `trustedHosts == null` 标准化为空集合，导致常规路径永远跑不到 `isTrusted` 的 null 分支；测试必须用 `new WebProperties(..., null, ...)` 绕过去才能覆盖。（3）`HomePathGuard` 的 IOException catch 分支没补——需要 OS 特定路径（Windows NUL 或符号链接环）才能可靠触发，跨平台测试得不偿失；该类已 0.77 单独提它风险不大。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档。
+
+---
+
+### 2.18 `2026-09-19-fix-provider-baseurl/` — 修 DEEPSEEK_BASE_URL 死路径
+
+- **测试目标**：修 `DEEPSEEK_BASE_URL` 与 `provider.baseUrl` 在 CLI/web 上完全失效——`AgentLoopFactory.buildProvider` 用单参构造器，`cfg.provider().baseUrl()` 被读后丢弃；`DeepSeekProvider.baseUrl()` / `MiniMaxProvider.baseUrl()` 无论构造器传什么都返回硬编码常量。两层各自为政，自部署/代理/本地桩上游全走不通。
+- **执行要点**：worktree `fix/fix-provider-baseurl` 隔离作业（§2.7）；TDD 先写 `DeepSeekProviderBaseUrlTest.baseUrlReturnsValuePassedToConstructor` 跑红（期望 `customUrl` 拿到 `BASE_URL` 常量），再实现：父类 `OpenAiCompatibleProvider` 把 baseUrl 存为 `protected final` 字段、`baseUrl()` 由 abstract 改非抽象返该字段；子类 `DeepSeekProvider`/`MiniMaxProvider` 改 `return super.baseUrl()`；`AgentLoopFactory.buildProvider` 引入 `baseUrlOf(cfg)`，cfg.baseUrl 非空时选 2 参 ctor；分支 agent-core 533/0、合并后 main 530/0、agent-web 379/0、`mvn verify` BUILD SUCCESS。
+- **关键发现**：（1）**OpenSpec 归档时同名 Requirement 头冲突**：并行 agent 把 `/api/chat/send 发送聊天消息` 改名为 `发送聊天消息`，第一次 archive 报头找不到；修正 delta 头对齐、场景内容不变，按「同一 Requirement 的场景补充」处理。（2）**final 字段必须显式赋值**：把 `baseUrl()` 从 abstract 改非抽象后忘了在 ctor 给 `protected final String baseUrl` 赋值，编译报「变量 baseUrl 可能尚未初始化」；在 4 参 ctor 加 `this.baseUrl = baseUrl;` 即可。（3）**未补 `AgentLoopFactory` 的端到端集成测试**：依赖既有 `DeepSeekProviderTest.streamsTextAndUsage` 用 WireMock 间接覆盖（它构造 2 参 ctor 并断言 SSE chunks 抵达）——这是省事，但显式的「buildProvider 选 2 参 ctor」断言缺失；若后续有人改回单参 ctor，这套间接覆盖仍然绿。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
