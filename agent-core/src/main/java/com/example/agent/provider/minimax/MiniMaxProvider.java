@@ -84,7 +84,7 @@ public class MiniMaxProvider extends OpenAiCompatibleProvider {
 
     @Override
     protected String baseUrl() {
-        return BASE_URL;
+        return super.baseUrl();
     }
 
     @Override
