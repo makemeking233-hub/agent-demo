@@ -18,7 +18,8 @@ class InitCommandTest {
         assertTrue(Files.exists(cfg));
         String content = Files.readString(cfg);
         assertTrue(content.contains("deepseek"));
-        assertTrue(content.contains("deepseek-chat"));
+        // fix-cli-residue：默认 model 改为 deepseek-v4-flash（与 web profile 对齐）
+        assertTrue(content.contains("deepseek-v4-flash"));
     }
 
     @Test

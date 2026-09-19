@@ -430,7 +430,7 @@ public class ChatCommand implements Runnable {
         }
         if (msg != null && msg.contains("404")) {
             return "404 Not Found — baseUrl 或 model 名错（默认 https://api.deepseek.com /"
-                    + " deepseek-chat）";
+                    + " deepseek-v4-flash）";
         }
         if (msg != null && (msg.contains("429") || msg.contains("rate limit"))) {
             return "429 限流 — 稍等 30s 再试，或检查账户余额";

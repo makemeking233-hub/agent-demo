@@ -15,7 +15,7 @@ class ConfigLoaderTest {
     @Test
     void defaultsWhenNoFile() {
         var cfg = new ConfigLoader().load(null);
-        assertEquals("deepseek-chat", cfg.provider().model());
+        assertEquals("deepseek-v4-flash", cfg.provider().model());
         assertEquals(8192, cfg.provider().maxOutputTokens());
         assertEquals("", cfg.search().provider());
         assertEquals(5, cfg.search().maxResults());

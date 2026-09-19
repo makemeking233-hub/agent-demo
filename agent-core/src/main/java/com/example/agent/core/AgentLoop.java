@@ -49,7 +49,7 @@ public class AgentLoop {
     /**
      * 默认模型（v0.1 单 provider；从 cfg 传入覆盖）
      */
-    private static final String DEFAULT_MODEL = "deepseek-chat";
+    private static final String DEFAULT_MODEL = "deepseek-v4-flash";
 
     /**
      * 默认 temperature（DeepSeek 推荐 1.0）

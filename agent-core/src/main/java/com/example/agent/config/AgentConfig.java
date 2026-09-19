@@ -119,7 +119,7 @@ public record AgentConfig(
 
     public static AgentConfig defaults() {
         return new AgentConfig(
-                new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 8192),
+                new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-v4-flash", 8192),
                 new Permission(
                         "ask-write",
                         List.of(
