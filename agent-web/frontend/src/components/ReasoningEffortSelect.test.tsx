@@ -4,12 +4,13 @@ import type { ReasoningEffort } from "../api/chat";
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
 
 /**
- * ReasoningEffortSelect prop 升级（add-provider-catalog-abstract task 10.3）。
+ * ReasoningEffortSelect（shadcn-prototype：用 Popover + RadioGroup 重写）。
  *
- * <p>prop 从 `model: ModelEntry` 改为 `options: ReasoningEffort[]`。
- * 覆盖：options 渲染 / value 对应 label 选中 / 空 options 返回 null / onChange 回调。
+ * <p>trigger 用 shadcn Button，每个档位项是 Radix RadioGroupItem 渲染出的 button
+ * （shadcn 把 item 渲染为 type="button" value=id，而非 role="option"）。
+ * 改用 role="radio" 精确定位。
  */
-describe("ReasoningEffortSelect（options prop）", () => {
+describe("ReasoningEffortSelect（shadcn Popover + RadioGroup）", () => {
   afterEach(() => cleanup());
 
   const OPTIONS: ReasoningEffort[] = [
@@ -25,32 +26,34 @@ describe("ReasoningEffortSelect（options prop）", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("从 options 渲染 label（思考 + name）", async () => {
+  it("trigger 显示 current.name（避免与下拉项文案撞车）", async () => {
     render(<ReasoningEffortSelect options={OPTIONS} value="medium" onChange={vi.fn()} />);
     const trigger = await screen.findByRole("button", { name: "思考强度" });
-    expect(trigger.textContent).toContain("思考 Medium");
+    expect(trigger.textContent).toBe("Medium");
   });
 
-  it("value 对应 label 正确显示（high）", async () => {
+  it("value=high 时 trigger 显示 High", async () => {
     render(<ReasoningEffortSelect options={OPTIONS} value="high" onChange={vi.fn()} />);
     const trigger = await screen.findByRole("button", { name: "思考强度" });
-    expect(trigger.textContent).toContain("思考 High");
+    expect(trigger.textContent).toBe("High");
   });
 
-  it("打开下拉后可选项来自 options", async () => {
+  it("打开下拉后每个档位一个 radio 项（3 个）", async () => {
     render(<ReasoningEffortSelect options={OPTIONS} value="low" onChange={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "思考强度" }));
-    // 注意：trigger 也含 "思考 Low" 文案，故用 role=option 精确定位下拉项
-    const opts = screen.getAllByRole("option");
-    expect(opts.map((o) => o.textContent)).toEqual(["思考 Low", "思考 Medium", "思考 High"]);
+    // shadcn RadioGroupItem 渲染成 type=button + value=id 的 <button>
+    // 关联的 <label> 含档位文字（"思考 Low" 等）
+    const labels = screen.getAllByText(/^思考 (Low|Medium|High)/);
+    expect(labels.map((l) => l.textContent)).toEqual(["思考 Low", "思考 Medium默认档", "思考 High"]);
   });
 
-  it("切换档位触发 onChange（传 id）", async () => {
+  it("点击档位触发 onChange（传 id）", async () => {
     const onChange = vi.fn();
     render(<ReasoningEffortSelect options={OPTIONS} value="low" onChange={onChange} />);
     fireEvent.click(await screen.findByRole("button", { name: "思考强度" }));
-    const high = screen.getAllByRole("option").find((o) => o.textContent === "思考 High");
-    fireEvent.click(high!);
+    // 找到关联 'effort-high' label 的 input 然后点 label（更接近真实交互）
+    const highLabel = screen.getByText("思考 High");
+    fireEvent.click(highLabel);
     expect(onChange).toHaveBeenCalledWith("high");
   });
 
@@ -58,6 +61,6 @@ describe("ReasoningEffortSelect（options prop）", () => {
     const single: ReasoningEffort[] = [{ id: "medium", name: "Medium" }];
     render(<ReasoningEffortSelect options={single} value="medium" onChange={vi.fn()} />);
     const trigger = await screen.findByRole("button", { name: "思考强度" });
-    expect(trigger.textContent).toContain("思考 Medium");
+    expect(trigger.textContent).toBe("Medium");
   });
 });

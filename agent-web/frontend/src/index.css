@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+/* shadcn-prototype 阶段 @theme 映射
+ * 把 shadcn 标准变量映射到现状的 --dsw-alias-* 与 --dsw-static-* 系统
+ * 这样 shadcn 组件（bg-background / text-foreground 等）能复用现状主题系统
+ * 完整 token 系统改造（统一命名 + 三主题）留到 §1 (shadcn-infra) 处理。
+ *
+ * 现状 token 系统（src/styles/tokens.css）：
+ *   --dsw-static-*    30+ 颜色 token（light 默认）
+ *   --dsw-static-*:dark 重定义（body[data-ds-dark-theme]）
+ *   --dsw-alias-*     别名层（--dsw-alias-bg / --dsw-alias-text 等）
+ */
+@theme {
+  /* shadcn semantic → 现状 alias 映射 */
+  --color-background: var(--dsw-alias-bg);
+  --color-foreground: var(--dsw-alias-text);
+  --color-card: var(--dsw-alias-bg-raised);
+  --color-card-foreground: var(--dsw-alias-text);
+  --color-popover: var(--dsw-alias-bg-raised);
+  --color-popover-foreground: var(--dsw-alias-text);
+  --color-primary: var(--dsw-alias-accent);
+  --color-primary-foreground: var(--dsw-static-text-inverse);
+  --color-secondary: var(--dsw-static-surface-sunken);
+  --color-secondary-foreground: var(--dsw-alias-text);
+  --color-muted: var(--dsw-static-surface-sunken);
+  --color-muted-foreground: var(--dsw-alias-text-muted);
+  --color-accent: var(--dsw-alias-accent);
+  --color-accent-foreground: var(--dsw-static-text-inverse);
+  --color-destructive: var(--dsw-static-danger-default);
+  --color-destructive-foreground: var(--dsw-static-text-inverse);
+  --color-border: var(--dsw-alias-border);
+  --color-input: var(--dsw-alias-border);
+  --color-ring: var(--dsw-alias-accent);
+
+  /* 字体（与现状 body 一致） */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  /* 圆角（保留现状 --dsw-alias-radius） */
+  --radius: var(--dsw-alias-radius);
+  --radius-sm: var(--dsw-alias-radius-sm);
+}
