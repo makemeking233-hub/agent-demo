@@ -1,6 +1,6 @@
 ## MODIFIED Requirements
 
-### Requirement: /api/chat/send 发送聊天消息
+### Requirement: 发送聊天消息
 
 系统 SHALL 通过 HTTP 接受用户消息并启动一次 agent 回合。
 
