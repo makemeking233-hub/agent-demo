@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   Folder,
+  Link2,
   MessageSquare,
   MoreHorizontal,
   PanelLeftClose,
@@ -68,12 +69,21 @@ interface SidebarProps {
   currentSessionId: string | null;
   onSelect: (sessionId: string) => void;
   onNewSession: () => void;
+  /** align-dsh-workspace-ui-polish: v2 单 action；path 由后端派生 name+title */
+  onCreateWorkspace: (path: string) => void;
   onWorkspaceChange: (workspace: string) => void;
   onRename: (sessionId: string, title: string) => void;
-  onCreateWorkspace: (name: string, dir: string) => void;
   onArchive: (sessionId: string) => void;
   onRestore: (sessionId: string) => void;
   onCollapseToggle: (collapsed: boolean) => void;
+  /** 拖拽重排后应用新顺序（不含默认 workspace） */
+  onReorderWorkspaces: (orderedNames: string[]) => void;
+  /** 重命名 workspace display title（不动 dir/path/name/id） */
+  onRenameWorkspace: (name: string, newTitle: string) => void;
+  /** 删除 workspace record（不动 dir/session log） */
+  onDeleteWorkspace: (name: string) => void;
+  /** missing_dir 重新连接：复用 picker 选新 path，调 createWorkspace(path) */
+  onReconnectMissingWorkspace: (name: string, newPath: string) => void;
 }
 
 /** 每工作区默认展示的会话数，其余收进"展开其余 N 个会话"。 */
@@ -121,6 +131,25 @@ export function Sidebar(props: SidebarProps) {
   const [showPicker, setShowPicker] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  // align-dsh-workspace-ui-polish T7+T8+T9:
+  const [draggedName, setDraggedName] = useState<string | null>(null);
+  const [contextMenuFor, setContextMenuFor] = useState<string | null>(null);
+  const [renamingWs, setRenamingWs] = useState<string | null>(null);
+  const [renameWsValue, setRenameWsValue] = useState("");
+  const [reconnectFor, setReconnectFor] = useState<string | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // 点击外部关闭右键菜单
+  useEffect(() => {
+    if (!contextMenuFor) return;
+    function onMouseDown(e: MouseEvent) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenuFor(null);
+      }
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [contextMenuFor]);
 
   function toggle() {
     const next = !collapsed;
@@ -225,25 +254,88 @@ export function Sidebar(props: SidebarProps) {
       <div className={styles.workspaceBar}>
         <div className={styles.workspaceList}>
           {props.workspaces.map((ws) => (
-            <button
-              key={ws.name}
-              type="button"
-              className={`${styles.workspaceItem} ${
-                ws.name === props.activeWorkspace ? styles.workspaceActive : ""
-              } ${ws.status === "missing_dir" ? styles.workspaceMissing : ""}`}
-              onClick={() => {
-                setArchiveView(false);
-                props.onWorkspaceChange(ws.name);
-              }}
-              title={ws.status === "missing_dir"
-                ? `目录已移动：${ws.dir}（点击切换可重新指定）`
-                : ws.dir}
-              data-testid={`workspace-item-${ws.name}`}
-            >
-              <Folder size={12} />
-              <span className={styles.workspaceName}>{ws.name}</span>
-              <span className={styles.workspaceCount}>{ws.sessionCount}</span>
-            </button>
+            renamingWs === ws.name ? (
+              <input
+                key={`rename-${ws.name}`}
+                className={styles.workspaceRenameInput}
+                autoFocus
+                value={renameWsValue}
+                onChange={(e) => setRenameWsValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const v = renameWsValue.trim();
+                    if (v) props.onRenameWorkspace(ws.name, v);
+                    setRenamingWs(null);
+                  } else if (e.key === "Escape") {
+                    setRenamingWs(null);
+                  }
+                }}
+                onBlur={() => setRenamingWs(null)}
+                data-testid={`workspace-rename-${ws.name}`}
+              />
+            ) : (
+              <button
+                key={ws.name}
+                type="button"
+                className={`${styles.workspaceItem} ${
+                  ws.name === props.activeWorkspace ? styles.workspaceActive : ""
+                } ${ws.status === "missing_dir" ? styles.workspaceMissing : ""}`}
+                onClick={() => {
+                  setArchiveView(false);
+                  props.onWorkspaceChange(ws.name);
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenuFor(ws.name);
+                }}
+                draggable={true}
+                onDragStart={(e) => {
+                  setDraggedName(ws.name);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", ws.name);
+                }}
+                onDragOver={(e) => {
+                  if (draggedName && draggedName !== ws.name) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "move";
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const fromName = e.dataTransfer.getData("text/plain");
+                  setDraggedName(null);
+                  if (!fromName || fromName === ws.name) return;
+                  // 重排：从当前 props.workspaces 出发，把 fromName 移到 ws.name 之前
+                  const names = props.workspaces.map((w) => w.name).filter((n) => n !== fromName);
+                  const idx = names.indexOf(ws.name);
+                  if (idx < 0) return;
+                  names.splice(idx, 0, fromName);
+                  props.onReorderWorkspaces(names);
+                }}
+                title={ws.status === "missing_dir"
+                  ? `目录已移动：${ws.dir}`
+                  : ws.dir}
+                data-testid={`workspace-item-${ws.name}`}
+              >
+                <Folder size={12} />
+                <span className={styles.workspaceName}>{ws.title ?? ws.name}</span>
+                <span className={styles.workspaceCount}>{ws.sessionCount}</span>
+                {ws.status === "missing_dir" && (
+                  <button
+                    type="button"
+                    className={styles.workspaceReconnect}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setReconnectFor(ws.name);
+                    }}
+                    title="重新连接：选择新路径复用此 workspace record"
+                    data-testid={`workspace-reconnect-${ws.name}`}
+                  >
+                    <Link2 size={10} />
+                  </button>
+                )}
+              </button>
+            )
           ))}
         </div>
         <div className={styles.workspaceMenuWrap} ref={workspaceMenuRef}>
@@ -303,6 +395,57 @@ export function Sidebar(props: SidebarProps) {
           )}
         </div>
       </div>
+
+      {/* T8: workspace 右键菜单（重命名 / 删除） */}
+      {contextMenuFor && (
+        <div
+          ref={contextMenuRef}
+          className={styles.workspaceContextMenu}
+          role="menu"
+          data-testid={`workspace-context-menu-${contextMenuFor}`}
+        >
+          <button
+            type="button"
+            className={styles.workspaceContextItem}
+            role="menuitem"
+            onClick={() => {
+              const ws = props.workspaces.find((w) => w.name === contextMenuFor);
+              if (ws) setRenameWsValue(ws.title ?? ws.name);
+              setRenamingWs(contextMenuFor);
+              setContextMenuFor(null);
+            }}
+            data-testid={`workspace-rename-btn-${contextMenuFor}`}
+          >
+            <Pencil size={12} /> <span>重命名</span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.workspaceContextItem} ${styles.workspaceContextItemDanger}`}
+            role="menuitem"
+            onClick={() => {
+              if (window.confirm(`确认删除工作区 ${contextMenuFor}？\n目录和会话日志不会被删除。`)) {
+                props.onDeleteWorkspace(contextMenuFor);
+              }
+              setContextMenuFor(null);
+            }}
+            data-testid={`workspace-delete-btn-${contextMenuFor}`}
+          >
+            <Trash2 size={12} /> <span>删除</span>
+          </button>
+        </div>
+      )}
+
+      {/* T9: missing_dir workspace 重新连接 → 复用 picker 选新 path */}
+      {reconnectFor && (
+        <WorkspacePickerModal
+          open={true}
+          onClose={() => setReconnectFor(null)}
+          onSubmit={async (path) => {
+            props.onReconnectMissingWorkspace(reconnectFor, path);
+            setReconnectFor(null);
+          }}
+        />
+      )}
 
       {showPicker && (
         <WorkspacePickerModal

@@ -179,6 +179,37 @@ export function App() {
     refresh();
   }
 
+  // align-dsh-workspace-ui-polish T7+T8+T9
+  async function handleReorderWorkspaces(names: string[]) {
+    await fetch('/api/workspaces/order', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: names }),
+    });
+    refresh();
+  }
+  async function handleRenameWorkspace(name: string, newTitle: string) {
+    await fetch(`/api/workspaces/${encodeURIComponent(name)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: newTitle }),
+    });
+    refresh();
+  }
+  async function handleDeleteWorkspace(name: string) {
+    await fetch(`/api/workspaces/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+    if (activeWorkspace === name) setActiveWorkspace('agent-demo');
+    refresh();
+  }
+  async function handleReconnectMissingWorkspace(name: string, newPath: string) {
+    // missing_dir 重新连接：调 createWorkspace(newPath)，后端按 DSH 语义
+    // 复用同 canonical path 的 record → 新 path 在主工作区里相同 basename 则复用 name
+    await api.createWorkspace(newPath);
+    refresh();
+  }
+
   return (
     <OnlineProvider>
       <OfflineBanner />
@@ -212,6 +243,10 @@ export function App() {
             onArchive={handleArchive}
             onRestore={handleRestore}
             onCollapseToggle={setSidebarCollapsed}
+            onReorderWorkspaces={handleReorderWorkspaces}
+            onRenameWorkspace={handleRenameWorkspace}
+            onDeleteWorkspace={handleDeleteWorkspace}
+            onReconnectMissingWorkspace={handleReconnectMissingWorkspace}
           />
           <main className={styles.main}>
             <ChatPanel
