@@ -1,18 +1,23 @@
 /**
- * SettingsModal (add-settings-foundation M1 + add-settings-general-items M2 + add-settings-menu-placeholders M3).
+ * SettingsModal (add-settings-foundation M1 + add-settings-general-items M2 + add-settings-menu-placeholders M3
+ * → shadcn-components-p1: 用 shadcn Dialog 替换原手搓 <div role="dialog">).
  *
- * 居中 modal: 左 nav + 右 content.
- * 关闭路径: ESC / mask / X.
- * 焦点管理: 打开时跳到 close, 关闭时回到触发按钮.
+ * <p>用 shadcn Dialog 自动获得：focus trap / Esc 关闭 / 焦点还原 / 外点击关闭
+ * / portal 渲染。data-testid="settings-modal" 保留以兼容现有测试。
  */
 
 import { X } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { ChatApi, type ModelSelection, type ReasoningEffort } from '../api/chat';
 import { OpenConfigButton } from './OpenConfigButton';
 import { SettingsContent } from './SettingsContent';
 import { SettingsNav, type SettingsNavItem } from './SettingsNav';
-import styles from './SettingsModal.module.css';
 
 interface SettingsModalProps {
   open: boolean;
@@ -37,7 +42,6 @@ const NAV_ITEMS: SettingsNavItem[] = [
 export function SettingsModal({
   open,
   onClose,
-  triggerElement,
   api,
   selection,
   reasoningEfforts,
@@ -46,71 +50,43 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [activeId, setActiveId] = useState<string>('general');
   const titleId = useId();
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-
-  // ESC 关闭
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
-  // 打开时焦点管理
-  useEffect(() => {
-    if (open) {
-      previousFocusRef.current = triggerElement ?? (document.activeElement as HTMLElement | null);
-      // 让 DOM 先渲染再聚焦
-      setTimeout(() => closeButtonRef.current?.focus(), 0);
-    } else if (previousFocusRef.current) {
-      previousFocusRef.current.focus();
-      previousFocusRef.current = null;
-    }
-  }, [open, triggerElement]);
-
-  if (!open) return null;
 
   return (
-    <div className={styles.overlay} role="presentation">
-      <div className={styles.mask} aria-hidden="true" onClick={onClose} />
-      <div
-        className={styles.panel}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
         data-testid="settings-modal"
+        className="flex max-w-3xl gap-0 p-0"
       >
-        <nav className={styles.nav} aria-label="设置分类">
-          <h2 id={titleId} className={styles.navTitle}>设置</h2>
+        <nav
+          aria-label="设置分类"
+          className="flex w-48 shrink-0 flex-col gap-1 border-r p-4"
+        >
+          <DialogTitle id={titleId} className="mb-2 px-2 text-base font-semibold">
+            设置
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            应用设置：通用、模型、插件、Agent 预设
+          </DialogDescription>
           <SettingsNav
             items={NAV_ITEMS}
             activeId={activeId}
             onSelect={setActiveId}
           />
         </nav>
-        <div className={styles.content}>
-          <div className={styles.header}>
-            <div className={styles.actions}>
-              <OpenConfigButton />
-            </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex items-center justify-end gap-2 border-b px-4 py-2">
+            <OpenConfigButton />
             <button
-              ref={closeButtonRef}
               type="button"
-              className={styles.close}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sm hover:bg-accent"
               onClick={onClose}
               aria-label="关闭"
             >
               <X size={14} />
-              <span className={styles.closeLabel}>关闭</span>
+              <span className="sr-only">关闭</span>
             </button>
           </div>
-          <div className={styles.options}>
+          <div className="flex-1 overflow-auto p-4">
             <SettingsContent
               activeId={activeId}
               api={api}
@@ -121,7 +97,7 @@ export function SettingsModal({
             />
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
