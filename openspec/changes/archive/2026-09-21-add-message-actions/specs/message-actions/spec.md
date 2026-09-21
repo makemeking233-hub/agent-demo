@@ -98,11 +98,9 @@ copy 按钮 SHALL 把消息纯文本写入剪贴板，成功后 1 秒内显示 �
 - **WHEN** 会话存档里没有 `message_meta` 条目
 - **THEN** 历史端点照常返回消息，`meta` 为 null（前端只显示 copy）
 
-## MODIFIED Requirements
+### Requirement: 未知 SSE 事件的向后兼容
 
-### Requirement: SSE 事件类型扩展
-
-SSE 事件流新增 `message_meta` 类型（在 `message_stop` 之前推送）。老前端 SHALL 忽略未知 event 类型而不报错。
+SSE 事件流新增 `message_meta` 类型。前端 SHALL 忽略未知 event 类型而不报错——这样未实现 `message_meta` 的旧前端不会因为多了一个事件而崩掉既有渲染。
 
 #### Scenario: 老前端兼容
 
