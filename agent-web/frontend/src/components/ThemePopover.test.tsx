@@ -26,13 +26,14 @@ vi.mock("../hooks/useSettingsStore", () => ({
 }));
 
 describe("ThemePopover", () => {
-  it("renders 3 appearance cards with title", () => {
+  it("renders 4 appearance cards with title（含 hc）", () => {
     const onClose = vi.fn();
     render(<ThemePopover onClose={onClose} />);
     expect(screen.getByText("外观")).toBeInTheDocument();
     expect(screen.getByTestId("appearance-card-light")).toBeInTheDocument();
     expect(screen.getByTestId("appearance-card-dark")).toBeInTheDocument();
     expect(screen.getByTestId("appearance-card-system")).toBeInTheDocument();
+    expect(screen.getByTestId("appearance-card-hc")).toBeInTheDocument();
   });
 
   it("renders with role=dialog and aria-label", () => {
