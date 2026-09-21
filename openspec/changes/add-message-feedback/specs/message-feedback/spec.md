@@ -1,4 +1,4 @@
-# message-feedback Spec Deltas (add-message-actions)
+# message-feedback Spec Deltas (add-message-feedback)
 
 ## ADDED Requirements
 
@@ -68,3 +68,32 @@ PUT / DELETE SHALL 校验 `ifVersion`：`null` 表示「必须不存在」，`N`
 
 - **WHEN** 两个标签页同时 PUT 同一 messageId
 - **THEN** 串行执行；后者拿到前者的 version → 409 冲突
+
+### Requirement: 👍/👎 两态切换
+
+赞踩 SHALL 为两态互斥（up / down / 无），点击已选中的按钮 SHALL 取消该 rating。
+
+#### Scenario: 首次点赞
+
+- **WHEN** 消息无 rating，用户点击 👍
+- **THEN** `PUT /api/feedback/{sid}/{mid} {rating:"up", ifVersion:null}` → 200，按钮高亮
+
+#### Scenario: 取消点赞
+
+- **WHEN** 消息已 👍，用户再点 👍
+- **THEN** `DELETE /api/feedback/{sid}/{mid} {ifVersion:N}` → 204，按钮恢复
+
+#### Scenario: 切换方向
+
+- **WHEN** 消息已 👍，用户点 👎
+- **THEN** `PUT {rating:"down", ifVersion:N}` → 200，👎 高亮、👍 恢复
+
+#### Scenario: 写失败回滚
+
+- **WHEN** PUT 返回 500
+- **THEN** 按钮回到点击前的状态（乐观更新回滚），不静默留错
+
+#### Scenario: 无 uuid 的消息不显示赞踩
+
+- **WHEN** 消息没有 `uuid`（老会话历史 / 流式中）
+- **THEN** 不渲染 👍/👎 按钮（copy 与 clock 不受影响）

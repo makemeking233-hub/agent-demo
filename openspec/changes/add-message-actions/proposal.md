@@ -1,5 +1,8 @@
 # add-message-actions
 
+> **归档说明（2026-09-22）**：本 change 实际交付 **P1（copy）+ P2（clock）**；原 P3（赞踩 + feedback sidecar）
+> 因存储/并发语义独立，已拆为 `openspec/changes/add-message-feedback/`。下文 P3 相关段落保留为提案期原文。
+
 ## Why
 
 agent-demo Web UI 的 assistant 消息**没有任何操作栏**——用户无法复制回复、无法评价好坏、看不到该条消息的耗时与吞吐。对比 DSH Web（`MessageIconActions.tsx`：copy + 赞踩 + branch + clock），差距明显。

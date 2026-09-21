@@ -31,6 +31,7 @@
 | `2026-09-19-fix-provider-baseurl/` | fix-provider-baseurl 修 DEEPSEEK_BASE_URL 与 provider.baseUrl 死路径（AgentLoopFactory.buildProvider 用单参构造器 + DeepSeekProvider.baseUrl() 返回硬编码常量，自部署/代理/本地桩全失效），改为 buildProvider 选 1/2 参 ctor + baseUrl() 返回构造器值 | 2026-09-18（合并 09-19） | 2 新增（DeepSeekProviderBaseUrlTest）；分支 533 core / 合并后 main 530 core + 379 web | ✅ mvn verify BUILD SUCCESS | ✅ | 已归档 |
 | `2026-09-19-fix-cli-residue/` | fix-cli-residue 清 CLI 路径残留的 deepseek-chat 默认值（AgentConfig.defaults() / AgentLoop.DEFAULT_MODEL / ChatCommand 错误消息 / ChatRequest javadoc），与 web profile 的 deepseek-v4-flash 对齐；不动 SlashCommand 的 /model chat 别名（spec 锁死向后兼容） | 2026-09-19 | 2 新增（AgentConfigDefaultsModelTest + AgentLoopDefaultModelTest）+ 2 fixture 同步；分支 535 core / 合并后 main 532 core + 379 web | ✅ mvn verify BUILD SUCCESS | ✅ | 已归档 |
 | `2026-09-19-fix-provider-baseurl-e2e/` | 给 fix-provider-baseurl 加端到端验证：WireMock 桩捕获 cfg.provider.baseUrl 覆盖下的真实 HTTP 请求（之前 A 只证 baseUrl() 方法返回值正确，未证 WebClient 真的打到了那个 URL） | 2026-09-19 | 1 新增（AgentLoopFactoryBuildProviderBaseUrlTest） | ✅ agent-core 536/0 全绿；一次性跑绿（cfg.provider.baseUrl → WireMock.requestedFor 路径验证） | ✅ | 已归档 |
+| `2026-09-22-add-message-actions/` | add-message-actions P1 copy + P2 per-message clock（`MessageActionRow` copy 按钮 + `message_meta` SSE 事件 + `SessionRecorder` 落盘读数 + 历史回填 + `message-clock` 格式化 + ChatPanel 时间线装配） | 2026-09-22 | 新增 36（9 Java + 27 vitest）；套件 306 → **328 passed / 41 文件**；后端 agent-web **386 tests** 全绿 | ✅ mvn verify BUILD SUCCESS（jacoco 全达标）；tsc 3 ≤ 基线 7；vitest 用例全绿，9 条 `EventSource is not defined` 已在干净 HEAD `4c4df4d` 复现 → 记录放行 | ✅ | 已归档 |
 
 ---
 
@@ -192,6 +193,14 @@
 - **关键发现**：（1）**OpenSpec delta 头类型错**：第一次 archive 把 ADDED 写成 MODIFIED，cli/spec.md 没有同名 Requirement → archive 报错；改为 `## ADDED Requirements` 即可。（2）`InitCommandTest.createsConfigFile` 自动连带坏了——它断言生成的 yaml 含 `deepseek-chat`，改了 defaults 后生成的 yaml 不再含 `deepseek-chat`；这是 fixture 同步，不是覆盖缺失。（3）`AgentLoop.DEFAULT_MODEL` 用反射读没改可见性：测试只读一次不破坏 prod API。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
+
+### 2.20 `2026-09-22-add-message-actions/` — add-message-actions P1 copy + P2 per-message clock
+
+- **测试目标**：为 assistant 消息操作栏补上 DSH 风格的两件事——copy 按钮（P1）与 per-message 读数 clock（P2）。P2 要打通全栈：SSE 新增 `message_meta` 事件 → 前端 `16:23 · Ran for 15s · TTFT 1.2s · 34 tok/s` → 落盘 → 历史回填后刷新仍在。
+- **执行要点**：worktree `.worktrees/add-message-actions-p2` 隔离作业（§2.7）；后端 9 条（`SseSessionLogSinkTest` +4 用 Mockito `InOrder` 证顺序、真实 `ChatStreamService` replay sink 证字段；`SessionRecorderTest` +2 用 `@TempDir` 证落盘；`SessionControllerTest` +3 证回填与「uuid 找不到就丢弃」）；前端 27 条（`message-clock.test.ts` 18 条边界 + `MessageActionRow` clock 4 条 + `ChatPanel` 时间线装配 5 条）；门禁 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` BUILD SUCCESS（agent-web 386 tests，jacoco 全达标）、vitest 328 passed / 41 文件、tsc 3 ≤ 基线 7。
+- **关键发现**：（1）**原设计有两处实现不了**——`ttft_ms`/`tok_per_sec` 只有 `TurnResult.delta()` 才有，故 `message_meta` 必须在 `onTurnEnd` 发送（仍在 `message_stop` 之前，契约不变）；前端一轮可能因工具调用拆成多条 item，而事件按轮下发，故读数是「贴到本轮最后一条 assistant」而非按 uuid 建索引（uuid 仍写进 item，供后续赞踩当 `messageId`）。（2）**踩到生产侧潜在缺陷**：`SessionEntry.assistant(content, null, parent)` 在 `toolCalls == null` 时 `Map.of` 抛 NPE，被 `SessionRecorder.safeStore` 静默吞掉 → 该条 assistant 不落盘；本次未修（超范围），已写入 Follow-up。（3）**vitest 的 9 条 `EventSource is not defined` 是既有**：`git stash` 回干净 HEAD `4c4df4d` 跑出逐位一致的 9 条才放行（§2.7.5 门禁 5 的证据形态）。（4）**`mvn test` 不加 `-DskipNpm=true` 会删坏 `node_modules`**：frontend-maven-plugin 触发 `npm ci`，原生模块 `.node` 被占用 → `EPERM -4048`，npm 先删后装把 `vite` 等删掉了；用 `npm install` 就地修复。（5）**`core.autocrlf=true` 的坑**：`git stash pop` 会把工作区文件重写成 CRLF，之后多行 `edit` 匹配失败，需批量规范回 LF。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
+- **归档状态**：已归档（P3 赞踩拆为 `add-message-feedback`）。
 
 ---
 
