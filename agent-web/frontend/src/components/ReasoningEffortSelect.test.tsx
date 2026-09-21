@@ -68,6 +68,7 @@ describe("ReasoningEffortSelect（shadcn Popover + RadioGroup）", () => {
     const { container } = render(
       <ReasoningEffortSelect options={OPTIONS} value="medium" onChange={vi.fn()} />,
     );
+    // @ts-expect-error vitest-axe 类型在 jsdom 路径下解析缺失
     await expect(container).toHaveNoViolations();
   });
 });
