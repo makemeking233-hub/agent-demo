@@ -40,13 +40,14 @@ export function ReasoningEffortSelect({ options, value, onChange }: ReasoningEff
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3" align="start">
         <RadioGroup
+          className=""
           value={value}
           onValueChange={onChange}
           aria-label="思考强度选项"
         >
           {options.map((o) => (
             <div key={o.id} className="flex items-center gap-2 py-1">
-              <RadioGroupItem value={o.id} id={`effort-${o.id}`} />
+              <RadioGroupItem className="" value={o.id} id={`effort-${o.id}`} />
               <Label htmlFor={`effort-${o.id}`} className="cursor-pointer font-normal">
                 思考 {o.name}
                 {o.description ? (

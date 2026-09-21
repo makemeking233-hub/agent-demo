@@ -34,9 +34,11 @@
     "typescript": "^5.9.3",
     "vite": "^6.4.3",
     "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "vitest-axe": "^1.0.0-pre.5"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.3.0",
@@ -44,13 +46,17 @@
     "katex": "^0.18.7",
     "lucide-react": "^1.47.0",
     "mermaid": "^12.0.0",
+    "next-themes": "^0.4.6",
     "radix-ui": "^1.6.7",
+    "react-hook-form": "^7.88.0",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
     "vosk-browser": "^0.0.8",
-    "workbox-window": "^7.3.0"
+    "workbox-window": "^7.3.0",
+    "zod": "^3.25.76"
   }
 }
