@@ -16,9 +16,9 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交。
 
 ## 3. MemorySectionProvider：按 query 产出记忆段
 
-- [ ] 3.1 测试先红：写 `MemorySectionProviderTest`——给定含条目的 memory 目录与一条相关 query，断言产出的记忆段含 `(relevant)` 标记的 scope 小节；query 为空时返回空串
-- [ ] 3.2 实现：新增 `MemorySectionProvider`（`memory` 包），封装 `MemoryRetriever` + `List<MemoryDir>` + `k`，提供 `sectionFor(String query)`；内部复用 `MemoryPromptBuilder` 的召回渲染逻辑，异常时返回空串（静默降级）
-- [ ] 3.3 `mvn -o -pl agent-core test -Dtest='MemorySectionProviderTest'` 转绿后 commit + push
+- [x] 3.1 测试先红：写 `MemorySectionProviderTest`——给定含条目的 memory 目录与一条相关 query，断言产出的记忆段含 `(relevant)` 标记的 scope 小节；query 为空时返回空串
+- [x] 3.2 实现：新增 `MemorySectionProvider`（`memory` 包），封装 `MemoryRetriever` + `List<MemoryDir>` + `k`，提供 `sectionFor(String query)`；内部复用 `MemoryPromptBuilder` 的召回渲染逻辑，异常时返回空串（静默降级）
+- [x] 3.3 `mvn -o -pl agent-core test -Dtest='MemorySectionProviderTest'` 转绿后 commit + push
 
 ## 4. AgentLoop：每轮动态拼装 system prompt
 
