@@ -52,6 +52,11 @@ describe("Sidebar 会话管理", () => {
       onArchive: vi.fn(),
       onRestore: vi.fn(),
       onCollapseToggle: vi.fn(),
+      // align-dsh-workspace-ui-polish T7+T8+T9
+      onReorderWorkspaces: vi.fn(),
+      onRenameWorkspace: vi.fn(),
+      onDeleteWorkspace: vi.fn(),
+      onReconnectMissingWorkspace: vi.fn(),
       ...overrides,
     };
     render(<Sidebar {...props} />);
@@ -271,5 +276,109 @@ describe("Sidebar 会话管理", () => {
 
     const el = screen.getByTestId("workspace-item-agent-demo");
     expect(el.className).not.toMatch(/workspaceMissing/);
+  });
+
+  // ===== align-dsh-workspace-ui-polish T7: drag 重排 =====
+
+  it("T7: 拖拽 workspace 到另一个前 → onReorderWorkspaces 收到新顺序", () => {
+    const p = renderSidebar({
+      workspaces: [
+        { name: "agent-demo", dir: "/a", sessionCount: 0, status: "ok" },
+        { name: "ws-a", dir: "/b", sessionCount: 0, status: "ok" },
+        { name: "ws-b", dir: "/c", sessionCount: 0, status: "ok" },
+      ],
+    });
+
+    const source = screen.getByTestId("workspace-item-ws-b");
+    const target = screen.getByTestId("workspace-item-ws-a");
+
+    // HTML5 DnD: dataTransfer 在 jsdom 中需要 mock
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: (k: string, v: string) => data.set(k, v),
+      getData: (k: string) => data.get(k) ?? "",
+    };
+    fireEvent.dragStart(source, { dataTransfer });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+
+    // ws-b 被移到 ws-a 之前 → 顺序 [agent-demo, ws-b, ws-a]
+    expect(p.onReorderWorkspaces).toHaveBeenCalledWith(["agent-demo", "ws-b", "ws-a"]);
+  });
+
+  // ===== T8: 右键菜单（重命名 / 删除）=====
+
+  it("T8: 右键 workspace → 弹菜单（重命名 + 删除）", () => {
+    renderSidebar({
+      workspaces: [{ name: "ws-x", dir: "/x", sessionCount: 0, status: "ok" }],
+    });
+
+    fireEvent.contextMenu(screen.getByTestId("workspace-item-ws-x"));
+    expect(screen.getByTestId("workspace-context-menu-ws-x")).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-rename-btn-ws-x")).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-delete-btn-ws-x")).toBeInTheDocument();
+  });
+
+  it("T8: 点重命名 → 出现 inline input，Enter 调 onRenameWorkspace", () => {
+    const p = renderSidebar({
+      workspaces: [{ name: "ws-x", title: "Pretty X", dir: "/x", sessionCount: 0, status: "ok" }],
+    });
+
+    fireEvent.contextMenu(screen.getByTestId("workspace-item-ws-x"));
+    fireEvent.click(screen.getByTestId("workspace-rename-btn-ws-x"));
+
+    const input = screen.getByTestId("workspace-rename-ws-x") as HTMLInputElement;
+    expect(input.value).toBe("Pretty X");
+    fireEvent.change(input, { target: { value: "New Title" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(p.onRenameWorkspace).toHaveBeenCalledWith("ws-x", "New Title");
+  });
+
+  it("T8: 点删除 → confirm 通过后调 onDeleteWorkspace", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const p = renderSidebar({
+      workspaces: [{ name: "ws-del", dir: "/d", sessionCount: 0, status: "ok" }],
+    });
+
+    fireEvent.contextMenu(screen.getByTestId("workspace-item-ws-del"));
+    fireEvent.click(screen.getByTestId("workspace-delete-btn-ws-del"));
+    expect(p.onDeleteWorkspace).toHaveBeenCalledWith("ws-del");
+  });
+
+  it("T8: 删除 confirm 取消 → 不调 onDeleteWorkspace", () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const p = renderSidebar({
+      workspaces: [{ name: "ws-del", dir: "/d", sessionCount: 0, status: "ok" }],
+    });
+
+    fireEvent.contextMenu(screen.getByTestId("workspace-item-ws-del"));
+    fireEvent.click(screen.getByTestId("workspace-delete-btn-ws-del"));
+    expect(p.onDeleteWorkspace).not.toHaveBeenCalled();
+  });
+
+  // ===== T9: missing_dir 重新连接 =====
+
+  it("T9: missing_dir workspace 显示「重新连接」按钮，点击弹 picker", async () => {
+    renderSidebar({
+      workspaces: [
+        { name: "agent-demo", dir: "/a", sessionCount: 0, status: "ok" },
+        { name: "lost", dir: "/old", sessionCount: 2, status: "missing_dir" },
+      ],
+    });
+
+    const btn = screen.getByTestId("workspace-reconnect-lost");
+    expect(btn).toBeInTheDocument();
+    fireEvent.click(btn);
+    // picker modal 打开
+    expect(await screen.findByRole("dialog", { name: "选择工作区目录" })).toBeInTheDocument();
+  });
+
+  it("T9: ok workspace 不显示「重新连接」按钮", () => {
+    renderSidebar({
+      workspaces: [{ name: "agent-demo", dir: "/a", sessionCount: 0, status: "ok" }],
+    });
+    expect(screen.queryByTestId("workspace-reconnect-agent-demo")).toBeNull();
   });
 });
