@@ -27,8 +27,6 @@ public final class SessionResumeLoader {
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(SessionResumeLoader.class);
 
-    private static final String ORPHAN_CALL_NAME = "resumed_tool";
-
     /**
      * 已记录"历史不配对"日志的 sessionId 集合（quiet-tool-pairing-warn）。
      *
@@ -145,14 +143,22 @@ public final class SessionResumeLoader {
                     dangling);
         }
         List<Message> paired = com.example.agent.core.ToolCallPairing.repair(messages);
-        // 反向配对修复：为无前置 assistant.tool_calls 的 tool_result 注入合成骨架
-        injectOrphanSkeletons(paired);
+        // 反向配对修复：为无前置 assistant.tool_calls 的 tool_result 注入合成骨架。
+        // snip-pairing-repair：实现已提取到 ToolCallPairing，与请求路径（AgentLoop）共用同一份逻辑，
+        // 避免两处判定漂移。
+        paired = com.example.agent.core.ToolCallPairing.repairOrphanResults(paired);
         return new ResumeResult(paired, raw.promptTokens(), raw.completionTokens());
     }
 
     /**
      * snip 裁剪：若消息列表 token 总量超过 {@code maxTokens}，把最早轮（从头部）坍缩为
      * summary system 消息，直到剩余不超过上限。坍缩会丢弃旧 detail（只保留一条提示 + 最新消息）。
+     *
+     * <p><b>裁剪点按配对组对齐</b>（snip-pairing-repair）：配对约束的作用域是
+     * {@code assistant(tool_calls)} 加上紧随其后的连续 {@code tool_result} 这一整块。逐条丢弃时裁剪点
+     * 可能落在这块内部，于是 assistant 被丢掉、它的结果被保留 → 一条无前置 {@code tool_calls} 的
+     * tool 消息 → 上游 400（{@code Messages with role 'tool' must be a response to a preceding message
+     * with 'tool_calls'}），且该会话此后每轮重放都 400。因此丢弃的最小单位必须是整块。
      *
      * @param messages 已 restored 的消息列表
      * @param estimator token 估算器
@@ -170,6 +176,12 @@ public final class SessionResumeLoader {
         while (drop < all.size() && estimate(all.subList(drop, all.size()), estimator) > maxTokens) {
             drop++;
         }
+        // 组对齐：若保留列表会以 tool 结果开头，说明裁剪点落在 assistant(tool_calls) 与其结果之间
+        // ——把这一组剩下的结果一并丢掉。丢弃的始终是前缀，故正向不变式不受影响；此处只保证
+        // 保留列表的起点是一个「组起点」，从而不产生反向孤儿。对齐只让 drop 单调不减，不会重新超限。
+        while (drop < all.size() && all.get(drop) instanceof Message.ToolResult) {
+            drop++;
+        }
         if (drop == 0) return all;
         List<Message> kept = new ArrayList<>(all.subList(drop, all.size()));
         // 在头部补一条 summary 系统消息，告知前方已压缩
@@ -178,36 +190,6 @@ public final class SessionResumeLoader {
     }
 
     // ---------- 内部 ----------
-
-    /** 扫描消息，为每个无前置 assistant.tool_calls 的 tool_result 注入合成 assistant 骨架。 */
-    private static void injectOrphanSkeletons(List<Message> messages) {
-        int result = 0;
-        for (int i = 0; i < messages.size(); i++) {
-            if (messages.get(i) instanceof Message.ToolResult tr) {
-                if (!hasMatchingCall(messages, i, tr.toolCallId())) {
-                    // 在当前位置之前插入合成 assistant
-                    messages.add(
-                            i,
-                            new Message.Assistant(
-                                    "",
-                                    List.of(new ToolCall(tr.toolCallId(), ORPHAN_CALL_NAME, "{}"))));
-                    i++; // 跳过刚插入的
-                    result++;
-                }
-            }
-        }
-    }
-
-    private static boolean hasMatchingCall(List<Message> messages, int upTo, String callId) {
-        for (int i = 0; i < upTo; i++) {
-            if (messages.get(i) instanceof Message.Assistant a
-                    && a.toolCalls() != null
-                    && a.toolCalls().stream().anyMatch(tc -> tc.id().equals(callId))) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     private static int estimate(List<Message> msgs, TokenEstimator estimator) {
         int sum = 0;

@@ -652,12 +652,14 @@ public class AgentLoop {
         for (var t : tools.list()) {
             specs.add(new ToolSpec(t.name(), t.description(), t.inputSchema()));
         }
-        // 配对修复（repair-dangling-tool-calls）：某一轮若在「assistant(tool_calls) 已入 history、
-        // tool_result 尚未回流」之间被打断，内存历史就带着空洞；直接发出去会被上游 400
-        // （assistant 的 tool_calls 缺少对应 tool 消息）。这里对**将要发送的消息列表**补齐，
-        // 使同一进程内不必等重启也能继续对话（幂等，已配对时无改动）。
+        // 配对修复（repair-dangling-tool-calls + snip-pairing-repair）：内存历史可能带着两个方向的
+        // 污染，直接发出去都会被上游 400 ——
+        //   正向：某一轮在「assistant(tool_calls) 已入 history、tool_result 尚未回流」之间被打断；
+        //   反向：历史前缀被 snip 裁掉，留下无前置 tool_calls 的孤儿 tool 结果。
+        // 这里对**将要发送的消息列表**把两个方向都补齐，使同一进程内不必等重启也能继续对话。
+        // 只作用于本次请求的副本，不写回 history（幂等，已配对时逐元素无改动）。
         List<com.example.agent.core.Message> msgs =
-                ToolCallPairing.repair(history.all());
+                ToolCallPairing.repairOrphanResults(ToolCallPairing.repair(history.all()));
         sink.onContextSnapshot(buildSnapshot(specs));
         // add-models-dropdown-v0 + add-provider-catalog-abstract：把 volatile reasoningEffort
         // + providerId 透传到 ChatRequest.extra,让 OpenAI/Anthropic mapper 按各自规则写入
