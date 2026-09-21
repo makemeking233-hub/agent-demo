@@ -88,6 +88,28 @@ Test Files  41 passed (41)
 处置：改用 `npm install --no-audit --no-fund` 就地修复（658 个包补齐），vitest 恢复。
 **结论**：在本仓库跑 Maven 必须带 `-DskipNpm=true`（本项目门禁命令已如此）。
 
+### 4.4 合并回 main 的复验（§2.7.5.2）
+
+| 步骤 | 结果 |
+|------|------|
+| 门禁 4：与 main 同步 | `main` 已被并行 agent 推进到 `256c182`（memory-recall-wiring + snip-pairing-repair）。在分支 `git merge main` → **`docs/test-agent-demo/test-guide.md` 冲突**（双方都往 §1 登记表/§2 详情追加了 2026-09-22 批次）。解决方式：保留双方内容，批次号改为我方 2.20 / 对方 2.21，删除冲突标记。 |
+| 同步后重跑门禁 1 | `mvn verify` **BUILD SUCCESS**（agent-core + agent-web，agent-web 386 tests、jacoco 全达标）；vitest 328 passed + 1 skipped；tsc 3 ≤ 7 |
+| 合并执行 | `main` 是分支的祖先 → **fast-forward**，`main` 由 `256c182` 前进到 `2689461`；`git diff main feat/add-message-actions-p2` 为空、两者 `rev-parse` 相同，证明 **main 的树与刚验过的提交逐字节相同** |
+| main 上复验（第一次） | ❌ `spring-boot-maven-plugin:repackage` 失败：`Unable to rename 'agent-web\target\agent-web.jar' to '...jar.original'`。**不是测试失败**——根因是主工作区有一个正在运行的 `java -jar agent-web\target\agent-web.jar`（PID 8052）持有该 jar；测试阶段（surefire）在打包之前已跑完 |
+| main 上复验（第二次） | 加 `-Dspring-boot.repackage.skip=true` 后 **BUILD SUCCESS**：agent-web `Tests run: 386, Failures: 0, Errors: 0`、`All coverage checks have been met`；vitest 328 passed / tsc 3 |
+| 推送与清理 | `git push origin main`（`256c182..2689461`）；worktree 与分支 `feat/add-message-actions-p2` 本地 + origin 均已删除 |
+
+**运行期注意事项（写给下一次 session）**：
+
+1. 主工作区若有 `java -jar agent-web/target/agent-web.jar` 在跑，`mvn verify` 会在 repackage 阶段
+   因文件占用而红；跑门禁前先停服务，或加 `-Dspring-boot.repackage.skip=true`（测试与 jacoco 不受影响）。
+   另按 §2.7.1，**应用运行期间不要对同一 `target/` 构建**。
+2. 本次 P2 的 UI 改动需要在**重启 web server** 后才会出现在页面上（当前跑的是合并前的旧 jar）。
+3. worktree 目录删除会因 IntelliJ IDEA 的 Tailwind 语言服务器（`oxide-helper.js`）持有
+   `node_modules/@tailwindcss/.oxide-*/tailwindcss-oxide.win32-x64-msvc.node` 而 `Access denied`；
+   `git worktree` 元数据已 prune 掉，残留的空目录（gitignored）可在 IDEA 释放该文件后再删。
+
+
 ---
 
 ## 5. 覆盖率
