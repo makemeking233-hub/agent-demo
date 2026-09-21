@@ -66,15 +66,15 @@
 
 ## 10. 前端改造（3 个 task）
 
-- [ ] 10.1 `PermissionModeSelect.tsx`：保持 4 档 dsh 命名 + 接受 sandbox-policy 默认值（`"plan"` 替代 `"ask"`）
-- [ ] 10.2 `ChatPanel.tsx`：删除 `useState<PermissionMode>("read_only")`，改从 `useSettingsStore((s) => (s.snapshot?.general?.permission as { mode?: string })?.mode ?? "plan")` 读
-- [ ] 10.3 `ToolResult.tsx`：渲染 denial marker `[sandbox: file access denied under <mode> mode]` + suggestedMode 非 null 时显示 "升级到 danger-full" 按钮（点击调 POST /api/chat/{streamId}/permission with escalate=true）
+- [x] 10.1 `PermissionModeSelect.tsx`：保持 4 档 dsh 命名 + 接受 sandbox-policy 默认值（`"plan"` 替代 `"ask"`）
+- [x] 10.2 `ChatPanel.tsx`：删除 `useState<PermissionMode>("read_only")`，改从 `useSettingsStore((s) => (s.snapshot?.general?.permission as { mode?: string })?.mode ?? "plan")` 读
+- [x] 10.3 `ToolResult.tsx`：渲染 denial marker `[sandbox: file access denied under <mode> mode]` + suggestedMode 非 null 时显示 "升级到 danger-full" 按钮（点击调 POST /api/chat/{streamId}/permission with escalate=true）
 
 ## 11. 前端 TDD 与场景覆盖
 
-- [ ] 11.1 `PermissionModeSelect.test.tsx`：4 档选项渲染 + PATCH 触发
-- [ ] 11.2 `ChatPanel.test.tsx`：从 settings 读 mode + send body 透传该值
-- [ ] 11.3 `ToolResult.test.tsx`：denial marker 渲染 + 升级按钮触发
+- [x] 11.1 `PermissionModeSelect.test.tsx`：4 档选项渲染 + PATCH 触发
+- [x] 11.2 `ChatPanel.test.tsx`：从 settings 读 mode + send body 透传该值
+- [x] 11.3 `ToolResult.test.tsx`：denial marker 渲染 + 升级按钮触发
 
 ## 12. 兼容迁移（2 个 task）
 

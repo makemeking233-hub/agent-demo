@@ -3,12 +3,25 @@
  * 配合 lib/sse-client.ts 跑流.
  */
 
-export type PermissionMode = "read_only" | "workspace_write" | "full_access";
+/**
+ * 权限模式（rewrite-permission-mode-dsh T10：统一为 dsh 4 档命名）。
+ *
+ * 后端 `PermissionMode.from()` 接受新旧两套 wire value 并自动 normalize：
+ * - 新 4 档（推荐）
+ * - 旧 3 档（read_only / workspace_write / full_access）
+ */
+export type PermissionMode = "plan" | "ask" | "danger-full" | "dontAsk";
+
+/** 旧 3 档 wire value（向后兼容；后端会自动 normalize 为 4 档） */
+export type LegacyPermissionMode = "read_only" | "workspace_write" | "full_access";
+
+/** send / permission 请求可接受的 mode 值（新旧兼容） */
+export type PermissionModeInput = PermissionMode | LegacyPermissionMode;
 
 export interface SendRequest {
   content: string;
   session_id?: string;
-  permission_mode?: PermissionMode;
+  permission_mode?: PermissionModeInput;
   /** add-models-dropdown-v0: 可选模型名（如 deepseek-reasoner）；缺省 deepseek-chat */
   model?: string;
   /** add-models-dropdown-v0: 可选思考强度（low / medium / high）；缺省由 Provider 内部 fallback */
@@ -139,14 +152,22 @@ export class ChatApi {
     return body.ok;
   }
 
-  // 实时切换权限模式（add-permission-mode-dropdown）
-  async setPermission(streamId: string, mode: PermissionMode): Promise<void> {
+  // 实时切换权限模式（add-permission-mode-dropdown + rewrite-permission-mode-dsh T10）
+  //
+  // escalate=true 时后端临时升级, turn 结束自动恢复; 响应含 effective_mode 字段。
+  async setPermission(
+    streamId: string,
+    mode: PermissionModeInput,
+    escalate: boolean = false,
+  ): Promise<{ mode: string; effective_mode: string }> {
     const r = await fetch(this.base + `/api/chat/${encodeURIComponent(streamId)}/permission`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ mode, escalate }),
     });
     if (!r.ok) throw new Error(`setPermission ${r.status}`);
+    const body = (await r.json()) as { ok: boolean; mode: string; effective_mode: string };
+    return { mode: body.mode, effective_mode: body.effective_mode };
   }
 
   async slash(streamId: string, content: string): Promise<SlashResult> {

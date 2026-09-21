@@ -1,13 +1,17 @@
 /**
- * PermissionModeSelect (add-settings-general-items M2).
+ * PermissionModeSelect (add-settings-general-items M2 + rewrite-permission-mode-dsh T10.1).
  *
- * 4 选项下拉：plan / ask / danger-full / dontAsk。
+ * 4 选项下拉：plan / ask / danger-full / dontAsk（dsh 命名）。
+ *
+ * <p>默认值 `plan`（与后端 {@code SandboxMode.DEFAULT} 一致）；
+ * 用户选择后 PATCH 到 settings.yaml 的 {@code general.permission.mode}。
  */
 
 import { useSettingsStore } from "../hooks/useSettingsStore";
+import { type PermissionMode } from "../api/chat";
 import styles from "./SettingsRows.module.css";
 
-export type PermissionMode = "plan" | "ask" | "danger-full" | "dontAsk";
+export type { PermissionMode };
 
 const OPTIONS: { value: PermissionMode; label: string }[] = [
   { value: "plan", label: "Plan（只读计划）" },
@@ -16,11 +20,14 @@ const OPTIONS: { value: PermissionMode; label: string }[] = [
   { value: "dontAsk", label: "Don't Ask（不询问）" },
 ];
 
+/** 后端 SandboxMode.DEFAULT = PLAN，前端首屏缺省与之一致 */
+export const DEFAULT_PERMISSION_MODE: PermissionMode = "plan";
+
 export function PermissionModeSelect() {
   const value =
     (useSettingsStore(
       (s) => (s.snapshot?.general?.permission as { mode?: PermissionMode } | undefined)?.mode,
-    ) ?? "ask") as PermissionMode;
+    ) ?? DEFAULT_PERMISSION_MODE) as PermissionMode;
   const patch = useSettingsStore((s) => s.patch);
 
   return (

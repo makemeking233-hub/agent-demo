@@ -5,12 +5,14 @@ import { SseEvent } from "../lib/event-types";
 import { createVoice } from "../lib/voice";
 import { createVoskStt } from "../lib/stt";
 import { useVoiceChat } from "../lib/useVoiceChat";
+import { useSettingsStore } from "../hooks/useSettingsStore";
+import { DEFAULT_PERMISSION_MODE } from "./PermissionModeSelect";
 import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
 import { PermissionCard } from "./PermissionCard";
 import { StatsBar } from "./StatsBar";
-import { ToolCallCard } from "./ToolCallCard";
+import { ToolCallCard, type SandboxDenial } from "./ToolCallCard";
 
 export type Item =
   | {
@@ -24,7 +26,7 @@ export type Item =
       // assistant 消息项可携带内联工具调用（按到达顺序与文本交错展示）
       tools?: InlineTool[];
     }
-  | { kind: "tool"; id: string; name: string; toolCallId: string; status: "running" | "ok" | "fail"; text?: string; durationMs?: number }
+  | { kind: "tool"; id: string; name: string; toolCallId: string; status: "running" | "ok" | "fail"; text?: string; durationMs?: number; denial?: SandboxDenial }
   | { kind: "perm"; id: string; toolName: string; reason: string; permissionId: string; choices: ("yes" | "no" | "always")[]; toolCallId: string };
 
 type InlineTool = {
@@ -33,6 +35,7 @@ type InlineTool = {
   status: "running" | "ok" | "fail";
   text?: string;
   durationMs?: number;
+  denial?: SandboxDenial;
 };
 
 // ---------- 会话重进恢复：localStorage 持久化 + 服务端历史回填 ----------
@@ -149,6 +152,37 @@ function openAssistantIndexForText(items: Item[]): number {
 }
 
 /**
+ * 从工具结果文本解析 sandbox denial（rewrite-permission-mode-dsh T10.3）。
+ *
+ * <p>后端 {@code PathResult.denied} 渲染为：
+ * {@code [sandbox: <kind> under <mode> mode] <message>}；
+ * 若 message 含 {@code writableRoots} 等额外信息也一并保留。
+ *
+ * @returns 解析成功返回结构化 denial；非 denial 文本返回 null
+ */
+function parseSandboxDenial(text: string | undefined): SandboxDenial | null {
+  if (!text) return null;
+  // 形如 [sandbox: write-out-of-bounds under ask mode] 路径越界（mode=ask）: ../x
+  const m = text.match(/\[sandbox:\s*([a-z-]+)\s+under\s+([a-z-]+)\s+mode\]\s*([\s\S]*)/);
+  if (!m) return null;
+  const kind = m[1];
+  const currentMode = m[2];
+  const rest = (m[3] ?? "").trim();
+  // 按 kind → suggestedMode 映射（与后端 FsDenialKind.suggestedMode 一致）
+  const suggestedMode =
+    kind === "write-out-of-bounds" ? "danger-full" : kind === "mode-rejected" ? "ask" : null;
+  const escalateHint = suggestedMode
+    ? ` Escalate: POST /api/chat/{streamId}/permission with mode=${suggestedMode}`
+    : "";
+  return {
+    kind,
+    currentMode,
+    suggestedMode,
+    marker: `[sandbox: ${kind} under ${currentMode} mode]${rest ? ` ${rest}` : ""}${escalateHint}`,
+  };
+}
+
+/**
  * 当前最新 assistant 文本项是否还能继续追加**工具**。
  *
  * <p>同一次迭代的工具调用是在 `onAssistant` 里**一次性公告**的（结果稍后才到），所以判据是
@@ -245,8 +279,16 @@ export function ChatPanel(props: {
   const [streamId, setStreamId] = useState<string | null>(null);
   // 底部统计状态栏数据（add-session-stats-bar）：首屏拉 stats API，运行时由 turn_stats 事件刷新。
   const [stats, setStats] = useState<SessionStats | null>(null);
-  // 权限模式（add-permission-mode-dropdown）：缺省 read_only；切换即调后端 setPermission；随 send 透传初始模式。
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>("read_only");
+  // 权限模式（rewrite-permission-mode-dsh T10.2）：
+  // 默认从 settings.yaml 的 general.permission.mode 读（与 Settings 面板同源）；
+  // 用户在 Composer 切换时用 sessionMode 覆盖当前会话（不写回 settings）。
+  const settingsPermissionMode = useSettingsStore(
+    (s) =>
+      (s.snapshot?.general?.permission as { mode?: PermissionMode } | undefined)?.mode ??
+      DEFAULT_PERMISSION_MODE,
+  ) as PermissionMode;
+  const [sessionPermissionMode, setSessionPermissionMode] = useState<PermissionMode | null>(null);
+  const permissionMode: PermissionMode = sessionPermissionMode ?? settingsPermissionMode;
   // add-models-dropdown-v0：model/reasoningEffort/currentModelEntry 由 props 传入（App.tsx 持有，避免双 state 不同步）
   const { model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
@@ -438,10 +480,13 @@ export function ChatPanel(props: {
       });
     } else if (ev.type === "tool_call_end") {
       const text = typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result);
+      // T10.3: 检测 sandbox denial marker（后端 PathResult.denied 渲染为 "[sandbox: ... under <mode> mode] ..."）
+      const denial = parseSandboxDenial(text);
       updateToolInLastAssistant(ev.tool_call_id, {
         status: ev.ok ? "ok" : "fail",
         text,
         durationMs: ev.duration_ms,
+        ...(denial ? { denial } : {}),
       });
     } else if (ev.type === "permission_request") {
       appendItem({ kind: "perm", id: ev.permission_id, toolName: ev.tool_name, reason: ev.reason, permissionId: ev.permission_id, choices: ev.choices, toolCallId: ev.tool_call_id });
@@ -486,11 +531,18 @@ export function ChatPanel(props: {
     if (sid) await api.abort(sid);
   }
 
-  // 切换权限模式：本地状态 + 若有活动流则立即下发后端（add-permission-mode-dropdown）
+  // 切换权限模式：session 级覆盖 + 若有活动流则立即下发后端（rewrite-permission-mode-dsh T10.2）
   function handlePermissionModeChange(mode: PermissionMode) {
-    setPermissionMode(mode);
+    setSessionPermissionMode(mode);
     const sid = streamIdRef.current;
     if (sid) api.setPermission(sid, mode).catch(() => {});
+  }
+
+  // escalate 升级（T10.3）：从 denial 的 suggested_mode 触发, turn 结束自动恢复
+  function handleEscalate(targetMode: PermissionMode) {
+    const sid = streamIdRef.current;
+    if (!sid) return;
+    api.setPermission(sid, targetMode, true).catch(() => {});
   }
 
   // 切换自由语音（add-voice-interaction）：开则开始循环（懒加载 Vosk），关则停止
@@ -528,7 +580,7 @@ export function ChatPanel(props: {
         )}
         {items.map((it) => {
           if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} thinking={it.thinking} reasoningTokens={it.reasoningTokens} />;
-          if (it.kind === "tool") return <ToolCallCard key={it.id} name={it.name} status={it.status} text={it.text} durationMs={it.durationMs} />;
+          if (it.kind === "tool") return <ToolCallCard key={it.id} name={it.name} status={it.status} text={it.text} durationMs={it.durationMs} denial={it.denial} onEscalate={(m) => handleEscalate(m as PermissionMode)} />;
           if (it.kind === "perm") return <PermissionCard key={it.id} toolName={it.toolName} reason={it.reason} choices={it.choices} onChoose={(d) => submitPermission(it.permissionId, d, it.id)} />;
           return null;
         })}
