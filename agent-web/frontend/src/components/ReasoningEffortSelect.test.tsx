@@ -63,4 +63,11 @@ describe("ReasoningEffortSelect（shadcn Popover + RadioGroup）", () => {
     const trigger = await screen.findByRole("button", { name: "思考强度" });
     expect(trigger.textContent).toBe("Medium");
   });
+
+  it.skip("trigger 通过 axe a11y 检查（jsdom 限制，见 shadcn-prototype §4）", async () => {
+    const { container } = render(
+      <ReasoningEffortSelect options={OPTIONS} value="medium" onChange={vi.fn()} />,
+    );
+    await expect(container).toHaveNoViolations();
+  });
 });
