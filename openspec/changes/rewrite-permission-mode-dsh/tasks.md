@@ -32,14 +32,14 @@
 
 ## 5. PermissionManager 拆分（3 个 task）
 
-- [ ] 5.1 拆 `PermissionManager` 为 `SandboxPolicyService` + `SensitivePathMatcher`（抽离自 PermissionPathMatcher）+ `DecisionRecorder`（会话日志 sink）
-- [ ] 5.2 `PermissionManager` 保留 wrapper：构造注入上述 3 个；`decide()` 委托给 SandboxPolicyService.defaultDecision + SensitivePathMatcher 命中升级 ask
-- [ ] 5.3 改造 `AgentLoop`：调用顺序改为 SandboxPolicyService → Tool.checkPermissions → 后者 DENY 直接拒绝
+- [x] 5.1 拆 `PermissionManager` 为 `SandboxPolicyService` + `SensitivePathMatcher`（抽离自 PermissionPathMatcher）+ `DecisionRecorder`（会话日志 sink）
+- [x] 5.2 `PermissionManager` 保留 wrapper：构造注入上述 3 个；`decide()` 委托给 SandboxPolicyService.defaultDecision + SensitivePathMatcher 命中升级 ask
+- [x] 5.3 改造 `AgentLoop`：调用顺序改为 SandboxPolicyService → Tool.checkPermissions → 后者 DENY 直接拒绝
 
 ## 6. PermissionManager TDD 迁移
 
-- [ ] 6.1 跑全量 `PermissionManagerTest`，迁移失败 case 到 `SandboxPolicyServiceTest` / `SensitivePathMatcherTest`
-- [ ] 6.2 `PermissionManagerTest`：保留 wrapper 测试，确认对外行为不变（READ/WRITE/SHELL/OTHER × READ_ONLY/WORKSPACE_WRITE/FULL_ACCESS × workspace 内/外 × sensitive）
+- [x] 6.1 跑全量 `PermissionManagerTest`，迁移失败 case 到 `SandboxPolicyServiceTest` / `SensitivePathMatcherTest`
+- [x] 6.2 `PermissionManagerTest`：保留 wrapper 测试，确认对外行为不变（READ/WRITE/SHELL/OTHER × READ_ONLY/WORKSPACE_WRITE/FULL_ACCESS × workspace 内/外 × sensitive）
 
 ## 7. API 改造（4 个 task）
 

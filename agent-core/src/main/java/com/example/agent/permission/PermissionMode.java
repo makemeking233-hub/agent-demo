@@ -81,4 +81,19 @@ public enum PermissionMode {
                     };
         };
     }
+
+    /**
+     * 映射到新 SandboxMode 4 档（rewrite-permission-mode-dsh T5.2 兼容桥）。
+     *
+     * <p>READ_ONLY → PLAN; WORKSPACE_WRITE → ASK; FULL_ACCESS → DANGER_FULL.
+     *
+     * @return 对应 SandboxMode
+     */
+    public SandboxMode toSandboxMode() {
+        return switch (this) {
+            case READ_ONLY -> SandboxMode.PLAN;
+            case WORKSPACE_WRITE -> SandboxMode.ASK;
+            case FULL_ACCESS -> SandboxMode.DANGER_FULL;
+        };
+    }
 }

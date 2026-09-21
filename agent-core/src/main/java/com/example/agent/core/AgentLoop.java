@@ -857,13 +857,20 @@ public class AgentLoop {
     /**
      * 合并全局策略（敏感路径 + 分类默认）与工具级 {@code checkPermissions}（含 {@code ..} 越界 deny）。
      *
-     * <p>裁决顺序：
+     * <p>裁决顺序（rewrite-permission-mode-dsh T5.3 整合 SandboxPolicyService）：
      *
      * <ol>
-     *   <li>{@code DENY} 终态：任一为 DENY → DENY（含工具级 {@code ..} 越界兜底，FULL_ACCESS 也不绕过）
-     *   <li>{@code FULL_ACCESS} 短路：当前模式为 FULL_ACCESS 且全局 allow → ALLOW（工具默认 ASK 不再弹窗）
-     *   <li>任一 ASK → ASK（READ_ONLY / WORKSPACE_WRITE 维持原行为）
-     *   <li>其余 → ALLOW
+     *   <li><b>SandboxPolicyService</b>（via {@link PermissionManager#decide}）：
+     *     {@link SandboxPolicyService#defaultDecision} 按 mode × ToolCategory 决策
+     *     + {@link SensitivePathMatcher} 命中敏感路径升级 ask
+     *   <li><b>Tool.checkPermissions</b>（{@code local}）：工具级 deny 终态兜底
+     *   <li>合并：
+     *     <ul>
+     *       <li>任一 DENY → DENY（FULL_ACCESS 也不绕过工具级 deny）
+     *       <li>FULL_ACCESS 短路：global allow + FULL_ACCESS → ALLOW（不弹窗）
+     *       <li>任一 ASK → ASK
+     *       <li>其余 → ALLOW
+     *     </ul>
      * </ol>
      *
      * <p>fix-full-access-bypass：原逻辑把工具默认 ASK 与全局策略用 {@code OR} 合并，导致 FULL_ACCESS 仍弹窗。

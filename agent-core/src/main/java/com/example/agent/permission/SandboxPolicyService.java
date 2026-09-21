@@ -1,6 +1,7 @@
 package com.example.agent.permission;
 
 import com.example.agent.tools.Tool;
+import com.example.agent.tools.ToolCategory;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -166,5 +167,64 @@ public class SandboxPolicyService {
     @Override
     public int hashCode() {
         return Objects.hash(mode.get(), workspaceRoot);
+    }
+
+    /**
+     * 默认裁决（rewrite-permission-mode-dsh T5.1 引入）。
+     *
+     * <p>按 spec §"mode × capability 默认裁决表"决策；PermissionManager 用此方法做 mode × ToolCategory 决策。
+     *
+     * @param mode           当前 sandbox mode
+     * @param category       工具语义分类（READ / WRITE / SHELL / OTHER）
+     * @param target         目标路径（用于 ASK 下 workspace 内/外判定；可空表示无路径语义）
+     * @param workspaceRoot  工作目录（用于 withinWorkspace 计算；可空时按 not-within 处理）
+     * @return 默认裁决（allow / ask；deny 由 Tool.checkPermissions 单独兜底）
+     */
+    public PermissionDecision defaultDecision(SandboxMode mode, ToolCategory category,
+                                              Path target, Path workspaceRoot) {
+        if (mode == null) {
+            throw new IllegalArgumentException("mode 不可空");
+        }
+        if (category == null) {
+            throw new IllegalArgumentException("category 不可空");
+        }
+        // DANGER_FULL: 任何工具类别一律 allow（含 WRITE / SHELL）
+        if (mode == SandboxMode.DANGER_FULL) {
+            return PermissionDecision.allow();
+        }
+        // DONT_ASK: 自动 allow 无 UI 弹窗 (包含 WRITE/SHELL; sandbox policy 已限制 writableRoots)
+        if (mode == SandboxMode.DONT_ASK) {
+            return PermissionDecision.allow();
+        }
+        // PLAN / ASK: READ 类别一律 allow
+        if (category == ToolCategory.READ) {
+            return PermissionDecision.allow();
+        }
+        // WRITE / SHELL / OTHER
+        if (mode == SandboxMode.PLAN) {
+            // PLAN 模式: workspace 内也 ask (plan 模式禁止写入; v0.1 PermissionMode.READ_ONLY 行为)
+            return PermissionDecision.ask();
+        }
+        // ASK 模式: WRITE 类别看 workspace 内/外
+        if (category == ToolCategory.WRITE) {
+            boolean within = isWithinWorkspace(target, workspaceRoot);
+            return within ? PermissionDecision.allow() : PermissionDecision.ask();
+        }
+        // SHELL / OTHER: ASK 模式下 ask
+        return PermissionDecision.ask();
+    }
+
+    /**
+     * 目标路径是否在 workspace 之内（用于 ASK 模式下 WRITE 类别裁决）。
+     *
+     * @param target        目标路径（可空 → false）
+     * @param workspaceRoot 工作目录（可空 → false）
+     * @return true 表示在 workspace 内
+     */
+    private static boolean isWithinWorkspace(Path target, Path workspaceRoot) {
+        if (target == null || workspaceRoot == null) return false;
+        Path absTarget = target.toAbsolutePath().normalize();
+        Path absRoot = workspaceRoot.toAbsolutePath().normalize();
+        return absTarget.startsWith(absRoot);
     }
 }
