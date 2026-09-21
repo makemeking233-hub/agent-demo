@@ -10,7 +10,6 @@
 
 import { useEffect, useRef } from "react";
 import { AppearanceCards } from "./AppearanceCards";
-import styles from "./ThemePopover.module.css";
 
 interface ThemePopoverProps {
   onClose: () => void;
@@ -43,7 +42,13 @@ export function ThemePopover({ onClose }: ThemePopoverProps) {
   }, [onClose]);
 
   return (
-    <div ref={popoverRef} className={styles.popover} role="dialog" aria-label="外观选择" data-testid="theme-popover">
+    <div
+      ref={popoverRef}
+      className="absolute top-[calc(100%+8px)] right-0 z-[1000] min-w-[260px] rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-[0_8px_24px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)]"
+      role="dialog"
+      aria-label="外观选择"
+      data-testid="theme-popover"
+    >
       <AppearanceCards onAfterChange={onClose} />
     </div>
   );

@@ -10,7 +10,6 @@ import { useEffect, useRef, useState } from "react";
 import { useSettingsStore } from "../hooks/useSettingsStore";
 import { ThemePopover } from "./ThemePopover";
 import type { AppearancePreference } from "./AppearanceCards";
-import styles from "./ThemePopover.module.css";
 
 function iconFor(pref: AppearancePreference | undefined): typeof Sun {
   if (pref === "dark") return Moon;
@@ -47,11 +46,11 @@ export function ThemeToggle() {
   }, [open]);
 
   return (
-    <div className={styles.wrapper}>
+    <div className="relative inline-flex">
       <button
         ref={triggerRef}
         type="button"
-        className={styles.trigger}
+        className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border-none bg-transparent text-inherit transition-colors hover:bg-foreground/[0.06] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         onClick={() => setOpen(!open)}
         aria-label="切换主题"
         aria-expanded={open}

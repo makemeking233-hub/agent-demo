@@ -32,6 +32,11 @@
   --color-accent-foreground: var(--dsw-static-text-inverse);
   --color-destructive: var(--dsw-static-danger-default);
   --color-destructive-foreground: var(--dsw-static-text-inverse);
+  /* 语义色（项目自有的 warning / success，shadcn 默认没有） */
+  --color-warning: var(--dsw-static-warning-default);
+  --color-warning-foreground: var(--dsw-static-text-inverse);
+  --color-success: var(--dsw-static-success-default);
+  --color-success-foreground: var(--dsw-static-text-inverse);
   --color-border: var(--dsw-alias-border);
   --color-input: var(--dsw-alias-border);
   --color-ring: var(--dsw-alias-accent);
