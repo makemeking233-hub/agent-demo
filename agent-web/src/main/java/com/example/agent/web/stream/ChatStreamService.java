@@ -296,17 +296,27 @@ public class ChatStreamService {
     }
 
     /**
-     * 实时切换某流的权限模式（add-permission-mode-dropdown）。
+     * 实时切换某流的权限模式（add-permission-mode-dropdown + rewrite-permission-mode-dsh T7.1）。
      *
      * @param streamId 流 id
      * @param mode 新模式（不可空）
+     * @param escalate 是否 escalate（{@code true} 表示临时升级，turn 结束自动恢复）
      * @return 是否找到该流并已切换
      */
-    public boolean setPermission(String streamId, PermissionMode mode) {
+    public boolean setPermission(String streamId, PermissionMode mode, boolean escalate) {
         ActiveStream meta = actives.get(streamId);
         if (meta == null || meta.loop() == null) return false;
-        meta.loop().setPermissionMode(mode);
+        if (escalate) {
+            meta.loop().escalatePermission(streamId, mode);
+        } else {
+            meta.loop().setPermissionMode(mode);
+        }
         return true;
+    }
+
+    /** v0.1 兼容：不带 escalate 参数 */
+    public boolean setPermission(String streamId, PermissionMode mode) {
+        return setPermission(streamId, mode, false);
     }
 
     public ActiveStream get(String streamId) {

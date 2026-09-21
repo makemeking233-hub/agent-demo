@@ -15,7 +15,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+
+import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.UUID;
 
@@ -25,14 +28,16 @@ import java.util.UUID;
 public class ChatController {
     private final ChatStreamService streams;
     private final Environment env;
+    private final SessionOwnerRegistry ownerRegistry;
 
-    public ChatController(ChatStreamService streams, Environment env) {
+    public ChatController(ChatStreamService streams, Environment env, SessionOwnerRegistry ownerRegistry) {
         this.streams = streams;
         this.env = env;
+        this.ownerRegistry = ownerRegistry;
     }
 
     @PostMapping("/send")
-    public Mono<ResponseEntity<?>> send(@RequestBody SendRequest req) {
+    public Mono<ResponseEntity<?>> send(@RequestBody SendRequest req, ServerWebExchange exchange) {
         if (req.content() == null || req.content().isBlank()) {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "content_empty")));
         }
@@ -44,7 +49,8 @@ public class ChatController {
         String sessionId = req.sessionId() != null ? req.sessionId() : UUID.randomUUID().toString();
         PermissionMode mode;
         try {
-            // 缺省 read_only；非法值 → 400（不创建流）。
+            // 缺省 read_only; 非法值 → 400（不创建流）。
+            // PermissionMode.from 接受新 4 档 dsh (plan/ask/danger-full/dontAsk) + 旧 3 档 (read_only/workspace_write/full_access) + 自动 normalize
             mode = req.permissionMode() != null ? PermissionMode.from(req.permissionMode()) : PermissionMode.DEFAULT;
         } catch (IllegalArgumentException e) {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "invalid_mode")));
@@ -57,6 +63,8 @@ public class ChatController {
         // add-models-dropdown-v0：透传 reasoningEffort（null/blank = 不切换，沿用 Provider 默认）
         ChatStreamService.ActiveStream meta =
                 streams.create(sessionId, model, mode, req.workspace(), req.reasoningEffort());
+        // Q2: 注册 stream owner IP (permission 切换时校验)
+        ownerRegistry.register(meta.streamId(), clientIp(exchange));
         streams.start(meta.streamId(), req.content());
         return Mono.just(ResponseEntity.ok(new SendResponse(meta.streamId(), sessionId, model)));
     }
@@ -104,23 +112,47 @@ public class ChatController {
     }
 
     /**
-     * 实时切换权限模式 (spec §Requirement: 权限模式实时切换 → `{"mode":"..."}`)。
+     * 实时切换权限模式（rewrite-permission-mode-dsh T7.1 扩展 escalate + 新 4 档）。
      *
      * @param streamId 流 id
-     * @param req 载荷 (mode: read_only / workspace_write / full_access)
+     * @param req 载荷 (mode: 4 档 dsh 或 3 档旧 wire value; escalate: 是否临时升级)
      */
     @PostMapping("/{streamId}/permission")
     public Mono<ResponseEntity<Map<String, Object>>> permission(
-            @PathVariable String streamId, @RequestBody PermissionModeRequest req) {
+            @PathVariable String streamId, @RequestBody PermissionModeRequest req,
+            ServerWebExchange exchange) {
+        // Q2: 同 IP 校验 (stream owner)
+        if (!ownerRegistry.verify(streamId, clientIp(exchange))) {
+            return Mono.just(ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "ip_mismatch")));
+        }
         PermissionMode mode;
         try {
+            // PermissionMode.from 接受新旧两套 wire value + 自动 normalize (T7.1)
             mode = PermissionMode.from(req.mode());
         } catch (IllegalArgumentException e) {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "invalid_mode")));
         }
-        if (!streams.setPermission(streamId, mode)) {
+        boolean escalate = Boolean.TRUE.equals(req.escalate());
+        if (!streams.setPermission(streamId, mode, escalate)) {
             return Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "stream_not_found")));
         }
-        return Mono.just(ResponseEntity.ok(Map.of("ok", true, "mode", mode.wireValue())));
+        return Mono.just(ResponseEntity.ok(Map.of(
+                "ok", true,
+                "mode", mode.wireValue(),
+                "effective_mode", mode.toSandboxMode().wireValue())));
+    }
+
+    /** 提取客户端 IP（X-Forwarded-For 优先，否则用 remote address）。 */
+    private static String clientIp(ServerWebExchange exchange) {
+        String xff = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            return (comma >= 0 ? xff.substring(0, comma) : xff).trim();
+        }
+        InetSocketAddress remote = exchange.getRequest().getRemoteAddress();
+        return remote != null && remote.getAddress() != null
+                ? remote.getAddress().getHostAddress()
+                : "unknown";
     }
 }

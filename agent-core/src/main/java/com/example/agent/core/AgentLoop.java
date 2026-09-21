@@ -353,6 +353,41 @@ public class AgentLoop {
         this.toolContext.permissions().setMode(this.mode);
     }
 
+    /**
+     * escalate 临时升级权限模式（rewrite-permission-mode-dsh T7.1；spec §"escalate 同回合升级"）。
+     *
+     * <p>由 ChatController 在拒绝响应 suggestedMode 时调用；turn 结束时调
+     * {@link #restoreEscalatedPermission(String)} 恢复。
+     *
+     * @param streamId   流 id（不可空）
+     * @param targetMode 升级目标（{@code null} 视为 {@link PermissionMode#DEFAULT}）
+     */
+    public void escalatePermission(String streamId, PermissionMode targetMode) {
+        if (streamId == null || streamId.isBlank()) {
+            throw new IllegalArgumentException("streamId 不可空");
+        }
+        PermissionMode effective = targetMode != null ? targetMode : PermissionMode.DEFAULT;
+        this.mode = effective;
+        this.toolContext.permissions().setMode(effective);
+        // 同步到 SandboxPolicyService escalate 表 (turn end 由 restoreEscalatedPermission 恢复)
+        com.example.agent.permission.SandboxPolicyService svc =
+                this.toolContext.permissions().sandboxPolicy();
+        svc.escalate(streamId, effective.toSandboxMode());
+    }
+
+    /**
+     * turn 结束时恢复 escalate 前的权限模式。
+     *
+     * @param streamId 流 id
+     * @return true 表示有 escalate 记录并恢复；false 表示无
+     */
+    public boolean restoreEscalatedPermission(String streamId) {
+        if (streamId == null) return false;
+        com.example.agent.permission.SandboxPolicyService svc =
+                this.toolContext.permissions().sandboxPolicy();
+        return svc.restoreOnTurnEnd(streamId);
+    }
+
     /** 当前权限模式（供 UI / 测试读取）。 */
     public PermissionMode permissionMode() {
         return mode;

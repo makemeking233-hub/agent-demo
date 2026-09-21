@@ -43,10 +43,10 @@
 
 ## 7. API 改造（4 个 task）
 
-- [ ] 7.1 改造 `ChatController`：`POST /api/chat/{streamId}/permission` 支持 `escalate: bool` 字段 + 返回 `effective_mode`
-- [ ] 7.2 改造 `ChatController`：`POST /api/chat/send` 的 `permission_mode` 字段接受新 wire value + 旧值自动 normalize
-- [ ] 7.3 新增 `PermissionDenialResponse` DTO：`{ kind, currentMode, suggestedMode, marker }`
-- [ ] 7.4 新增 `SessionOwnerRegistry`（Q2 决策）：`session_id -> owner_ip` 映射；`send` 时注册、`POST /api/chat/{streamId}/permission` 时校验同 IP；不匹配返回 403
+- [x] 7.1 改造 `ChatController`：`POST /api/chat/{streamId}/permission` 支持 `escalate: bool` 字段 + 返回 `effective_mode`
+- [x] 7.2 改造 `ChatController`：`POST /api/chat/send` 的 `permission_mode` 字段接受新 wire value + 旧值自动 normalize
+- [x] 7.3 新增 `PermissionDenialResponse` DTO：`{ kind, currentMode, suggestedMode, marker }`
+- [x] 7.4 新增 `SessionOwnerRegistry`（Q2 决策）：`session_id -> owner_ip` 映射；`send` 时注册、`POST /api/chat/{streamId}/permission` 时校验同 IP；不匹配返回 403
 
 ## 8. SSE 事件与持久化（4 个 task）
 
@@ -57,11 +57,11 @@
 
 ## 9. API TDD 与场景覆盖
 
-- [ ] 9.1 `ChatControllerTest`：escalate=true 临时升级 + turn 结束恢复 + effective_mode 字段
-- [ ] 9.2 `ChatControllerTest`：permission_mode 新值（plan/ask/danger-full/dontAsk）通过 + 旧值（read_only/workspace_write/full_access）normalize
+- [x] 9.1 `ChatControllerTest`：escalate=true 临时升级 + turn 结束恢复 + effective_mode 字段
+- [x] 9.2 `ChatControllerTest`：permission_mode 新值（plan/ask/danger-full/dontAsk）通过 + 旧值（read_only/workspace_write/full_access）normalize
 - [ ] 9.3 `ChatStreamServiceTest`：SSE sandbox/mode 事件广播在 mode 变化时触发
 - [ ] 9.4 `SessionLoggerTest`：sandbox/mode 事件落盘字段完整
-- [ ] 9.5 `SessionOwnerRegistryTest`：同 IP + owner 校验通过；异 IP 返回 403
+- [x] 9.5 `SessionOwnerRegistryTest`：同 IP + owner 校验通过；异 IP 返回 403
 - [ ] 9.6 `SandboxPolicyReplayServiceTest`：session.jsonl 含 escalate 时启动重放 to_mode；含 turn_end_restore 时不重放
 
 ## 10. 前端改造（3 个 task）

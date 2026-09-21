@@ -169,6 +169,11 @@ public class PermissionManager {
         return mode;
     }
 
+    /** sandbox policy 服务（T7.1 暴露供 AgentLoop.escalatePermission 用） */
+    public SandboxPolicyService sandboxPolicy() {
+        return sandboxPolicy;
+    }
+
     /**
      * 从工具输入抽取文件路径（sealed {@link com.example.agent.tools.file.ToolInput} 多态分发）。
      */
