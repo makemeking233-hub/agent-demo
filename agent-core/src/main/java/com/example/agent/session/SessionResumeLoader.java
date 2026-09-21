@@ -154,6 +154,12 @@ public final class SessionResumeLoader {
      * snip 裁剪：若消息列表 token 总量超过 {@code maxTokens}，把最早轮（从头部）坍缩为
      * summary system 消息，直到剩余不超过上限。坍缩会丢弃旧 detail（只保留一条提示 + 最新消息）。
      *
+     * <p><b>裁剪点按配对组对齐</b>（snip-pairing-repair）：配对约束的作用域是
+     * {@code assistant(tool_calls)} 加上紧随其后的连续 {@code tool_result} 这一整块。逐条丢弃时裁剪点
+     * 可能落在这块内部，于是 assistant 被丢掉、它的结果被保留 → 一条无前置 {@code tool_calls} 的
+     * tool 消息 → 上游 400（{@code Messages with role 'tool' must be a response to a preceding message
+     * with 'tool_calls'}），且该会话此后每轮重放都 400。因此丢弃的最小单位必须是整块。
+     *
      * @param messages 已 restored 的消息列表
      * @param estimator token 估算器
      * @param maxTokens token 上限
@@ -168,6 +174,12 @@ public final class SessionResumeLoader {
         // 从头部逐个丢弃，直到剩余 ≤ 上限或只剩一条。
         int drop = 0;
         while (drop < all.size() && estimate(all.subList(drop, all.size()), estimator) > maxTokens) {
+            drop++;
+        }
+        // 组对齐：若保留列表会以 tool 结果开头，说明裁剪点落在 assistant(tool_calls) 与其结果之间
+        // ——把这一组剩下的结果一并丢掉。丢弃的始终是前缀，故正向不变式不受影响；此处只保证
+        // 保留列表的起点是一个「组起点」，从而不产生反向孤儿。对齐只让 drop 单调不减，不会重新超限。
+        while (drop < all.size() && all.get(drop) instanceof Message.ToolResult) {
             drop++;
         }
         if (drop == 0) return all;

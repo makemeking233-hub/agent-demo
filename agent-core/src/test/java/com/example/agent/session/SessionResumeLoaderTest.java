@@ -1,6 +1,7 @@
 package com.example.agent.session;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.agent.core.Message;
@@ -189,6 +190,112 @@ class SessionResumeLoaderTest {
         SessionResumeLoader.ResumeResult result = SessionResumeLoader.loadById(sessionsDir, "nope");
         assertTrue(result.messages().isEmpty());
         assertEquals(0, result.promptTokens());
+    }
+
+    // ---------- snip 裁剪的配对组对齐（snip-pairing-repair）----------
+
+    /** 按与 {@code snip} 内部一致的口径估算 token（仅累计 content）。 */
+    private static int tokens(List<Message> msgs, TokenEstimator est) {
+        int sum = 0;
+        for (Message m : msgs) sum += est.estimate(m.content());
+        return sum;
+    }
+
+    /** 是否存在无前置 {@code assistant.tool_calls} 的 tool_result（即反向孤儿）。 */
+    private static boolean hasOrphanToolResult(List<Message> msgs) {
+        java.util.Set<String> declared = new java.util.HashSet<>();
+        for (Message m : msgs) {
+            if (m instanceof Message.Assistant a && a.toolCalls() != null) {
+                for (ToolCall tc : a.toolCalls()) declared.add(tc.id());
+            } else if (m instanceof Message.ToolResult tr && !declared.contains(tr.toolCallId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 构造「裁剪点恰好落在配对组中间」的形状（复刻会话 2026-09-18T13-34-27-b1569b39）。
+     *
+     * <p>下标 0 = 长 user，1 = assistant(tool_calls=[c1,c2])，2/3 = 两条 tool_result，4 = 尾部 user。
+     * assistant 内容刻意非空，使 token 上限把裁剪点推到下标 2（组中间）而不是下标 1。
+     *
+     * @param est token 估算器（未使用，仅保持签名自解释）
+     * @return 长度为 5 的消息列表
+     */
+    private static List<Message> groupSplitFixture(TokenEstimator est) {
+        return List.of(
+                new Message.User("历史很长的一轮 " + "x".repeat(800)),
+                new Message.Assistant(
+                        "我先读这两个文件",
+                        List.of(
+                                new ToolCall("c1", "ReadFile", "{}"),
+                                new ToolCall("c2", "ReadFile", "{}"))),
+                new Message.ToolResult("c1", "y".repeat(400), false),
+                new Message.ToolResult("c2", "z".repeat(400), false),
+                new Message.User("最后一句"));
+    }
+
+    @Test
+    void snipDoesNotSplitToolCallGroup() {
+        TokenEstimator est = new TokenEstimator();
+        List<Message> all = groupSplitFixture(est);
+        // 上限 = 从下标 2 起的总量 → 裁剪点正好落在 tool_result(c1) 上（配对组中间）
+        int maxTokens = tokens(all.subList(2, all.size()), est);
+
+        List<Message> snipped = SessionResumeLoader.snip(all, est, maxTokens);
+
+        assertTrue(snipped.get(0) instanceof Message.System, "裁剪后头部应为压缩提示");
+        assertFalse(
+                hasOrphanToolResult(snipped),
+                "裁剪不得制造无前置 tool_calls 的 tool_result（否则发出去必被上游 400）");
+        assertFalse(
+                snipped.stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult tr
+                                                && (tr.toolCallId().equals("c1")
+                                                        || tr.toolCallId().equals("c2"))),
+                "配对组必须整组丢弃：c1/c2 的结果不应残留");
+    }
+
+    @Test
+    void snipStaysWithinLimitAfterGroupAlignment() {
+        TokenEstimator est = new TokenEstimator();
+        List<Message> all = groupSplitFixture(est);
+        int maxTokens = tokens(all.subList(2, all.size()), est);
+
+        List<Message> snipped = SessionResumeLoader.snip(all, est, maxTokens);
+        // 对齐只让裁剪点后移（保留量只减不增），不得重新越界；压缩提示自身不计入
+        List<Message> body = snipped.subList(1, snipped.size());
+        assertTrue(
+                tokens(body, est) <= maxTokens,
+                "组对齐后的保留量应仍在上限内，实际 " + tokens(body, est) + " > " + maxTokens);
+    }
+
+    @Test
+    void snipLeavesUnderLimitUntouched() {
+        TokenEstimator est = new TokenEstimator();
+        List<Message> all =
+                List.of(
+                        new Message.User("a"),
+                        new Message.Assistant("b", List.of()),
+                        new Message.User("c"));
+
+        List<Message> out = SessionResumeLoader.snip(all, est, 100_000);
+
+        assertEquals(all, out, "未超限时应原样返回，不插入压缩提示");
+    }
+
+    @Test
+    void snipSummaryStartsWithResumedMarker() {
+        TokenEstimator est = new TokenEstimator();
+        List<Message> out =
+                SessionResumeLoader.snip(List.of(new Message.User("x".repeat(5000))), est, 1);
+
+        assertTrue(
+                out.get(0) instanceof Message.System s && s.content().startsWith("[RESUMED]"),
+                "裁剪后首条应为 [RESUMED] 开头的 system 消息");
     }
 }
 
