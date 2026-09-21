@@ -155,7 +155,7 @@ describe("Sidebar 会话管理", () => {
     expect(screen.queryByTestId("workspace-add-menu")).toBeNull();
   });
 
-  it("端到端：点 + → menu → Add workspace → picker modal → 输入路径 → 自动 basename → 提交 → 调 onCreateWorkspace", async () => {
+  it("端到端：点 + → menu → Add workspace → picker modal → 输入路径 → 提交 → onCreateWorkspace(path)（align-dsh-workspace v2 single-action）", async () => {
     const p = renderSidebar();
     // 1. 点 + 弹 menu
     fireEvent.click(screen.getByTestId("workspace-add-button"));
@@ -163,23 +163,17 @@ describe("Sidebar 会话管理", () => {
     fireEvent.click(screen.getByTestId("workspace-add-new"));
     const dialog = await screen.findByRole("dialog", { name: "选择工作区目录" });
 
-    // 3. 输入路径 → name 自动填 basename
+    // 3. 输入路径（v2: 只有 path，没有 name input）
     fireEvent.change(within(dialog).getByTestId("wp-path-input"), {
       target: { value: "/home/user/projects/agent-demo" },
     });
-    expect(within(dialog).getByTestId("wp-name-input")).toHaveValue("agent-demo");
+    expect(within(dialog).queryByTestId("wp-name-input")).toBeNull();
 
-    // 4. 改成自定义 name
-    fireEvent.change(within(dialog).getByTestId("wp-name-input"), {
-      target: { value: "ws-from-picker" },
-    });
-
-    // 5. 点击 "选择此目录" 调 onCreateWorkspace
+    // 4. 点击 "选择此目录" 调 onCreateWorkspace（v2: 只传 path）
     fireEvent.click(within(dialog).getByTestId("wp-submit"));
 
     await waitFor(() =>
       expect(p.onCreateWorkspace).toHaveBeenCalledWith(
-        "ws-from-picker",
         "/home/user/projects/agent-demo",
       ),
     );
@@ -250,5 +244,32 @@ describe("Sidebar 会话管理", () => {
     expect(screen.getByText("other-ws")).toBeInTheDocument();
     // 普通视图不应出现分档标题
     expect(screen.queryByText("上周")).toBeNull();
+  });
+
+  // ===== align-dsh-workspace v2: missing_dir 渲染 =====
+
+  it("missing_dir workspace 标红 + data-testid", () => {
+    renderSidebar({
+      workspaces: [
+        { name: "agent-demo", dir: "/x", sessionCount: 0, status: "ok" },
+        { name: "lost", dir: "/old/path", sessionCount: 3, status: "missing_dir" },
+      ],
+    });
+
+    const lostEl = screen.getByTestId("workspace-item-lost");
+    expect(lostEl.className).toMatch(/workspaceMissing/);
+    // title 显示「目录已移动」
+    expect(lostEl.title).toContain("目录已移动");
+  });
+
+  it("ok workspace 不加 missing className", () => {
+    renderSidebar({
+      workspaces: [
+        { name: "agent-demo", dir: "/x", sessionCount: 0, status: "ok" },
+      ],
+    });
+
+    const el = screen.getByTestId("workspace-item-agent-demo");
+    expect(el.className).not.toMatch(/workspaceMissing/);
   });
 });

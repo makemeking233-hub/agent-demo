@@ -172,10 +172,10 @@ export function App() {
     refresh();
   }
 
-  // 新建工作区（名称 + 目录）
-  async function handleCreateWorkspace(name: string, dir: string) {
-    await api.createWorkspace(name, dir);
-    setActiveWorkspace(name);
+  // 新建工作区（align-dsh-workspace v2: 只传 path，name + title 后端派生）
+  async function handleCreateWorkspace(dir: string) {
+    const ws = await api.createWorkspace(dir);
+    setActiveWorkspace(ws.name);
     refresh();
   }
 
