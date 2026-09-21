@@ -64,18 +64,21 @@ describe("MessageActionRow (P1 copy)", () => {
 
   it("renders extraActions children between copy and clock", () => {
     render(
-      <MessageActionRow text="x" clock={<span data-testid="clk">16:23</span>}>
+      <MessageActionRow
+        text="x"
+        meta={{ uuid: "u1", duration_ms: 15_000, ttft_ms: 1200, tok_per_sec: 34, timestamp: Date.now() }}
+      >
         <button type="button" data-testid="up">👍</button>
       </MessageActionRow>,
     );
     expect(screen.getByTestId("up")).toBeInTheDocument();
-    expect(screen.getByTestId("clk")).toBeInTheDocument();
+    expect(screen.getByTestId("msg-clock")).toBeInTheDocument();
     // 顺序：copy → children → clock
     const row = screen.getByTestId("message-action-row");
     const ids = Array.from(row.querySelectorAll("[data-testid]")).map((el) =>
       el.getAttribute("data-testid"),
     );
-    expect(ids).toEqual(["msg-copy", "up", "clk"]);
+    expect(ids).toEqual(["msg-copy", "up", "msg-clock"]);
   });
 
   it("falls back to execCommand when navigator.clipboard throws", async () => {
@@ -95,5 +98,51 @@ describe("MessageActionRow (P1 copy)", () => {
     };
     const ok = await writeClipboard("x");
     expect(ok).toBe(false);
+  });
+});
+
+describe("MessageActionRow (P2 clock)", () => {
+  afterEach(() => cleanup());
+
+  const ts = new Date(2026, 8, 14, 16, 23, 0).getTime();
+
+  it("renders full clock when all fields present", () => {
+    render(
+      <MessageActionRow
+        text="x"
+        meta={{ uuid: "u1", duration_ms: 15_000, ttft_ms: 1200, tok_per_sec: 34, timestamp: ts }}
+      />,
+    );
+    expect(screen.getByTestId("msg-clock").textContent).toBe(
+      "16:23 · Ran for 15s · TTFT 1.2s · 34 tok/s",
+    );
+  });
+
+  it("skips TTFT segment when ttft_ms is null", () => {
+    render(
+      <MessageActionRow
+        text="x"
+        meta={{ duration_ms: 15_000, ttft_ms: null, tok_per_sec: 34, timestamp: ts }}
+      />,
+    );
+    expect(screen.getByTestId("msg-clock").textContent).toBe("16:23 · Ran for 15s · 34 tok/s");
+  });
+
+  it("skips tok/s segment when tok_per_sec is null", () => {
+    render(
+      <MessageActionRow
+        text="x"
+        meta={{ duration_ms: 2000, ttft_ms: 800, tok_per_sec: null, timestamp: ts }}
+      />,
+    );
+    expect(screen.getByTestId("msg-clock").textContent).toBe("16:23 · Ran for 2.0s · TTFT 800ms");
+  });
+
+  it("renders no clock element when meta is absent", () => {
+    const first = render(<MessageActionRow text="x" />);
+    expect(screen.queryByTestId("msg-clock")).toBeNull();
+    first.unmount();
+    render(<MessageActionRow text="x" meta={null} />);
+    expect(screen.queryByTestId("msg-clock")).toBeNull();
   });
 });
