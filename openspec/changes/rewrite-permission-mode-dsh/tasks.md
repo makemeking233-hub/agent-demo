@@ -50,19 +50,19 @@
 
 ## 8. SSE 事件与持久化（4 个 task）
 
-- [ ] 8.1 在 `ChatStreamService` 新增 SSE `sandbox/mode` 事件广播：`{ stream_id, from_mode, to_mode, reason, ts }`，reason 取值 `initial` / `user_set` / `escalate` / `turn_end_restore`
-- [ ] 8.2 在 `SessionLogger` 新增 `sandbox/mode` 事件持久化（追加到 session.jsonl）
-- [ ] 8.3 AgentLoop turn 结束时调 `SandboxPolicyService.restoreOnTurnEnd(streamId)` + 广播 SSE 事件
-- [ ] 8.4 新增 `SandboxPolicyReplayService`（Q4 决策）：启动钩子扫未结束 session.jsonl，重放最后一个 escalate；恢复 to_mode
+- [x] 8.1 在 `ChatStreamService` 新增 SSE `sandbox/mode` 事件广播：`{ stream_id, from_mode, to_mode, reason, ts }`，reason 取值 `initial` / `user_set` / `escalate` / `turn_end_restore`
+- [x] 8.2 在 `SessionLogger` 新增 `sandbox/mode` 事件持久化（追加到 session.jsonl）
+- [x] 8.3 AgentLoop turn 结束时调 `SandboxPolicyService.restoreOnTurnEnd(streamId)` + 广播 SSE 事件
+- [x] 8.4 新增 `SandboxPolicyReplayService`（Q4 决策）：启动钩子扫未结束 session.jsonl，重放最后一个 escalate；恢复 to_mode
 
 ## 9. API TDD 与场景覆盖
 
 - [x] 9.1 `ChatControllerTest`：escalate=true 临时升级 + turn 结束恢复 + effective_mode 字段
 - [x] 9.2 `ChatControllerTest`：permission_mode 新值（plan/ask/danger-full/dontAsk）通过 + 旧值（read_only/workspace_write/full_access）normalize
-- [ ] 9.3 `ChatStreamServiceTest`：SSE sandbox/mode 事件广播在 mode 变化时触发
-- [ ] 9.4 `SessionLoggerTest`：sandbox/mode 事件落盘字段完整
+- [x] 9.3 `ChatStreamServiceTest`：SSE sandbox/mode 事件广播在 mode 变化时触发
+- [x] 9.4 `SessionLoggerTest`：sandbox/mode 事件落盘字段完整
 - [x] 9.5 `SessionOwnerRegistryTest`：同 IP + owner 校验通过；异 IP 返回 403
-- [ ] 9.6 `SandboxPolicyReplayServiceTest`：session.jsonl 含 escalate 时启动重放 to_mode；含 turn_end_restore 时不重放
+- [x] 9.6 `SandboxPolicyReplayServiceTest`：session.jsonl 含 escalate 时启动重放 to_mode；含 turn_end_restore 时不重放
 
 ## 10. 前端改造（3 个 task）
 
