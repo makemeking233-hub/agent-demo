@@ -29,14 +29,14 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交。
 
 ## 5. 装配切换与死代码清理
 
-- [ ] 5.1 测试先红：写装配层用例——`dynamicRetrieval=true` 时 `buildLoop` 产出的 agent 在首轮请求的 system prompt 中含 `(relevant)`；`dynamicRetrieval=false` 时含全量索引格式（无 `(relevant)`）
-- [ ] 5.2 实现：`AgentLoopFactory.buildSystemPrompt` 增加 `buildBase` 分支与 `MemorySectionProvider` 构造；`buildLoop` 按开关决定是否注入 provider
-- [ ] 5.3 清理：移除 `ChatCommand:150` 中赋值后从未使用的 `systemPrompt` 局部变量（`buildLoop` 内部会重新生成）；确认 Web 路径 `WebAgentRuntime:212` 经同一装配入口生效
-- [ ] 5.4 `mvn -o -pl agent-core,agent-web test` 全绿后 commit + push
+- [x] 5.1 测试先红：写装配层用例——`dynamicRetrieval=true` 时 `buildLoop` 产出的 agent 在首轮请求的 system prompt 中含 `(relevant)`；`dynamicRetrieval=false` 时含全量索引格式（无 `(relevant)`）
+- [x] 5.2 实现：`AgentLoopFactory.buildSystemPrompt` 增加 `buildBase` 分支与 `MemorySectionProvider` 构造；`buildLoop` 按开关决定是否注入 provider
+- [x] 5.3 清理：移除 `ChatCommand:150` 中赋值后从未使用的 `systemPrompt` 局部变量（`buildLoop` 内部会重新生成）；确认 Web 路径 `WebAgentRuntime:212` 经同一装配入口生效
+- [x] 5.4 `mvn -o -pl agent-core,agent-web test` 全绿后 commit + push
 
 ## 6. 端到端验证与收尾
 
-- [ ] 6.1 端到端装配测试：在临时 memory 目录写入两条记忆（其中一条与测试 query 字面相关），经 `buildLoop` 构建 agent 并触发一轮对话，断言该轮 system prompt 记忆段包含相关条目、且**不**包含无关条目的全量索引文本
-- [ ] 6.2 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿（jacoco LINE≥80% / BRANCH≥70%）
+- [x] 6.1 端到端装配测试：在临时 memory 目录写入两条记忆（其中一条与测试 query 字面相关），经 `buildLoop` 构建 agent 并触发一轮对话，断言该轮 system prompt 记忆段包含相关条目、且**不**包含无关条目的全量索引文本
+- [x] 6.2 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿（jacoco LINE≥80% / BRANCH≥70%）
 - [ ] 6.3 更新 `docs/design/memory-recall-deep-dive.md`：把 §5.2「关键事实 2（断点）」与 §6.5 标注为「已由 change fix-memory-recall-wiring 修复」，并同步 §7 路线图中已完成的第一步
 - [ ] 6.4 `openspec archive` 归档本 change（delta spec 并入 `openspec/specs/memory/spec.md`）后 commit + push

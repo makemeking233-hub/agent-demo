@@ -23,7 +23,7 @@ public class MemorySectionProvider implements MemorySectionSource {
     /** 渲染器（基于首个目录构造；为 {@code null} 表示无可用目录，{@link #sectionFor} 恒返回空串） */
     private final MemoryPromptBuilder builder;
 
-    /** 召回器（可空：为 {@code null} 时降级为字面召回） */
+    /** 召回器（构造时若传入 {@code null} 会自建一个纯字面召回器，永不为 {@code null}） */
     private final MemoryRetriever retriever;
 
     /** 参与注入的 memory 目录（USER / PROJECT / LOCAL） */
@@ -46,7 +46,12 @@ public class MemorySectionProvider implements MemorySectionSource {
      */
     public MemorySectionProvider(
             MemoryRetriever retriever, List<MemoryDir> dirs, String extraGuidelines, int k) {
-        this.retriever = retriever;
+        // retriever 为 null 时自建一个「无 provider 的纯字面召回器」：MemoryPromptBuilder 的守卫
+        // 要求 retriever 非空才走召回路径，若保持 null 会退化成全量索引注入，那不是本类的语义。
+        this.retriever =
+                retriever != null
+                        ? retriever
+                        : new MemoryRetriever(null, null, new MemoryRecall(), null);
         // 不用 List.copyOf：它拒绝 null 元素，而调用方可能传入含 null 的列表（此时应降级而非抛错）
         this.dirs = dirs == null ? List.of() : new ArrayList<>(dirs);
         this.extraGuidelines = extraGuidelines;
