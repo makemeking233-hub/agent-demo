@@ -3,14 +3,14 @@
 > scope：P1 copy + P2 clock + P3 赞踩（**不含** regenerate，那个走独立 change `add-message-regenerate`）
 > 本 session 目标：**P1 + P2**（~2.5h）；P3 留给下次 session
 
-## P1: copy 按钮（前端，~1h）
+## P1: copy 按钮（前端，~1h）✅ 已完成
 
-- [ ] 1.1 新增 `MessageActionRow.tsx`：`[copy] [children]` row 布局（flex + gap + 半透明 hover）
-- [ ] 1.2 copy 按钮：`navigator.clipboard.writeText` + 1s ✓ 反馈（`copyPending` ref 防重入 + `copyEpoch` ref 防 unmount setState）
-- [ ] 1.3 降级路径：`navigator.clipboard` 抛错 → 隐藏 textarea + `document.execCommand('copy')`
-- [ ] 1.4 `MessageBubble.tsx` 集成：assistant 消息底部渲染 `MessageActionRow`（user 消息只渲染 copy）
-- [ ] 1.5 `MessageActionRow.module.css`：图标按钮 + hover 态 + ✓/📋 图标切换
-- [ ] 1.6 `MessageActionRow.test.tsx`：复制成功 / ✓ 1s 后恢复 / 防重入 / 降级路径（4+ 用例）
+- [x] 1.1 新增 `MessageActionRow.tsx`：`[copy] [children]` row 布局（flex + gap + 半透明 hover）
+- [x] 1.2 copy 按钮：`navigator.clipboard.writeText` + 1s ✓ 反馈（`copyPending` ref 防重入 + `copyEpoch` ref 防 unmount setState）
+- [x] 1.3 降级路径：`navigator.clipboard` 抛错 → 隐藏 textarea + `document.execCommand('copy')`
+- [x] 1.4 `MessageBubble.tsx` 集成：assistant 消息底部渲染 `MessageActionRow`（user 消息只渲染 copy）
+- [x] 1.5 `MessageActionRow.module.css`：图标按钮 + hover 态 + ✓/📋 图标切换
+- [x] 1.6 `MessageActionRow.test.tsx`：复制成功 / ✓ 1s 后恢复 / 防重入 / 降级路径（7 用例）
 
 ## P2: per-message clock（全栈，~1.5h）
 
