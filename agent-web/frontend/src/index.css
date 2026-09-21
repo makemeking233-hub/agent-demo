@@ -39,3 +39,45 @@
   --radius: var(--dsw-alias-radius);
   --radius-sm: var(--dsw-alias-radius-sm);
 }
+
+/* shadcn-infra 阶段新增 high-contrast 第三主题
+ * hc 主题选择器：[data-theme="hc"]
+ * 触发：useThemeApplication() 在 preference='hc' 时写 <html data-theme="hc">
+ * 现状: hc 主题仅占位（提高对比度到 WCAG AAA），§2 shadcn-components-p1
+ * 接入 ThemeToggle 时会实际填充所有 shadcn semantic 变量
+ */
+[data-theme="hc"] {
+  --dsw-alias-bg: #ffffff;
+  --dsw-alias-text: #000000;
+  --dsw-alias-text-muted: #1a1a1a;
+  --dsw-alias-border: #000000;
+  --dsw-alias-accent: #0000ee;
+  --dsw-static-text-primary: #000000;
+  --dsw-static-text-secondary: #1a1a1a;
+  --dsw-static-text-inverse: #ffffff;
+  --dsw-static-border-default: #000000;
+  --dsw-static-border-strong: #000000;
+  --dsw-static-accent-default: #0000ee;
+  --dsw-static-accent-hover: #0000aa;
+  --dsw-static-surface-default: #ffffff;
+  --dsw-static-surface-raised: #ffffff;
+  --dsw-static-surface-sunken: #f5f5f5;
+}
+
+/* shadcn-infra 阶段统一主题机制（兼容过渡）
+ * 现状两套机制并存：
+ *   旧：body[data-ds-dark-theme]（tokens-dark.css）
+ *   新：<html data-theme>（useThemeApplication）
+ * 此处新增 [data-theme="dark"] 选择器，与旧机制并行；
+ * §2 shadcn-components-p1 引入 ThemeToggle 切换到新机制时，
+ * 同步在 tokens-dark.css 把选择器从 body[data-ds-dark-theme] 改为 :root[data-theme="dark"]
+ * 并删除旧 API。详见 design §6 主题系统。
+ */
+[data-theme="dark"] {
+  --dsw-alias-bg: var(--dsw-static-surface-default);
+  --dsw-alias-bg-raised: var(--dsw-static-surface-raised);
+  --dsw-alias-text: var(--dsw-static-text-primary);
+  --dsw-alias-text-muted: var(--dsw-static-text-muted);
+  --dsw-alias-border: var(--dsw-static-border-default);
+  --dsw-alias-accent: var(--dsw-static-accent-default);
+}
