@@ -10,9 +10,9 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交。
 
 ## 2. SystemPromptBuilder 拆分基础段
 
-- [ ] 2.1 测试先红：为 `buildBase(...)` 写用例——产物包含身份段与 `{providerName}`/`{modelName}` 替换结果，且**不含** `# Persistent Agent Memory` 记忆段
-- [ ] 2.2 实现：新增 `buildBase(providerName, modelName, storageSection, extraGuidelines, userOverride)`；`{memoryBlock}` 替换为空串；保留既有 `build(...)` 不变（供旧调用与测试使用）
-- [ ] 2.3 `mvn -o -pl agent-core test -Dtest='SystemPromptBuilderTest'` 转绿后 commit + push
+- [x] 2.1 测试先红：为 `buildBase(...)` 写用例——产物包含身份段与 `{providerName}`/`{modelName}` 替换结果，且**不含** `# Persistent Agent Memory` 记忆段
+- [x] 2.2 实现：新增 `buildBase(providerName, modelName, storageSection, extraGuidelines, userOverride)`；`{memoryBlock}` 替换为空串；保留既有 `build(...)` 不变（供旧调用与测试使用）
+- [x] 2.3 `mvn -o -pl agent-core test -Dtest='SystemPromptBuilderTest'` 转绿后 commit + push
 
 ## 3. MemorySectionProvider：按 query 产出记忆段
 

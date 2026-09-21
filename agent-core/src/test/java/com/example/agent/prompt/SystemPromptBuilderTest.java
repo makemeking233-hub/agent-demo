@@ -91,5 +91,49 @@ class SystemPromptBuilderTest {
         String prompt = builder.build("deepseek", "deepseek-chat", "", "", List.of(), "   ");
         assertTrue(prompt.contains("agent-demo"));
     }
+
+    // ---- fix-memory-recall-wiring T2: buildBase 排除 memory 段（供每轮动态拼装复用） ----
+
+    /** buildBase 产物不含记忆段——记忆段改由每轮按 query 动态生成。 */
+    @Test
+    void buildBaseExcludesMemorySection() {
+        var builder = new SystemPromptBuilder();
+        String prompt = builder.buildBase("deepseek", "deepseek-chat", "", List.of(), null);
+        assertFalse(prompt.contains("Persistent Agent Memory"));
+        assertTrue(prompt.contains("agent-demo"));
+    }
+
+    /** buildBase 仍正常替换 provider / model 占位符。 */
+    @Test
+    void buildBaseSubstitutesProviderAndModel() {
+        var builder = new SystemPromptBuilder();
+        String prompt = builder.buildBase("minimax", "MiniMax-Text-01", "", List.of(), null);
+        assertTrue(prompt.contains("minimax"));
+        assertTrue(prompt.contains("MiniMax-Text-01"));
+        assertFalse(prompt.contains("{providerName}"));
+        assertFalse(prompt.contains("{modelName}"));
+        assertFalse(prompt.contains("{memoryBlock}"));
+    }
+
+    /** buildBase 保留存储段与附加指引段（它们与查询无关，不需每轮重算）。 */
+    @Test
+    void buildBaseKeepsStorageAndExtraGuidelines() {
+        var builder = new SystemPromptBuilder();
+        String storage = "- 日志目录: /tmp/logs";
+        String prompt =
+                builder.buildBase("deepseek", "deepseek-chat", storage, List.of("指引A", "指引B"), null);
+        assertTrue(prompt.contains("Runtime Storage / 运行时存储"));
+        assertTrue(prompt.contains(storage));
+        assertTrue(prompt.contains("指引A"));
+        assertTrue(prompt.contains("指引B"));
+    }
+
+    /** buildBase 同样尊重用户覆盖（--system-prompt）。 */
+    @Test
+    void buildBaseUserOverrideWins() {
+        var builder = new SystemPromptBuilder();
+        String prompt = builder.buildBase("deepseek", "deepseek-chat", "", List.of("附加"), "自定义提示词");
+        assertEquals("自定义提示词", prompt);
+    }
 }
 
