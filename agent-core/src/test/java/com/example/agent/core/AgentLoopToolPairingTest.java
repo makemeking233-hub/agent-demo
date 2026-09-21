@@ -1,5 +1,8 @@
 package com.example.agent.core;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
@@ -11,6 +14,7 @@ import com.example.agent.llm.FinishReason;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.TokenEstimator;
+import com.example.agent.llm.ToolCall;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.render.StreamingPrinter;
@@ -129,6 +133,108 @@ class AgentLoopToolPairingTest {
                     toolIds.contains(id),
                     "assistant.tool_calls id=[" + id + "] 应有对应 tool 消息，但 tool 消息 ids=" + toolIds);
         }
+    }
+
+    /** 是否存在无前置 {@code assistant.tool_calls} 的 tool_result（即反向孤儿）。 */
+    private static boolean hasOrphanToolResult(List<Message> msgs) {
+        java.util.Set<String> declared = new java.util.HashSet<>();
+        for (Message m : msgs) {
+            if (m instanceof Message.Assistant a && a.toolCalls() != null) {
+                for (ToolCall tc : a.toolCalls()) declared.add(tc.id());
+            } else if (m instanceof Message.ToolResult tr && !declared.contains(tr.toolCallId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 请求路径的双向自愈（snip-pairing-repair）。
+     *
+     * <p>内存历史同时含两种污染：{@code c0} 的 tool 结果没有前置 tool_calls（反向孤儿，历史前缀被
+     * {@code snip} 裁掉时的产物）、{@code c9} 的 tool_calls 没有结果（正向悬挂，回合被异常打断时的
+     * 产物）。此前 `toRequest` 只修正向，反向孤儿会原样发给上游 → 400。
+     */
+    @Test
+    void requestRepairsBothPairingDirectionsOnDirtyHistory(@TempDir Path tmp) {
+        AtomicReference<List<Message>> sent = new AtomicReference<>();
+
+        LlmProvider capturing =
+                new LlmProvider() {
+                    @Override
+                    public Flux<StreamChunk> streamChat(ChatRequest req) {
+                        sent.set(req.messages());
+                        return Flux.just(
+                                new StreamChunk.TextDelta("done"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0)));
+                    }
+
+                    @Override
+                    public String name() {
+                        return "deepseek";
+                    }
+
+                    @Override
+                    public int contextWindow() {
+                        return 100_000;
+                    }
+
+                    @Override
+                    public int maxOutputTokens() {
+                        return 8192;
+                    }
+                };
+
+        MessageHistory hist = new MessageHistory(new TokenEstimator());
+        hist.append(new Message.User("上一轮"));
+        hist.append(new Message.ToolResult("c0", "孤儿结果", false));
+        hist.append(new Message.Assistant("", List.of(new ToolCall("c9", "ReadFile", "{}"))));
+        int dirtySize = hist.size();
+
+        ToolRegistry tools = mock(ToolRegistry.class);
+        @SuppressWarnings("rawtypes")
+        List emptyTools = List.of();
+        when(tools.list()).thenReturn(emptyTools);
+
+        new AgentLoop(
+                        capturing,
+                        tools,
+                        hist,
+                        new StreamingPrinter(),
+                        25,
+                        "deepseek-v4-flash",
+                        tmp,
+                        null,
+                        SessionLogSink.NOOP,
+                        null,
+                        PermissionConfirmer.allowAll())
+                .processTurn(new Message.User("go"))
+                .block();
+
+        List<Message> msgs = sent.get();
+        assertNotNull(msgs, "应发出请求");
+
+        // 正向：c9 已被补上合成错误结果
+        assertTrue(
+                ToolCallPairing.danglingCallIds(msgs).isEmpty(),
+                "正向悬挂应已补齐，实际 dangling=" + ToolCallPairing.danglingCallIds(msgs));
+        // 反向：c0 已被补上合成 assistant 骨架
+        assertFalse(hasOrphanToolResult(msgs), "反向孤儿应已补齐骨架，否则发出去必被上游 400");
+        // 发出的列表已是修复不动点（连续两次修复不再新增）
+        assertEquals(
+                msgs,
+                ToolCallPairing.repairOrphanResults(ToolCallPairing.repair(msgs)),
+                "请求列表应是配对修复的不动点");
+        // 修复只作用于待发送列表：内存历史保持原样（本轮只多了 user + assistant 两条）
+        assertEquals(dirtySize + 2, hist.size(), "内存历史条数不应被修复改变");
+        assertTrue(
+                hist.all().stream()
+                        .anyMatch(
+                                m ->
+                                        m instanceof Message.ToolResult tr
+                                                && tr.toolCallId().equals("c0")),
+                "内存历史仍应保留原始孤儿结果（修复不写回）");
     }
 }
 

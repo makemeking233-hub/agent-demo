@@ -113,4 +113,94 @@ class ToolCallPairingTest {
         assertThat(((Message.ToolResult) repaired.get(1)).toolCallId()).isEqualTo("c1");
         assertThat(((Message.ToolResult) repaired.get(4)).toolCallId()).isEqualTo("c2");
     }
+
+    // ---------- 反向配对修复（snip-pairing-repair）----------
+
+    private static Message.ToolResult result(String id) {
+        return new Message.ToolResult(id, "结果-" + id, false);
+    }
+
+    @Test
+    void injectsSkeletonForSingleOrphanResult() {
+        // 重放历史被从头部裁掉父 assistant 后，tool 结果就成了无前置 tool_calls 的孤儿
+        List<Message> out =
+                ToolCallPairing.repairOrphanResults(
+                        List.of(new Message.User("u"), result("c1")));
+
+        assertThat(out).hasSize(3);
+        assertThat(out.get(1)).isInstanceOf(Message.Assistant.class);
+        Message.Assistant skeleton = (Message.Assistant) out.get(1);
+        assertThat(skeleton.toolCalls()).hasSize(1);
+        assertThat(skeleton.toolCalls().get(0).id()).isEqualTo("c1");
+        assertThat(out.get(2)).isInstanceOf(Message.ToolResult.class);
+    }
+
+    @Test
+    void mergesConsecutiveOrphanResultsIntoOneSkeleton() {
+        // 一次 assistant 的并行 tool_calls 被整组裁掉 → 结果应共用一条合成骨架，
+        // 而不是每个结果各插一条（后者会把历史切碎）
+        List<Message> out =
+                ToolCallPairing.repairOrphanResults(
+                        List.of(new Message.User("u"), result("c1"), result("c2"), new Message.User("v")));
+
+        assertThat(out).hasSize(5);
+        Message.Assistant skeleton = (Message.Assistant) out.get(1);
+        assertThat(skeleton.toolCalls()).extracting(ToolCall::id).containsExactly("c1", "c2");
+        assertThat(out.get(2)).isEqualTo(result("c1"));
+        assertThat(out.get(3)).isEqualTo(result("c2"));
+        assertThat(out.get(4)).isInstanceOf(Message.User.class);
+    }
+
+    @Test
+    void stopsOrphanGroupAtResultThatHasPrecedingCall() {
+        // c1 有前置 assistant，不是孤儿；c2 没有 → 只给 c2 插骨架
+        List<Message> out =
+                ToolCallPairing.repairOrphanResults(
+                        List.of(assistant("c1"), result("c1"), result("c2"), new Message.User("v")));
+
+        assertThat(out).hasSize(5);
+        assertThat(out.get(0)).isEqualTo(assistant("c1"));
+        assertThat(out.get(1)).isEqualTo(result("c1"));
+        Message.Assistant skeleton = (Message.Assistant) out.get(2);
+        assertThat(skeleton.toolCalls()).extracting(ToolCall::id).containsExactly("c2");
+        assertThat(out.get(3)).isEqualTo(result("c2"));
+    }
+
+    @Test
+    void leavesCleanHistoryUntouchedOnOrphanRepair() {
+        List<Message> input = List.of(assistant("c1"), result("c1"));
+
+        assertThat(ToolCallPairing.repairOrphanResults(input)).isEqualTo(input);
+    }
+
+    @Test
+    void orphanRepairIsIdempotent() {
+        List<Message> once =
+                ToolCallPairing.repairOrphanResults(List.of(new Message.User("u"), result("c1")));
+
+        assertThat(ToolCallPairing.repairOrphanResults(once)).isEqualTo(once);
+    }
+
+    @Test
+    void doesNotMutateInputListOnOrphanRepair() {
+        List<Message> input = new java.util.ArrayList<>(List.of(new Message.User("u"), result("c1")));
+
+        ToolCallPairing.repairOrphanResults(input);
+
+        assertThat(input).hasSize(2);
+    }
+
+    @Test
+    void combinedRepairSatisfiesBothDirections() {
+        // 请求路径的组合拳：正向悬挂（assistant c9 无结果）+ 反向孤儿（c8 无前置）
+        List<Message> out =
+                ToolCallPairing.repairOrphanResults(
+                        ToolCallPairing.repair(
+                                List.of(result("c8"), assistant("c9"), new Message.User("u"))));
+
+        assertThat(ToolCallPairing.danglingCallIds(out)).isEmpty();
+        assertThat(out).anyMatch(m -> m instanceof Message.Assistant a
+                && a.toolCalls() != null
+                && a.toolCalls().stream().anyMatch(tc -> tc.id().equals("c8")));
+    }
 }
