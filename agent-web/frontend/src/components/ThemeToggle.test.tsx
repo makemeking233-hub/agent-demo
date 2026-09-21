@@ -69,12 +69,13 @@ describe("ThemeToggle", () => {
     expect(screen.getByTestId("theme-toggle-trigger").getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("renders 3 appearance cards inside popover", () => {
+  it("renders 4 appearance cards inside popover（含 hc）", () => {
     render(<ThemeToggle />);
     fireEvent.click(screen.getByTestId("theme-toggle-trigger"));
     expect(screen.getByTestId("appearance-card-light")).toBeInTheDocument();
     expect(screen.getByTestId("appearance-card-dark")).toBeInTheDocument();
     expect(screen.getByTestId("appearance-card-system")).toBeInTheDocument();
+    expect(screen.getByTestId("appearance-card-hc")).toBeInTheDocument();
   });
 
   it("clicking a card closes popover (via onAfterChange)", () => {
