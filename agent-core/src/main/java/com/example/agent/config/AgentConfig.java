@@ -69,7 +69,16 @@ public record AgentConfig(
             int retentionMaxAgeDays,
             int retentionKeepSessions) {}
 
-    public record Memory(SideQuery sideQuery) {}
+    /**
+     * Memory 配置。
+     *
+     * @param sideQuery        sideQuery 语义召回补充配置
+     * @param dynamicRetrieval 是否启用「每轮按当前用户提问动态召回」（fix-memory-recall-wiring）。
+     *                         {@code true}（默认）= 每轮请求组装时按当轮 query 召回并注入记忆段；
+     *                         {@code false} = 回退为启动期注入各 scope 全量索引（截断 200 行 / 25KB），
+     *                         即 v0.1 兼容行为。关闭可省去每轮的索引解析与 sideQuery 调用开销。
+     */
+    public record Memory(SideQuery sideQuery, boolean dynamicRetrieval) {}
 
     public record SideQuery(boolean enabled, int maxCandidates, int minCandidates) {}
 
@@ -151,7 +160,7 @@ public record AgentConfig(
                         2_000,
                         30,
                         50),
-                new Memory(new SideQuery(true, 8, 3)),
+                new Memory(new SideQuery(true, 8, 3), true),
                 new Mcp(List.of()),
                 new Worktree(false, AgentPaths.worktreesDir()),
                 List.of(),

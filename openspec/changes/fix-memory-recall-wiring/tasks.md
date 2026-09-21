@@ -4,9 +4,9 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交。
 
 ## 1. 配置：memory.dynamicRetrieval 开关
 
-- [ ] 1.1 测试先红：为 `AgentConfig.defaults()` 断言 `memory().dynamicRetrieval()` 缺省为 `true`；为 `ConfigLoader` 写 `memory.dynamicRetrieval=false` 的解析用例（期望读到 `false`，缺省读到 `true`）
-- [ ] 1.2 实现：`AgentConfig.Memory` record 增加 `boolean dynamicRetrieval` 字段并更新 `defaults()`；`ConfigLoader` 在合并 user yaml 时解析该键（缺失保持 base 值）
-- [ ] 1.3 `mvn -o -pl agent-core test -Dtest='ConfigLoaderTest,AgentConfigTest'` 转绿后 commit + push 本分支
+- [x] 1.1 测试先红：为 `AgentConfig.defaults()` 断言 `memory().dynamicRetrieval()` 缺省为 `true`；为 `ConfigLoader` 写 `memory.dynamicRetrieval=false` 的解析用例（期望读到 `false`，缺省读到 `true`）
+- [x] 1.2 实现：`AgentConfig.Memory` record 增加 `boolean dynamicRetrieval` 字段并更新 `defaults()`；`ConfigLoader` 在合并 user yaml 时解析该键（缺失保持 base 值）
+- [x] 1.3 `mvn -o -pl agent-core test -Dtest='ConfigLoaderTest,AgentConfigTest'` 转绿后 commit + push 本分支
 
 ## 2. SystemPromptBuilder 拆分基础段
 
