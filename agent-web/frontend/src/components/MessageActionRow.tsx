@@ -1,5 +1,6 @@
 /**
- * MessageActionRow（add-message-actions P1 + P2）。
+ * MessageActionRow（add-message-actions P1 + P2
+ * → shadcn-components-p2: 从 CSS Modules 迁到 Tailwind utility）。
  *
  * <p>assistant / user 消息底部的操作栏：copy + 可选 per-message clock + 可选 extraActions（赞踩）。
  *
@@ -12,7 +13,6 @@
 
 import { Check, Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import styles from "./MessageActionRow.module.css";
 
 export interface MessageActionRowProps {
   /** 复制到剪贴板的纯文本 */
@@ -27,7 +27,9 @@ export interface MessageActionRowProps {
 export function MessageActionRow({ text, clock, children, className }: MessageActionRowProps) {
   const [copied, setCopied] = useState(false);
   const copyPending = useRef(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 用 number 而非 ReturnType<typeof setTimeout>：装了 @types/node 后后者会解析成
+  // NodeJS.Timeout，与 window.setTimeout 返回的 number 不兼容（tsc TS2322）。
+  const copyTimer = useRef<number | null>(null);
   const copyEpoch = useRef(0);
 
   // unmount 清理：递增 epoch 让 pending 的 promise 回调失效；清 timer
@@ -58,12 +60,14 @@ export function MessageActionRow({ text, clock, children, className }: MessageAc
 
   return (
     <div
-      className={className ? `${styles.row} ${className}` : styles.row}
+      className={`mt-1 flex items-center gap-1 opacity-55 transition-opacity hover:opacity-100 ${
+        className ?? ""
+      }`}
       data-testid="message-action-row"
     >
       <button
         type="button"
-        className={styles.action}
+        className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
         aria-label={copied ? "已复制" : "复制"}
         title={copied ? "已复制" : "复制"}
         onClick={onCopy}
