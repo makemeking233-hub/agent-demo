@@ -60,6 +60,34 @@ public sealed interface SseEvent {
     }
 
     /**
+     * 单条 assistant 消息的读数（add-message-actions P2）：回合结束时于 {@code message_stop} **之前**推送。
+     *
+     * <p>与 {@link TurnStats}（会话累计值）互补：本事件只描述**刚结束的这一轮**，供前端在消息底部
+     * 渲染 DSH 风格的 clock（时间 + Ran for + TTFT + tok/s）。
+     *
+     * <p>派生指标不可用时为 {@code null}（前端显示 N/A）：
+     *
+     * <ul>
+     *   <li>{@code uuid} —— provider 不落盘（无 {@code SessionRecorder}）时为 {@code null}
+     *   <li>{@code ttft_ms} —— 本轮没有任何文本 chunk 时为 {@code null}
+     *   <li>{@code tok_per_sec} —— 纯生成耗时 ≤ 0 时为 {@code null}
+     * </ul>
+     */
+    record MessageMeta(
+            @JsonProperty("type") String type,
+            @JsonProperty("uuid") String uuid,
+            @JsonProperty("duration_ms") long durationMs,
+            @JsonProperty("ttft_ms") Double ttftMs,
+            @JsonProperty("tok_per_sec") Double tokPerSec,
+            @JsonProperty("timestamp") long timestamp)
+            implements SseEvent {
+
+        public MessageMeta(String uuid, long durationMs, Double ttftMs, Double tokPerSec, long timestamp) {
+            this("message_meta", uuid, durationMs, ttftMs, tokPerSec, timestamp);
+        }
+    }
+
+    /**
      * 回合统计（add-session-stats-bar）：每次回合结束时于 {@code message_stop} 之前推送，携带会话累计值。
      *
      * <p>派生指标（{@code avg_ttft_ms} / {@code tok_per_sec} / {@code cache_hit_rate}）不可用时为 {@code null}

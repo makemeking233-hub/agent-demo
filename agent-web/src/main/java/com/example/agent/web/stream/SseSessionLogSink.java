@@ -18,6 +18,9 @@ public class SseSessionLogSink implements SessionLogSink {
     private final Map<String, String> toolNames = new ConcurrentHashMap<>();
     // 本轮模型输出是否已逐 token 推过正文（add-true-streaming）：供 onAssistant 兜底判重
     private final AtomicBoolean textStreamed = new AtomicBoolean(false);
+    // add-message-actions P2：per-message clock 的 wall time 起点 / 终点
+    private volatile long turnStartedAtMs;
+    private volatile long lastAssistantAtMs;
 
     public SseSessionLogSink(ChatStreamService stream, String streamId) {
         this.stream = stream;
@@ -25,10 +28,18 @@ public class SseSessionLogSink implements SessionLogSink {
     }
 
     @Override public void onTurnStart(int turn) {}
-    @Override public void onUser(Message.User user) {}
+
+    @Override
+    public void onUser(Message.User user) {
+        // add-message-actions P2：clock 的 "Ran for" 从用户输入算到本轮最后一条 assistant 定稿
+        turnStartedAtMs = System.currentTimeMillis();
+        lastAssistantAtMs = 0;
+    }
 
     @Override
     public void onAssistant(Message.Assistant assistant, List<String> thinking) {
+        // add-message-actions P2：记下本轮最后一条 assistant 的定稿时刻
+        lastAssistantAtMs = System.currentTimeMillis();
         // 工具调用先于文本推送（因果顺序：先调工具，再基于结果说话）
         if (assistant.toolCalls() != null) {
             for (ToolCall call : assistant.toolCalls()) {
@@ -98,6 +109,11 @@ public class SseSessionLogSink implements SessionLogSink {
 
     @Override
     public void onTurnEnd(TurnResult result) {
+        // add-message-actions P2：先推 per-message 读数（message_meta），再走 turn_stats + message_stop。
+        // 顺序保证前端在收到 message_stop 之前就能把 clock 绑到刚定稿的那条 assistant 消息上。
+        long endMs = lastAssistantAtMs > 0 ? lastAssistantAtMs : System.currentTimeMillis();
+        long durationMs = turnStartedAtMs > 0 ? endMs - turnStartedAtMs : 0L;
+        stream.emitMessageMeta(streamId, result, Math.max(0L, durationMs));
         // add-session-stats-bar：先累加并推送 turn_stats，再发 message_stop 关流。
         stream.onTurnEnd(streamId, result);
     }

@@ -4,6 +4,7 @@ export type SseEventType =
   | 'tool_call_start'
   | 'tool_call_end'
   | 'permission_request'
+  | 'message_meta'
   | 'turn_stats'
   | 'message_stop'
   | 'error';
@@ -72,12 +73,27 @@ export interface TurnStats {
   cache_hit_rate: number | null;
 }
 
+/** 单条 assistant 消息读数（add-message-actions P2）：回合结束时于 message_stop 前推送。 */
+export interface MessageMeta {
+  type: 'message_meta';
+  /** 该条 assistant 在会话存档里的条目 uuid；会话不落盘时为 null */
+  uuid: string | null;
+  /** 本轮 wall time（用户输入 → 最后一条 assistant 定稿） */
+  duration_ms: number;
+  /** 首 token 延迟；本轮无文本 chunk 时为 null */
+  ttft_ms: number | null;
+  /** 输出吞吐；纯生成耗时 ≤ 0 时为 null */
+  tok_per_sec: number | null;
+  timestamp: number;
+}
+
 export type SseEvent =
   | MessageStart
   | MessageDelta
   | ToolCallStart
   | ToolCallEnd
   | PermissionRequest
+  | MessageMeta
   | TurnStats
   | MessageStop
   | ErrorEvent;

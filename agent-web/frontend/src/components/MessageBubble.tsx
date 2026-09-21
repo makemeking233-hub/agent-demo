@@ -4,6 +4,7 @@ import { MarkdownContent } from "./MarkdownContent";
 import { MessageActionRow } from "./MessageActionRow";
 import { ThinkingCollapse } from "./ThinkingCollapse";
 import { ToolCallCard } from "./ToolCallCard";
+import type { MessageClock } from "../lib/message-clock";
 
 export type InlineTool = {
   id: string;
@@ -20,8 +21,8 @@ export function MessageBubble(props: {
   // add-reasoning-thinking-streaming: 推理过程（assistant 消息可携带）
   thinking?: string;
   reasoningTokens?: number;
-  /** add-message-actions P2: per-message clock 读数（assistant finalize 后才有） */
-  clock?: React.ReactNode;
+  /** add-message-actions P2: per-message 读数（assistant finalize 后才有） */
+  meta?: MessageClock | null;
   /** add-message-actions P3: 赞踩按钮（extraActions slot） */
   actions?: React.ReactNode;
 }) {
@@ -51,7 +52,7 @@ export function MessageBubble(props: {
         ))}
         {/* add-message-actions P1: action row（copy + 可选 clock/赞踩）；流式中不显示 */}
         {showActions && (
-          <MessageActionRow text={props.text} clock={isUser ? undefined : props.clock}>
+          <MessageActionRow text={props.text} meta={isUser ? undefined : props.meta}>
             {isUser ? undefined : props.actions}
           </MessageActionRow>
         )}

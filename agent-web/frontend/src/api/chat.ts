@@ -3,6 +3,8 @@
  * 配合 lib/sse-client.ts 跑流.
  */
 
+import type { MessageClock } from "../lib/message-clock";
+
 export type PermissionMode = "read_only" | "workspace_write" | "full_access";
 
 export interface SendRequest {
@@ -170,6 +172,10 @@ export interface HistoryMessage {
   toolCalls?: HistoryToolCall[];
   toolCallId?: string;
   isError?: boolean;
+  /** add-message-actions P2：该条 assistant 在会话存档里的条目 uuid */
+  uuid?: string | null;
+  /** add-message-actions P2：该条消息的读数（刷新后 clock 仍在） */
+  meta?: MessageClock | null;
 }
 
 export interface HistoryResponse {

@@ -2,6 +2,7 @@ package com.example.agent.web.api;
 
 import com.example.agent.core.Message;
 import com.example.agent.session.SessionAgeBucket;
+import com.example.agent.session.SessionEntry;
 import com.example.agent.session.SessionResumeLoader;
 import com.example.agent.session.SessionStore;
 import com.example.agent.web.api.dto.RenameRequest;
@@ -16,6 +17,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.context.annotation.Profile;
@@ -142,9 +145,78 @@ public class SessionController {
         if (!runtime.hasSession(sessionId)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
-        List<SessionMessageDto> messages =
-                runtime.messagesFor(sessionId).stream().map(SessionController::toDto).toList();
+        List<Message> msgs = runtime.messagesFor(sessionId);
+        // add-message-actions P2：把存档里的 per-message 读数（message_meta 条目）按 assistant 序号
+        // 贴回消息，使刷新后 clock 仍在（见 loadAssistantMeta 的「数量不一致则整体放弃」保护）
+        List<Map<String, Object>> assistantMeta =
+                loadAssistantMeta(runtime.sessionsDirFor(null), sessionId);
+        long assistantCount = msgs.stream().filter(m -> "assistant".equals(m.role())).count();
+        boolean aligned = assistantCount == assistantMeta.size();
+        List<SessionMessageDto> messages = new ArrayList<>(msgs.size());
+        int assistantIndex = 0;
+        for (Message m : msgs) {
+            boolean isAssistant = "assistant".equals(m.role());
+            Map<String, Object> meta = null;
+            if (isAssistant) {
+                if (aligned && assistantIndex < assistantMeta.size()) {
+                    meta = assistantMeta.get(assistantIndex);
+                }
+                assistantIndex++;
+            }
+            messages.add(toDto(m, meta));
+        }
         return ResponseEntity.ok(new SessionMessagesResponse(sessionId, messages));
+    }
+
+    /**
+     * 读取某会话存档里的 per-message 读数（add-message-actions P2）。
+     *
+     * <p>返回列表**按 assistant 条目在存档中的出现顺序**索引：第 i 个元素就是第 i 条 assistant 消息
+     * 的读数（无读数时为 {@code null}）。这样前端只需按 assistant 序号对齐，无需自己解析存档。
+     *
+     * <p>读数是 {@code SessionRecorder} 在回合结束时追加的 {@code meta(key="message_meta")} 条目，
+     * 内含 {@code uuid} —— 用它反查该 assistant 条目在存档中的序号，避免"数消息"式推断。
+     * 存档里的 assistant 条目若少于消息列表（例如孤儿 tool_result 触发了合成骨架），序号会错位，
+     * 故调用方需按 list 尺寸与消息数量是否一致决定是否采用（不一致就整体放弃，宁可不显示读数）。
+     *
+     * @param sessionsDir sessions 目录
+     * @param sessionId   会话 id
+     * @return assistant 序号 → 读数（可含 null 元素）；无存档/无读数时为空 list
+     */
+    private static List<Map<String, Object>> loadAssistantMeta(Path sessionsDir, String sessionId) {
+        List<SessionEntry> entries = SessionStore.loadById(sessionsDir, sessionId);
+        if (entries.isEmpty()) return List.of();
+        Map<String, Integer> ordinalByUuid = new HashMap<>();
+        Map<String, Map<String, Object>> metaByUuid = new HashMap<>();
+        int assistantCount = 0;
+        for (SessionEntry e : entries) {
+            if ("assistant".equals(e.type())) {
+                if (e.uuid() != null) ordinalByUuid.put(e.uuid(), assistantCount);
+                assistantCount++;
+                continue;
+            }
+            if (!"meta".equals(e.type()) || e.extras() == null) continue;
+            if (!"message_meta".equals(e.extras().get("key"))) continue;
+            Object value = e.extras().get("value");
+            if (!(value instanceof Map<?, ?> raw)) continue;
+            Map<String, Object> meta = asStringMap(raw);
+            Object uuid = meta.get("uuid");
+            if (uuid != null) metaByUuid.put(String.valueOf(uuid), meta);
+        }
+        if (assistantCount == 0) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>(Collections.nCopies(assistantCount, null));
+        metaByUuid.forEach(
+                (uuid, meta) -> {
+                    Integer at = ordinalByUuid.get(uuid);
+                    if (at != null) out.set(at, meta);
+                });
+        return out;
+    }
+
+    /** Jackson 反序列化出的 extras 是 {@code Map<String,Object>}，这里只做受检转换。 */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asStringMap(Map<?, ?> raw) {
+        return (Map<String, Object>) raw;
     }
 
     /**
@@ -235,8 +307,15 @@ public class SessionController {
         }
     }
 
-    /** 把领域消息映射为 DTO。 */
-    private static SessionMessageDto toDto(Message m) {
+    /**
+     * 把领域消息映射为 DTO。
+     *
+     * @param m    领域消息
+     * @param meta 该条消息的 per-message 读数（add-message-actions P2；非 assistant 或无数时 null）
+     * @return 消息 DTO
+     */
+    private static SessionMessageDto toDto(Message m, Map<String, Object> meta) {
+        String uuid = meta == null ? null : asText(meta.get("uuid"));
         if (m instanceof Message.Assistant a) {
             return new SessionMessageDto(
                     m.role(),
@@ -247,12 +326,19 @@ public class SessionController {
                                     .map(tc -> new ToolCallDto(tc.id(), tc.name(), tc.argumentsJson()))
                                     .toList(),
                     null,
-                    false);
+                    false,
+                    uuid,
+                    meta);
         }
         if (m instanceof Message.ToolResult t) {
-            return new SessionMessageDto(m.role(), m.content(), List.of(), t.toolCallId(), t.isError());
+            return new SessionMessageDto(m.role(), m.content(), List.of(), t.toolCallId(), t.isError(), null, null);
         }
-        return new SessionMessageDto(m.role(), m.content(), List.of(), null, false);
+        return new SessionMessageDto(m.role(), m.content(), List.of(), null, false, null, null);
+    }
+
+    /** {@code Object → String}（null 安全；非字符串走 {@code String.valueOf}）。 */
+    private static String asText(Object v) {
+        return v == null ? null : String.valueOf(v);
     }
 
     /** 标题+预览派生结果。 */
