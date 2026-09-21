@@ -125,3 +125,17 @@ maven 测试运行仍会创建 `~/.agent-demo/logs/sessions/<uuid>/` 目录。�
 | jacoco 既有违规未扩大 | ✅ 5 条 → 1 条 |
 | 缺陷链条每环有反向断言 | ✅ 见 `test-cases.md` §3 |
 | 测试数据同任务内清理并说明 | ✅ 见 §5 |
+
+## 8. 事后发现（超出本次范围）
+
+2026-09-19 用户用 F12 Network 实测一次请求后发现：前端下拉框显示「deepseek-v4-flash」，但实际请求体里发出去的是 `deepseek-chat`——即「前端根本没把 flash 发出去」。
+
+服务端 WARN 日志 `rejecting unknown model requested=deepseek-chat supported=[...]` 实锤。
+
+根因是 fix-stale-model-fallback **未覆盖到的盲区**：本 change 只修了服务端（fail-closed 校验 + 删除 `ModelRegistry` 与 `deepseek-chat` 硬编码默认值），没改前端。旧 bundle 里 `App.tsx` 的 `resolveModelSelection` 在 `valid=false` 时显式兜底成字面量 `"deepseek-chat"`——`localStorage` 里残留的旧值会让 `valid=false`，发送值于是恒等于已停用的别名；显示值走另一条路径，兜到 `models[0]`（即 v4-flash），于是「显示 flash / 发 chat」。
+
+正确修法是改前端，把兜底从字面量 `"deepseek-chat"` 换成服务端 `defaultModel`（用 `model-selection.test.ts` 的现有模式加一条断言：「发送值与显示值同源、且兜底不为停用别名」）。该 fix 属前端范畴，本 change 不做。
+
+侧效应：那个长期"后台显示 v4-pro"的谜团——`deepseek-chat` 是已停用别名（DeepSeek 2026-07-24 停用、统一升级 V4 系列），旧客户端发到上游会被路由到当前模型，故后台显示 v4-pro。前端脱钩修好后这条路径也断了。
+
+也顺带确认：当前 `sw.js` 的 precache 清单不含 `index-BDostkKB.js`（已被新构建排除），`target/classes/static/assets/index-BDostkKB.js` 是 gitignored 的构建产物——用户浏览器侧缓存是真正风险点，需 `DevTools → Application → Service Workers → Unregister` + `Clear site data` + 硬刷新。
