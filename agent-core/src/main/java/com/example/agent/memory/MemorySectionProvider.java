@@ -16,7 +16,7 @@ import java.util.List;
  * <p><b>失败语义</b>：任何异常都返回空串（本轮不注入记忆段），绝不阻断主对话流——与既有
  * 「sideQuery 失败静默降级」的设计原则一致。
  */
-public class MemorySectionProvider {
+public class MemorySectionProvider implements MemorySectionSource {
 
     private static final Logger log = LoggerFactory.getLogger(MemorySectionProvider.class);
 
@@ -61,6 +61,7 @@ public class MemorySectionProvider {
      * @param query 当轮用户提问；{@code null} / 空白时返回空串（无查询则无召回）
      * @return system prompt 记忆段文本（含 {@code (relevant)} 小节）；失败或无可用目录时返回空串
      */
+    @Override
     public String sectionFor(String query) {
         if (builder == null || query == null || query.isBlank()) return "";
         try {

@@ -22,10 +22,10 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交。
 
 ## 4. AgentLoop：每轮动态拼装 system prompt
 
-- [ ] 4.1 测试先红：写 `AgentLoop` 动态召回用例——①同一轮内多次 `toRequest()` 只调用 provider 一次（轮内缓存）；②两轮不同 query 时 provider 被调用两次且 system prompt 随之变化；③`memoryProvider` 为 `null` 时 system prompt 恒等于构造时传入值（行为不变）
-- [ ] 4.2 实现：`AgentLoop` 新增可选字段 `baseSystemPrompt` + `memoryProvider` + 轮内缓存（`lastQuery` / `lastSection`）；`toRequest()` 用 `history` 中最近一条 user 消息作为 query 拼装最终 system prompt
-- [ ] 4.3 实现：新增一个接收 `baseSystemPrompt + memoryProvider` 的构造器重载；既有 8 个构造器全部保留并委托（`memoryProvider = null`）
-- [ ] 4.4 `mvn -o -pl agent-core test -Dtest='AgentLoopTest'` 转绿后 commit + push
+- [x] 4.1 测试先红：写 `AgentLoop` 动态召回用例——①同一轮内多次 `toRequest()` 只调用 provider 一次（轮内缓存）；②两轮不同 query 时 provider 被调用两次且 system prompt 随之变化；③`memoryProvider` 为 `null` 时 system prompt 恒等于构造时传入值（行为不变）
+- [x] 4.2 实现：`AgentLoop` 新增可选字段 `baseSystemPrompt` + `memoryProvider` + 轮内缓存（`lastQuery` / `lastSection`）；`toRequest()` 用 `history` 中最近一条 user 消息作为 query 拼装最终 system prompt
+- [x] 4.3 实现：新增一个接收 `baseSystemPrompt + memoryProvider` 的构造器重载；既有 8 个构造器全部保留并委托（`memoryProvider = null`）
+- [x] 4.4 `mvn -o -pl agent-core test -Dtest='AgentLoopTest'` 转绿后 commit + push
 
 ## 5. 装配切换与死代码清理
 
