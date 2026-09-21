@@ -1,11 +1,13 @@
 /**
- * ReasoningEffortSelect 主题切换验证（shadcn-prototype §A Task A9）。
+ * ReasoningEffortSelect 主题切换验证（shadcn-prototype §A Task A9
+ * → shadcn-components-p2 C6：机制收敛到 <html data-theme>）。
  *
- * <p>原型阶段不能真启 vite dev server 截图，改用 jsdom + 切换 body class
+ * <p>原型阶段不能真启 vite dev server 截图，改用 jsdom + 切换主题属性
  * 模拟 light/dark 两主题，断言组件在两主题下行为一致。
  *
- * <p>现状 token 系统（tokens.css + tokens-dark.css）用 `body[data-ds-dark-theme]` 标记，
- * 因此 dark 主题下 body.dataset.dsDarkTheme = ""，light 下 delete。
+ * <p>主题机制已统一为 `<html data-theme="...">`（useThemeApplication 写入，
+ * tokens-dark.css 的 `:root[data-theme="dark"]` 响应），旧
+ * `body[data-ds-dark-theme]` 不再使用。
  */
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -19,10 +21,8 @@ const OPTIONS: ReasoningEffort[] = [
   { id: "high", name: "High" },
 ];
 
-function applyTheme(theme: "light" | "dark") {
-  const body = document.body;
-  if (theme === "dark") body.dataset.dsDarkTheme = "";
-  else delete body.dataset.dsDarkTheme;
+function applyTheme(theme: "light" | "dark" | "hc") {
+  document.documentElement.dataset.theme = theme;
 }
 
 describe("ReasoningEffortSelect — 两主题行为一致", () => {

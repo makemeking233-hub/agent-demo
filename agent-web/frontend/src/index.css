@@ -1,14 +1,18 @@
 @import "tailwindcss";
 
-/* shadcn-prototype 阶段 @theme 映射
- * 把 shadcn 标准变量映射到现状的 --dsw-alias-* 与 --dsw-static-* 系统
- * 这样 shadcn 组件（bg-background / text-foreground 等）能复用现状主题系统
- * 完整 token 系统改造（统一命名 + 三主题）留到 §1 (shadcn-infra) 处理。
+/* shadcn 语义变量映射
+ * 把 shadcn 标准变量映射到现状的 --dsw-alias-* 与 --dsw-static-* 系统，
+ * 这样 shadcn 组件（bg-background / text-foreground 等）能复用现状主题系统。
  *
  * 现状 token 系统（src/styles/tokens.css）：
  *   --dsw-static-*    30+ 颜色 token（light 默认）
- *   --dsw-static-*:dark 重定义（body[data-ds-dark-theme]）
  *   --dsw-alias-*     别名层（--dsw-alias-bg / --dsw-alias-text 等）
+ * 主题覆盖：
+ *   dark → src/styles/tokens-dark.css（:root[data-theme="dark"]）
+ *   hc   → 本文件下方 :root[data-theme="hc"]
+ *
+ * 注意：--dsw-alias-* 的 var() 在**声明作用域**求值，后代作用域覆盖
+ * --dsw-static-* 时必须同步重新声明别名（tokens-dark.css 与下方 hc 块均已处理）。
  */
 @theme {
   /* shadcn semantic → 现状 alias 映射 */
@@ -40,44 +44,73 @@
   --radius-sm: var(--dsw-alias-radius-sm);
 }
 
-/* shadcn-infra 阶段新增 high-contrast 第三主题
- * hc 主题选择器：[data-theme="hc"]
- * 触发：useThemeApplication() 在 preference='hc' 时写 <html data-theme="hc">
- * 现状: hc 主题仅占位（提高对比度到 WCAG AAA），§2 shadcn-components-p1
- * 接入 ThemeToggle 时会实际填充所有 shadcn semantic 变量
+/* high-contrast 第三主题（shadcn-components-p2 C5：变量填全）
+ *
+ * 选择器：[data-theme="hc"]，由 useThemeApplication() 在
+ * general.appearance.preference = "hc" 时写到 <html>。
+ *
+ * 配色目标：WCAG AAA（正文对比度 ≥ 7:1）。以纯黑/纯白为基底，
+ * 强调色与语义色都取深色档以满足 7:1。
+ *
+ * 与 tokens-dark.css 同理：别名必须在同一作用域重新声明，
+ * 否则 --dsw-alias-* 仍停留在 :root 的亮色求值结果。
  */
-[data-theme="hc"] {
-  --dsw-alias-bg: #ffffff;
-  --dsw-alias-text: #000000;
-  --dsw-alias-text-muted: #1a1a1a;
-  --dsw-alias-border: #000000;
-  --dsw-alias-accent: #0000ee;
-  --dsw-static-text-primary: #000000;
-  --dsw-static-text-secondary: #1a1a1a;
-  --dsw-static-text-inverse: #ffffff;
-  --dsw-static-border-default: #000000;
-  --dsw-static-border-strong: #000000;
-  --dsw-static-accent-default: #0000ee;
-  --dsw-static-accent-hover: #0000aa;
+:root[data-theme="hc"] {
+  /* surface */
   --dsw-static-surface-default: #ffffff;
   --dsw-static-surface-raised: #ffffff;
-  --dsw-static-surface-sunken: #f5f5f5;
-}
+  --dsw-static-surface-sunken: #f2f2f2;
+  --dsw-static-surface-overlay: rgba(0, 0, 0, 0.75);
+  --dsw-static-surface-canvas: #ffffff;
 
-/* shadcn-infra 阶段统一主题机制（兼容过渡）
- * 现状两套机制并存：
- *   旧：body[data-ds-dark-theme]（tokens-dark.css）
- *   新：<html data-theme>（useThemeApplication）
- * 此处新增 [data-theme="dark"] 选择器，与旧机制并行；
- * §2 shadcn-components-p1 引入 ThemeToggle 切换到新机制时，
- * 同步在 tokens-dark.css 把选择器从 body[data-ds-dark-theme] 改为 :root[data-theme="dark"]
- * 并删除旧 API。详见 design §6 主题系统。
- */
-[data-theme="dark"] {
+  /* text */
+  --dsw-static-text-primary: #000000;
+  --dsw-static-text-secondary: #1a1a1a;
+  --dsw-static-text-muted: #262626;
+  --dsw-static-text-inverse: #ffffff;
+  --dsw-static-text-link: #0000c8;
+
+  /* border */
+  --dsw-static-border-default: #000000;
+  --dsw-static-border-strong: #000000;
+  --dsw-static-border-subtle: #595959;
+
+  /* accent（#0000c8 on #fff ≈ 12.6:1） */
+  --dsw-static-accent-default: #0000c8;
+  --dsw-static-accent-hover: #00008f;
+  --dsw-static-accent-subtle: #dbe3ff;
+
+  /* neutral（保留灰阶供滚动条等使用） */
+  --dsw-static-neutral-50: #ffffff;
+  --dsw-static-neutral-100: #f2f2f2;
+  --dsw-static-neutral-200: #d9d9d9;
+  --dsw-static-neutral-300: #b3b3b3;
+  --dsw-static-neutral-400: #8c8c8c;
+  --dsw-static-neutral-500: #595959;
+  --dsw-static-neutral-600: #404040;
+  --dsw-static-neutral-700: #262626;
+  --dsw-static-neutral-800: #1a1a1a;
+  --dsw-static-neutral-900: #000000;
+
+  /* 语义色（全部取深色档以满足 AAA） */
+  --dsw-static-warning-default: #7a4100;
+  --dsw-static-warning-bg: #fff4e5;
+  --dsw-static-success-default: #005c1f;
+  --dsw-static-success-bg: #e6f7ec;
+  --dsw-static-danger-default: #a30000;
+  --dsw-static-danger-bg: #ffe8e8;
+
+  /* 别名层重新求值 */
   --dsw-alias-bg: var(--dsw-static-surface-default);
   --dsw-alias-bg-raised: var(--dsw-static-surface-raised);
   --dsw-alias-text: var(--dsw-static-text-primary);
   --dsw-alias-text-muted: var(--dsw-static-text-muted);
   --dsw-alias-border: var(--dsw-static-border-default);
   --dsw-alias-accent: var(--dsw-static-accent-default);
+}
+
+/* hc 主题下强化焦点环可见度 */
+:root[data-theme="hc"] :focus-visible {
+  outline: 3px solid var(--dsw-static-accent-default);
+  outline-offset: 2px;
 }

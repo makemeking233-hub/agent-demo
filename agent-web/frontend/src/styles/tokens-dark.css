@@ -1,6 +1,17 @@
-/* 暗色 token 覆盖: 仅在 body[data-ds-dark-theme] 生效 */
+/* 暗色 token 覆盖：仅在 <html data-theme="dark"> 时生效
+ *
+ * 主题机制统一（shadcn-components-p2 C6）：
+ *   旧：body[data-ds-dark-theme]  （lib/theme.ts 的 applyTheme 写入）
+ *   新：:root[data-theme="dark"]  （hooks/useThemeApplication 写入）
+ * 本次收敛到新机制，旧属性不再被读取。
+ *
+ * 注意：`--dsw-alias-*` 在 tokens.css 的 `:root` 上声明，其 var() 在**该作用域**
+ * 就已求值，后代作用域重定义 `--dsw-static-*` **不会**让别名跟着变。因此本文件
+ * 除了覆盖 `--dsw-static-*`，还必须**重新声明别名**，否则组件用的
+ * `var(--dsw-alias-text)` 等仍是亮色值（这是旧机制的潜在 bug）。
+ */
 
-body[data-ds-dark-theme] {
+:root[data-theme="dark"] {
   --dsw-static-surface-default: #0f172a;
   --dsw-static-surface-raised: #1e293b;
   --dsw-static-surface-sunken: #0b1220;
@@ -38,7 +49,20 @@ body[data-ds-dark-theme] {
   --dsw-static-success-bg: #052e16;
   --dsw-static-danger-default: #f87171;
   --dsw-static-danger-bg: #450a0a;
+
+  /* 别名层重新求值（必须与 tokens.css 的别名一一对应） */
+  --dsw-alias-bg: var(--dsw-static-surface-default);
+  --dsw-alias-bg-raised: var(--dsw-static-surface-raised);
+  --dsw-alias-text: var(--dsw-static-text-primary);
+  --dsw-alias-text-muted: var(--dsw-static-text-muted);
+  --dsw-alias-border: var(--dsw-static-border-default);
+  --dsw-alias-accent: var(--dsw-static-accent-default);
 }
 
-body[data-ds-dark-theme] ::-webkit-scrollbar-thumb { background: var(--dsw-static-neutral-700); }
-body[data-ds-dark-theme] ::-webkit-scrollbar-thumb:hover { background: var(--dsw-static-neutral-600); }
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--dsw-static-neutral-700);
+}
+
+:root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--dsw-static-neutral-600);
+}
