@@ -85,5 +85,40 @@ class ConfigLoaderTest {
         var cfg = new ConfigLoader().load(yaml);
         assertEquals(true, cfg.voice().postProcess().enabled());
     }
+
+    /** fix-memory-recall-wiring T1.1: memory.dynamicRetrieval 缺省为 true（每轮按 query 召回）。 */
+    @Test
+    void dynamicRetrievalEnabledByDefault() {
+        var cfg = new ConfigLoader().load(null);
+        assertEquals(true, cfg.memory().dynamicRetrieval());
+    }
+
+    /** fix-memory-recall-wiring T1.1: yaml memory.dynamicRetrieval=false 可回退为启动期全量索引注入。 */
+    @Test
+    void yamlCanDisableDynamicRetrieval() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "memory:\n  dynamicRetrieval: false\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(false, cfg.memory().dynamicRetrieval());
+    }
+
+    /** fix-memory-recall-wiring T1.1: memory 段缺失时保留 dynamicRetrieval 默认（true）。 */
+    @Test
+    void yamlMemoryMissingKeepsDynamicRetrievalDefault() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "provider:\n  model: deepseek-chat\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(true, cfg.memory().dynamicRetrieval());
+    }
+
+    /** fix-memory-recall-wiring T1.1: 只配 sideQuery 时 dynamicRetrieval 保持默认，不被误改。 */
+    @Test
+    void yamlSideQueryDoesNotAffectDynamicRetrieval() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "memory:\n  sideQuery:\n    enabled: false\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(false, cfg.memory().sideQuery().enabled());
+        assertEquals(true, cfg.memory().dynamicRetrieval());
+    }
 }
 

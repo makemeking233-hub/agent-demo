@@ -65,6 +65,29 @@ public class SystemPromptBuilder {
     }
 
     /**
+     * 组装**不含长期记忆段**的 system prompt（fix-memory-recall-wiring T2）。
+     *
+     * <p>记忆段的内容与用户提问相关，需要每轮按「当轮 query」动态召回，因此不在此处注入。
+     * 调用方（{@code AgentLoop}）负责把本方法的产物与当轮记忆段拼接成最终 system prompt。
+     * 其余段（身份 / 行为规范 / 运行时存储 / 附加指引）与 query 无关，可跨轮复用。
+     *
+     * @param providerName    provider 类型名（deepseek / minimax / openai / anthropic ...）
+     * @param modelName       当前模型名
+     * @param storageSection  运行时存储位置段（为空则整段省略）
+     * @param extraGuidelines 附加指引列表（为空则整段省略）
+     * @param userOverride    用户自定义 system prompt（--system-prompt；非空白时直接返回）
+     * @return 不含记忆段的 system prompt 文本
+     */
+    public String buildBase(
+            String providerName,
+            String modelName,
+            String storageSection,
+            List<String> extraGuidelines,
+            String userOverride) {
+        return build(providerName, modelName, null, storageSection, extraGuidelines, userOverride);
+    }
+
+    /**
      * 组装运行时存储位置段（含标题；为空时返回空串，整段省略）。
      *
      * @param storageSection 存储位置说明文本

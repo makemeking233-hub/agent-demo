@@ -168,7 +168,10 @@ public class ConfigLoader {
     }
 
     /**
-     * 合并 user yaml 的 {@code memory.sideQuery} 段到 base（缺失段保持 base 值）。
+     * 合并 user yaml 的 {@code memory} 段到 base（缺失段保持 base 值）。
+     *
+     * <p>识别两个键：{@code memory.sideQuery.*}（语义召回补充）与
+     * {@code memory.dynamicRetrieval}（是否每轮按 query 动态召回）。
      *
      * @param base 当前 memory 配置
      * @param map user yaml 顶层字典
@@ -191,7 +194,10 @@ public class ConfigLoader {
         } else {
             sql = baseSql;
         }
-        return new AgentConfig.Memory(sql);
+        boolean dynamicRetrieval = m.containsKey("dynamicRetrieval")
+                ? BoolVal(m.get("dynamicRetrieval"), base.dynamicRetrieval())
+                : base.dynamicRetrieval();
+        return new AgentConfig.Memory(sql, dynamicRetrieval);
     }
 
     /**

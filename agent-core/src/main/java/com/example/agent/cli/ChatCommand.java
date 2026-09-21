@@ -146,8 +146,9 @@ public class ChatCommand implements Runnable {
         LlmProvider provider = AgentLoopFactory.buildProvider(cfg, resolvedKey);
         TokenEstimator estimator = new TokenEstimator();
 
-        // 组装系统提示词：模型无关默认模板 + provider/model 元数据 + 长期记忆 + 用户 --system-prompt 覆盖
-        String systemPrompt = AgentLoopFactory.buildSystemPrompt(cfg, resolvedModel, this.systemPrompt);
+        // 注：system prompt 不在此处组装。fix-memory-recall-wiring 起，装配统一由
+        // AgentLoopFactory.buildLoop 内部完成（它需要同时拿到 provider 才能构造每轮召回的记忆段来源）；
+        // 此前这里另生成一份 buildSystemPrompt 结果但从未使用，属死代码，已移除。
 
         // AtomicReference: lambda-friendly mutable holder for the active MessageHistory
         // (AtomicReference replaces single-element MessageHistory[] array used in v0.1)
