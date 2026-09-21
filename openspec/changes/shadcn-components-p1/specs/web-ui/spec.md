@@ -1,12 +1,16 @@
 # Web UI 增量（shadcn-components-p1）
 
 > 主 spec：`openspec/specs/web-ui/spec.md`
+> 注：主 spec 中无 SettingsModal / ThemeToggle 相关 Requirement，
+> 故本次全部为 ADDED（MODIFIED 会因找不到匹配 header 而 archive 失败）。
 
-## MODIFIED Requirements
+## ADDED Requirements
 
 ### Requirement: SettingsModal 使用 shadcn Dialog
 
-MUST 使用 shadcn `Dialog` + `DialogContent` 替换原 `<div role="dialog">` 手搓实现。
+MUST 使用 shadcn `Dialog` + `DialogContent` 替换原手搓 `<div role="dialog">`，
+以获得 Radix 提供的 focus trap / Esc 关闭 / 焦点还原 / 外点击关闭 / portal 渲染。
+
 对调用方 props 接口 MUST 保持不变：
 
 ```ts
@@ -22,41 +26,47 @@ interface SettingsModalProps {
 }
 ```
 
-#### Scenario: 用户打开设置 modal
+`data-testid="settings-modal"` MUST 保留以兼容现有测试与自动化。
 
-- **WHEN** 用户点击 trigger
-- **THEN** 弹出 shadcn Dialog，自动 focus trap + Esc 关闭 + 关闭时焦点回到 trigger
-- **AND** 内容区渲染左侧 nav + 右侧 content（来自 SettingsContent）
+#### Scenario: 打开设置 modal
 
-#### Scenario: 关闭 modal 后焦点回到 trigger
+- **WHEN** 用户点击 trigger（`open` 变为 true）
+- **THEN** 渲染 shadcn Dialog，`data-testid="settings-modal"` 存在
+- **AND** 左侧渲染 4 个 nav 项（general / models / plugins / agent-presets）+ "设置" 标题
+- **AND** 右侧渲染 SettingsContent（默认 `settings-content-general`）
 
-- **WHEN** 用户按 Esc 或点 mask 关闭
-- **THEN** Radix 自动还原焦点到 trigger 元素
+#### Scenario: 关闭 modal
 
-### Requirement: Dropdown 使用 shadcn DropdownMenu
+- **WHEN** 用户点击关闭按钮
+- **THEN** `onClose` 被调用一次
+- **AND** Radix 自动把焦点还原到 trigger 元素
 
-MUST 使用 shadcn `DropdownMenu` + `DropdownMenuTrigger` + `DropdownMenuContent`
-替换原 `<details>` 元素手搓实现。保留 `Dropdown` 组件作为**兼容 re-export 层**
-（4 处现有使用方暂不强制迁移，§3 统一推进）。
+### Requirement: ThemeToggle 支持 high-contrast 主题
 
-#### Scenario: Dropdown 打开下拉
+`AppearancePreference` MUST 支持 `"light" | "dark" | "system" | "hc"` 四个值。
+`useThemeApplication` MUST 把 `preference="hc"` 映射为 `<html data-theme="hc">`。
+`ThemeToggle` MUST 在 preference 为 hc 时显示高对比度图标与「高对比度」标签。
 
-- **WHEN** 用户点击 trigger
-- **THEN** 弹出 shadcn DropdownMenu
-- **AND** 自动外点击关闭 + Esc 关闭 + 焦点还原
+#### Scenario: 用户选择高对比度
 
-### Requirement: ThemeToggle 三选项含 high-contrast
+- **WHEN** 用户点击 `appearance-card-hc`
+- **THEN** settings store 的 `general.appearance.preference` 被 patch 为 `"hc"`
+- **AND** `useThemeApplication` 把 `<html data-theme>` 设为 `"hc"`
+- **AND** `src/index.css` 中 `[data-theme="hc"]` 选择器覆盖 `--dsw-*` 颜色变量
 
-MUST 在 `ThemeToggle.tsx` 提供 light / dark / hc 三选项，与现有 useThemeApplication
-机制打通。hc 主题选择器 `[data-theme="hc"]` 已在 §1 index.css 提供。
+#### Scenario: 保留跟随系统
 
-#### Scenario: 用户选择 high-contrast 主题
+- **WHEN** 用户选择「跟随系统」（`preference="system"`）
+- **THEN** `data-theme` 跟随 `prefers-color-scheme`（dark → `"dark"`，否则 `"light"`）
+- **AND** 新增 hc 不破坏既有 system 行为
 
-- **WHEN** 用户在 ThemeToggle 选择 "高对比度"
-- **THEN** `<html data-theme="hc">` 被设置
-- **AND** 现状 `--dsw-*` 颜色变量被高对比度配色覆盖（来自 index.css [data-theme="hc"]）
+### Requirement: 淘汰无引用的 Dropdown 组件
 
-#### Scenario: 主题选择持久化
+`Dropdown.tsx` / `Dropdown.test.tsx` / `Dropdown.module.css` MUST 被删除
+（仅由 ReasoningEffortSelect 使用，而后者已迁至 shadcn Popover + RadioGroup）。
 
-- **WHEN** 用户选择主题后刷新页面
-- **THEN** 通过 settings store 的 appearance.preference 持久化（已有机制）
+#### Scenario: 代码库中不再有 Dropdown 引用
+
+- **WHEN** 执行 `grep -r "components/Dropdown" agent-web/frontend/src`
+- **THEN** 无任何匹配
+- **AND** 前端测试与构建仍全绿
