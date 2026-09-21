@@ -30,8 +30,15 @@ describe("MessageBubble", () => {
     const { container } = render(<MessageBubble role="user" text="hi" />);
     const row = container.querySelector("div") as HTMLElement | null;
     expect(row).not.toBeNull();
-    // user 用 rowUser CSS Module 类, 跟 rowAssistant 区分
-    expect(row!.className).toMatch(/rowUser/);
+    // 迁 Tailwind 后不再有 CSS Module 类名；user 行靠 `flex-row-reverse` 区分
+    expect(row!.className).toContain("flex-row-reverse");
+  });
+
+  it("assistant bubble 不反转方向", () => {
+    const { container } = render(<MessageBubble role="assistant" text="hi" />);
+    const row = container.querySelector("div") as HTMLElement | null;
+    expect(row).not.toBeNull();
+    expect(row!.className).not.toContain("flex-row-reverse");
   });
 
   it("renders inline tool cards within assistant message", () => {
