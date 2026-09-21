@@ -193,6 +193,12 @@ export interface SessionSummary {
 /** 工作区（add-workspaces-and-rename）。 */
 export interface Workspace {
   name: string;
+  // align-dsh-workspace v2: 稳定 id / title / updatedAt / status
+  id: string;
+  title: string;
+  updatedAt: number;
+  status: "ok" | "missing_dir";
+  // v1 兼容字段（保留）
   dir: string;
   sessionCount: number;
   lastActiveAt: number;
@@ -312,15 +318,15 @@ export class ChatApi {
     return (await r.json()) as Workspace[];
   }
 
-  // 创建工作区（add-workspaces-and-rename）
-  async createWorkspace(name: string, dir: string): Promise<{ ok: boolean; name: string }> {
+  // 创建工作区（align-dsh-workspace v2: DSH 单 action，只需 path，name + title 后端派生）
+  async createWorkspace(path: string): Promise<{ ok: boolean; name: string; id: string; title: string; dir: string }> {
     const r = await fetch(this.base + '/api/workspaces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, dir }),
+      body: JSON.stringify({ path }),
     });
     if (!r.ok) throw new Error(`createWorkspace ${r.status}: ${await r.text()}`);
-    return (await r.json()) as { ok: boolean; name: string };
+    return (await r.json()) as { ok: boolean; name: string; id: string; title: string; dir: string };
   }
 
   // 会话重命名（add-workspaces-and-rename）

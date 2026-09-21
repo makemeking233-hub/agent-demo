@@ -1,27 +1,29 @@
 /**
- * WorkspacePickerModal（picker-reveal-only）。
+ * WorkspacePickerModal（picker-async + align-dsh-workspace）。
  *
- * 路径输入 + reveal 快速备选（无 OS dialog）：
- *  - 路径输入框：直接键入/粘贴
- *  - 「在资源管理器中显示」按钮：调 /api/settings/reveal（explorer /select, ~50ms）
- *  - 路径变化自动填 basename 为 name（用户改过 name 后不再覆盖）
- *  - 提交：调 onSubmit(name, dir)
+ * <p>DSH 单 action：用户只选 path，name + title 由后端从 basename(path) 派生。
  *
- * <p>不再调 OS FolderBrowserDialog（PowerShell 3-5s 启动太慢）。
+ * <p>异步 picker 流程：
+ *  1. 点"选择文件夹..." → POST /api/workspaces/pick-folder → 立即返回 202 + task_id
+ *  2. 启动 polling（500ms 间隔，30s 后切到 2s 间隔）
+ *  3. status="done" → 调 onSubmit(path) → 关闭
+ *  4. status="cancelled" / "timeout" → 不提示 / 提示超时
+ *  5. 关闭 modal → DELETE task_id（destroy OS process）
+ *
+ * <p>另提供"在资源管理器中显示"按钮 → 调 /api/settings/reveal（复用现有端点）。
  */
 
-import { ExternalLink, X } from "lucide-react";
+import { ExternalLink, FolderSearch, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { cancelPickFolder, pollPickFolder, startPickFolder } from "../api/workspace";
 import styles from "./WorkspacePickerModal.module.css";
 
 const STORAGE_KEY = "agent-demo.workspace-picker.last-path";
-const NAME_RE = /^[A-Za-z0-9._-]+$/;
-
-function basenameOf(p: string): string {
-  if (!p) return "";
-  const m = p.match(/[^\\/]+$/);
-  return m ? m[0] : "";
-}
+const POLL_FAST_MS = 500;
+const POLL_SLOW_MS = 2000;
+const POLL_SWITCH_AFTER_MS = 30_000;
+/** picking 状态超过此秒数仍无 done/error/cancelled 时显示"对话框可能未显示"提示（fix-picker-hint） */
+const PICKING_HINT_AFTER_MS = 3000;
 
 async function callReveal(): Promise<void> {
   const r = await fetch("/api/settings/reveal", { method: "POST" });
@@ -31,33 +33,42 @@ async function callReveal(): Promise<void> {
 export interface WorkspacePickerModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (name: string, dir: string) => Promise<void>;
+  /** align-dsh-workspace v2: 只传 path（name + title 由后端派生） */
+  onSubmit: (path: string) => Promise<void>;
 }
 
 export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePickerModalProps) {
   const [selectedPath, setSelectedPath] = useState<string>("");
-  const [workspaceName, setWorkspaceName] = useState<string>("");
-  const [nameTouched, setNameTouched] = useState(false);
+  const [picking, setPicking] = useState(false);
+  /** picking=true 持续 PICKING_HINT_AFTER_MS 后置 true；picking=false 时立即清掉（fix-picker-hint） */
+  const [pickingHint, setPickingHint] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const taskIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    taskIdRef.current = taskId;
+  }, [taskId]);
 
   // Esc 关闭
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (taskId) void cancelPickFolder(taskId);
+        onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, taskId]);
 
   // 打开时恢复上次路径；关闭时重置
   useEffect(() => {
     if (!open) {
       setSelectedPath("");
-      setWorkspaceName("");
-      setNameTouched(false);
       setError(null);
       return;
     }
@@ -69,15 +80,79 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
     }
   }, [open]);
 
-  // 路径变化自动填 basename 为 name（仅当 name 还没被用户手动改过）
+  // picking 持续过久提示（fix-picker-hint）
   useEffect(() => {
-    if (nameTouched) return;
-    if (!selectedPath) {
-      setWorkspaceName("");
+    if (!picking) {
+      setPickingHint(false);
       return;
     }
-    setWorkspaceName(basenameOf(selectedPath));
-  }, [selectedPath, nameTouched]);
+    const t = setTimeout(() => setPickingHint(true), PICKING_HINT_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [picking]);
+
+  async function handlePickFolder() {
+    setPicking(true);
+    setError(null);
+    const signal = { aborted: false };
+    try {
+      const start = await startPickFolder();
+      setTaskId(start.task_id);
+      await pollUntilDone(start.task_id, signal);
+    } catch (e) {
+      setError("调起资源管理器失败：" + (e as Error).message);
+    } finally {
+      signal.aborted = true;
+      setPicking(false);
+    }
+  }
+
+  async function pollUntilDone(id: string, signal: { aborted: boolean }): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < POLL_SWITCH_AFTER_MS + 5 * 60 * 1000) {
+      if (signal.aborted) return;
+      try {
+        const status = await pollPickFolder(id);
+        if (signal.aborted) return;
+        if (status.status === "done" && status.path) {
+          setSelectedPath(status.path);
+          try {
+            localStorage.setItem(STORAGE_KEY, status.path);
+          } catch {
+            /* ignore */
+          }
+          setTaskId(null);
+          return;
+        }
+        if (status.status === "cancelled") {
+          setTaskId(null);
+          return;
+        }
+        if (status.status === "timeout") {
+          setError("操作超时，请重试");
+          setTaskId(null);
+          return;
+        }
+        if (status.status === "invalid_path") {
+          setError("选定路径无效");
+          setTaskId(null);
+          return;
+        }
+        if (status.status === "error") {
+          setError("操作失败：" + (status.reason ?? "未知"));
+          setTaskId(null);
+          return;
+        }
+        if (status.status === "unknown") {
+          setTaskId(null);
+          return;
+        }
+      } catch {
+        // 网络错误：继续轮询
+      }
+      const interval = Date.now() - start < POLL_SWITCH_AFTER_MS ? POLL_FAST_MS : POLL_SLOW_MS;
+      await new Promise((r) => setTimeout(r, interval));
+    }
+  }
 
   async function handleReveal() {
     setError(null);
@@ -89,20 +164,15 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
   }
 
   async function handleSubmit() {
-    const name = workspaceName.trim();
-    if (!selectedPath || !name || !NAME_RE.test(name) || name.length > 64) {
-      setError("工作区名称非法");
+    const path = selectedPath.trim();
+    if (!path) {
+      setError("请先选择文件夹");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit(name, selectedPath);
-      try {
-        localStorage.setItem(STORAGE_KEY, selectedPath);
-      } catch {
-        /* ignore */
-      }
+      await onSubmit(path);
       onClose();
     } catch (e) {
       setError((e as Error).message ?? "未知错误");
@@ -111,12 +181,7 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
     }
   }
 
-  const canSubmit =
-    !!selectedPath &&
-    !!workspaceName.trim() &&
-    NAME_RE.test(workspaceName.trim()) &&
-    workspaceName.trim().length <= 64 &&
-    !submitting;
+  const canSubmit = !!selectedPath && !submitting;
 
   if (!open) return null;
 
@@ -125,7 +190,10 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
       className={styles.wpOverlay}
       ref={overlayRef}
       onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
+        if (e.target === overlayRef.current) {
+          if (taskId) void cancelPickFolder(taskId);
+          onClose();
+        }
       }}
       role="dialog"
       aria-modal="true"
@@ -137,7 +205,10 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
           <button
             type="button"
             className={styles.wpIconButton}
-            onClick={onClose}
+            onClick={() => {
+              if (taskId) void cancelPickFolder(taskId);
+              onClose();
+            }}
             aria-label="关闭"
           >
             <X size={16} />
@@ -145,6 +216,13 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
         </header>
 
         {error && <div className={styles.wpErrorBanner}>{error}</div>}
+
+        {pickingHint && (
+          <div className={styles.wpHintBanner} data-testid="wp-pick-hint">
+            💡 已发送 OS 文件夹选择请求。如果 5 秒内没有看到弹窗，请检查任务栏 / Alt+Tab；
+            或直接点下方"取消"后在路径框里手动输入工作区目录。
+          </div>
+        )}
 
         <div className={styles.wpBody}>
           <div className={styles.wpRow}>
@@ -154,40 +232,38 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
                 className={styles.wpPathInput}
                 value={selectedPath}
                 onChange={(e) => setSelectedPath(e.target.value)}
-                placeholder="输入绝对路径（点击右侧图标调起资源管理器复制）..."
+                placeholder="点击右侧按钮调起资源管理器选择文件夹，或直接键入路径..."
                 aria-label="文件夹路径"
                 data-testid="wp-path-input"
               />
               <button
                 type="button"
+                className={styles.wpPickButton}
+                onClick={handlePickFolder}
+                disabled={picking}
+                data-testid="wp-pick-folder"
+              >
+                <FolderSearch size={14} />
+                {picking ? "选择中..." : "选择文件夹..."}
+              </button>
+              <button
+                type="button"
                 className={styles.wpRevealButton}
                 onClick={handleReveal}
-                title="在资源管理器中显示（explorer /select 当前文件）"
+                title="在资源管理器中显示（reveal 父目录后手动定位）"
                 data-testid="wp-reveal"
               >
                 <ExternalLink size={14} />
               </button>
             </div>
           </div>
-
-          <div className={styles.wpRow}>
-            <label className={styles.wpLabel}>工作区名称：</label>
-            <input
-              className={styles.wpNameInput}
-              value={workspaceName}
-              onChange={(e) => {
-                setWorkspaceName(e.target.value);
-                setNameTouched(true);
-              }}
-              placeholder="md-main"
-              aria-label="工作区名称"
-              data-testid="wp-name-input"
-            />
-          </div>
         </div>
 
         <footer className={styles.wpFooter}>
-          <button type="button" className={styles.wpCancel} onClick={onClose}>
+          <button type="button" className={styles.wpCancel} onClick={() => {
+            if (taskId) void cancelPickFolder(taskId);
+            onClose();
+          }}>
             取消
           </button>
           <button

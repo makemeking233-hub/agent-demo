@@ -1,12 +1,13 @@
 /**
- * WorkspacePickerModal 路径输入 + reveal 测试 (picker-reveal-only).
+ * WorkspacePickerModal v2 测试 (picker-async + align-dsh-workspace):
+ * DSH 单 action — 只传 path，name + title 由后端派生。
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { WorkspacePickerModal } from "./WorkspacePickerModal";
 
-describe("WorkspacePickerModal (reveal-only)", () => {
+describe("WorkspacePickerModal (v2 single-action)", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -41,17 +42,41 @@ describe("WorkspacePickerModal (reveal-only)", () => {
     expect(screen.getByText("Select Workspace Directory")).toBeInTheDocument();
   });
 
-  it("renders path + name inputs and reveal button; submit disabled when path empty", () => {
+  it("renders path input + pick button + reveal; no name input (DSH single-action); submit disabled when path empty", () => {
     renderModal();
     expect(screen.getByTestId("wp-path-input")).toBeInTheDocument();
-    expect(screen.getByTestId("wp-name-input")).toBeInTheDocument();
+    expect(screen.getByTestId("wp-pick-folder")).toBeInTheDocument();
     expect(screen.getByTestId("wp-reveal")).toBeInTheDocument();
+    // v2 不再需要 name input（后端自动派生）
+    expect(screen.queryByTestId("wp-name-input")).toBeNull();
     expect((screen.getByTestId("wp-submit") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("does NOT render the pick folder button (picker dialog removed)", () => {
+  it("clicking pick button sends POST /api/workspaces/pick-folder", async () => {
+    fetchMock.mockResolvedValueOnce({
+      status: 202,
+      ok: true,
+      json: async () => ({ task_id: "task-1", timeout_seconds: 300 }),
+    });
     renderModal();
-    expect(screen.queryByTestId("wp-pick-folder")).toBeNull();
+    fireEvent.click(screen.getByTestId("wp-pick-folder"));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/workspaces/pick-folder",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+  });
+
+  it("polls until status=done and fills path", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ status: 202, ok: true, json: async () => ({ task_id: "task-1" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: "done", path: "/Users/me/projects" }) });
+    renderModal();
+    fireEvent.click(screen.getByTestId("wp-pick-folder"));
+    await waitFor(() =>
+      expect(screen.getByTestId("wp-path-input")).toHaveValue("/Users/me/projects"),
+    );
   });
 
   it("restore last path from localStorage", () => {
@@ -60,28 +85,14 @@ describe("WorkspacePickerModal (reveal-only)", () => {
     expect(screen.getByTestId("wp-path-input")).toHaveValue("C:\\Users\\test\\projects");
   });
 
-  it("typing path auto-fills basename as name (when name is empty)", () => {
-    renderModal();
-    const pathInput = screen.getByTestId("wp-path-input") as HTMLInputElement;
-    fireEvent.change(pathInput, { target: { value: "C:\\Users\\test\\projects\\md-main" } });
-    expect(screen.getByTestId("wp-name-input")).toHaveValue("md-main");
-  });
-
-  it("does not overwrite user-edited name when path changes", () => {
-    renderModal();
-    const pathInput = screen.getByTestId("wp-path-input") as HTMLInputElement;
-    const nameInput = screen.getByTestId("wp-name-input") as HTMLInputElement;
-    fireEvent.change(pathInput, { target: { value: "C:\\x\\y" } });
-    fireEvent.change(nameInput, { target: { value: "my-name" } });
-    fireEvent.change(pathInput, { target: { value: "C:\\a\\b" } });
-    expect(nameInput).toHaveValue("my-name");
-  });
-
   it("reveal button calls /api/settings/reveal", async () => {
     renderModal();
     fireEvent.click(screen.getByTestId("wp-reveal"));
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/api/settings/reveal", expect.objectContaining({ method: "POST" })),
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/settings/reveal",
+        expect.objectContaining({ method: "POST" }),
+      ),
     );
   });
 
@@ -105,34 +116,33 @@ describe("WorkspacePickerModal (reveal-only)", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("submit enables with valid name + path", async () => {
+  it("submit calls onSubmit with path only (v2 single-action, no name)", async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const onClose = vi.fn();
     renderModal({ onSubmit, onClose });
     fireEvent.change(screen.getByTestId("wp-path-input"), {
-      target: { value: "C:\\x\\y" },
-    });
-    fireEvent.change(screen.getByTestId("wp-name-input"), {
-      target: { value: "my-ws" },
+      target: { value: "C:\\Users\\test\\projects" },
     });
     fireEvent.click(screen.getByTestId("wp-submit"));
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith("my-ws", "C:\\x\\y"));
+    // v2: onSubmit 只接收 path
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith("C:\\Users\\test\\projects"),
+    );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it("submit disabled with invalid name (contains space)", () => {
+  it("submit disabled when path empty", () => {
     renderModal();
-    fireEvent.change(screen.getByTestId("wp-path-input"), { target: { value: "C:\\x\\y" } });
-    fireEvent.change(screen.getByTestId("wp-name-input"), { target: { value: "bad name" } });
     expect((screen.getByTestId("wp-submit") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId("wp-path-input"), { target: { value: "C:\\x\\y" } });
+    expect((screen.getByTestId("wp-submit") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("submit failure shows error", async () => {
-    const onSubmit = vi.fn().mockRejectedValue(new Error("workspace_exists"));
+    const onSubmit = vi.fn().mockRejectedValue(new Error("dir_not_found"));
     renderModal({ onSubmit });
-    fireEvent.change(screen.getByTestId("wp-path-input"), { target: { value: "C:\\x\\y" } });
-    fireEvent.change(screen.getByTestId("wp-name-input"), { target: { value: "my-ws" } });
+    fireEvent.change(screen.getByTestId("wp-path-input"), { target: { value: "C:\\nope" } });
     fireEvent.click(screen.getByTestId("wp-submit"));
-    await waitFor(() => expect(screen.getByText(/workspace_exists/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/dir_not_found/)).toBeInTheDocument());
   });
 });

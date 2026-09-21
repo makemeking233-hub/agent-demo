@@ -48,8 +48,14 @@ export function bucketKeyOf(session: SidebarSession): string {
   return session.bucket && BUCKET_LABELS[session.bucket] ? session.bucket : "earlier";
 }
 
+/** align-dsh-workspace v2: Sidebar 暴露 v2 record 字段（id / title / status / updatedAt） */
 export interface SidebarWorkspace {
   name: string;
+  id?: string;
+  title?: string;
+  updatedAt?: number;
+  status?: "ok" | "missing_dir";
+  // v1 兼容字段
   dir: string;
   sessionCount: number;
 }
@@ -224,12 +230,15 @@ export function Sidebar(props: SidebarProps) {
               type="button"
               className={`${styles.workspaceItem} ${
                 ws.name === props.activeWorkspace ? styles.workspaceActive : ""
-              }`}
+              } ${ws.status === "missing_dir" ? styles.workspaceMissing : ""}`}
               onClick={() => {
                 setArchiveView(false);
                 props.onWorkspaceChange(ws.name);
               }}
-              title={ws.dir}
+              title={ws.status === "missing_dir"
+                ? `目录已移动：${ws.dir}（点击切换可重新指定）`
+                : ws.dir}
+              data-testid={`workspace-item-${ws.name}`}
             >
               <Folder size={12} />
               <span className={styles.workspaceName}>{ws.name}</span>

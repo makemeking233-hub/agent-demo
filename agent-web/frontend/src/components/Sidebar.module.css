@@ -343,6 +343,15 @@
   color: var(--dsw-alias-text);
 }
 
+/* align-dsh-workspace v2: 缺失目录（status='missing_dir'）workspace 标红 */
+.workspaceMissing {
+  border-color: #dc2626 !important;
+  color: #dc2626;
+  text-decoration: line-through;
+  text-decoration-color: rgba(220, 38, 38, 0.5);
+}
+.workspaceMissing:hover { background: rgba(220, 38, 38, 0.08) !important; }
+
 .workspaceName { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
 .workspaceCount { opacity: 0.7; }
 
