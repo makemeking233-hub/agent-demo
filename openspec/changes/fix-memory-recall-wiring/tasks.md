@@ -38,5 +38,5 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交。
 
 - [x] 6.1 端到端装配测试：在临时 memory 目录写入两条记忆（其中一条与测试 query 字面相关），经 `buildLoop` 构建 agent 并触发一轮对话，断言该轮 system prompt 记忆段包含相关条目、且**不**包含无关条目的全量索引文本
 - [x] 6.2 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿（jacoco LINE≥80% / BRANCH≥70%）
-- [ ] 6.3 更新 `docs/design/memory-recall-deep-dive.md`：把 §5.2「关键事实 2（断点）」与 §6.5 标注为「已由 change fix-memory-recall-wiring 修复」，并同步 §7 路线图中已完成的第一步
-- [ ] 6.4 `openspec archive` 归档本 change（delta spec 并入 `openspec/specs/memory/spec.md`）后 commit + push
+- [x] 6.3 更新 `docs/design/memory-recall-deep-dive.md`：把 §5.2「关键事实 2（断点）」与 §6.5 标注为「已由 change fix-memory-recall-wiring 修复」，并同步 §7 路线图中已完成的第一步
+- [x] 6.4 `openspec archive` 归档本 change（delta spec 并入 `openspec/specs/memory/spec.md`）后 commit + push
