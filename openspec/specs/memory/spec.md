@@ -46,6 +46,8 @@ TBD - created by archiving change add-memory-three-scope. Update Purpose after a
 
 系统 SHALL 提供配置开关以关闭上述动态召回行为；关闭时系统 SHALL 回退为「启动期注入各 scope 全量索引（截断至 200 行 / 25KB）」的兼容行为。
 
+本 change（add-embedding-rag）起，召回流程 SHALL 为**三层架构**：字面 → embedding 粗排（新增） → sideQuery 精排；详见 `memory-embedding` capability 的 `Requirement: 三层召回架构（粗排 + 精排解耦）`。
+
 #### Scenario: 条目携带 scope
 
 - **WHEN** 一条记忆被解析为 `MemoryEntry`
@@ -86,6 +88,8 @@ TBD - created by archiving change add-memory-three-scope. Update Purpose after a
 系统 SHALL 在字面 token 重叠召回命中不足时，复用当前 LLM provider 发起一次轻量模型调用，从候选条目中挑选与查询最相关的 K 条作为补充，与字面结果并集去重后注入记忆段。
 
 上述调用 SHALL 发生在**每一轮请求组装时**（由该轮的 user 消息触发），使该补充行为在实际运行路径上可达。系统 SHALL 保证同一轮内至多发起一次该调用。
+
+本 change（add-embedding-rag）起，三层召回架构中 sideQuery 改为**精排层**：其触发条件由「字面召回不足」改为「**字面 ∪ embedding 粗排**召回不足」。具体触发门槛 SHALL 仍为「命中数 < k AND 候选 ≥ `minCandidates` AND `sideQuery.enabled`」。
 
 #### Scenario: 字面命中充足时不调用 provider
 
