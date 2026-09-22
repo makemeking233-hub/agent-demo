@@ -156,7 +156,7 @@ openspec/
 | §2.2 commit 即 push | tasks.md 每项 commit 后立即 push；用中文 Conventional Commits |
 | §2.1 成本豁免 | OpenSpec change 内部仍按里程碑/M 分摊汇报；MiniMax 模型不受 5 元红线 |
 | §3 关键决策 | change 内的 design.md 不得违反 JDK17 / Fail-Closed / JSONL 0700 / 无 Lombok 等 |
-| jacoco 门禁 | `mvn verify` 在 apply-change 收尾时必跑，LINE≥80% / BRANCH≥70% |
+| jacoco 门禁 | `mvn verify` 在 apply-change 收尾时必跑。阈值（LINE≥80% / BRANCH≥70%）、考核方式（`PACKAGE` 逐包独立考核；`includes` 必须**成对**写「根包」与「根包 `.*`」，只写其一会静默漏检）与排除清单的**真源**是 `openspec/specs/testability/spec.md` 的《覆盖率门禁》Requirement |
 
 #### 2.5.4 强制门禁
 
@@ -497,6 +497,7 @@ mvn -o -pl agent-core,agent-web package -DskipTests -DskipNpm=true
 ---
 
 > 修订记录：
+> - v0.1.9（2026-09-23）：§2.5.3 的 jacoco 门禁一行改为指向 `openspec/specs/testability/spec.md §覆盖率门禁`（门禁规则改成有规格锚点，不再只写在本文件里）；同时写明 `includes` 必须成对写根包与子包——`PACKAGE` 元素下 `X` 只中根包、`X.*` 只中子包，实测只写其一会让子包的覆盖缺口静默漏检（fix-jacoco-rule）
 > - v0.1.8（2026-09-22）：🔴 **§2.7 由「分支隔离（默认）」升格为「worktree 隔离（强制，无例外）」**（用户明确要求，每次必须严格执行）——新增 5 条强制条款（worktree 是唯一允许的隔离方式、接到需求第一件事就是建 worktree、绝不在 main 上直接改、作业期间 pwd 必须在 worktree 内、测试全绿才可合并）+「违反=该次改动视为未完成」；§2.7.1 事故表新增第 4 条（2026-09-22 运行中应用被同工作区并发构建替换 fat jar 打断，`NoClassDefFoundError: DefaultPromise$1`）；§2.7.2 删掉「或 git checkout -b」并新增「开工自检」四步表；§2.7.6 豁免表按「是否碰 `src/` 代码」重写（修 bug/重构/性能优化一律必须 worktree，紧急 hotfix 也需 worktree）；**§2.7.5.1 新增「新建 worktree 的已知环境前置」**（`static/` 被 gitignore 排除 → 全新 worktree 里 `WebIntegrationTest.rootServesIndexHtml` 会 404 变红，给出两种处置）；§2.2、§2.5.4、§3 同步改为 worktree 强制
 > - v0.1.7（2026-09-23）：新增 §2.7.8 门禁命令与「应用正在运行」的冲突——`repackage` 撞 jar 占用该先停应用；`-Dspring-boot.repackage.skip=true` 会把可执行 fat jar 覆盖成普通 jar（启动能力静默丢失而门禁仍绿），若用了必须补真 repackage 并校验 manifest 的 `Start-Class`
 > - v0.1.6（2026-09-13）：§2.7.5.1 门禁 1 的 tsc 基线由 27 更正为 **7**；新增 §2.7.7 说明基线的构成与维护（17 条假报错来自缺失的 `vite-env.d.ts`，剩余 7 条才是真既有问题）
