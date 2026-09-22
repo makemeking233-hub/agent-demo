@@ -5,7 +5,6 @@
  */
 
 import { useEffect, useState } from "react";
-import styles from "./SettingsRows.module.css";
 
 type Language = "zh" | "en";
 
@@ -38,12 +37,12 @@ export function LanguageSelect() {
   }, [value]);
 
   return (
-    <div className={styles.group}>
-      <div className={styles.title}>语言</div>
-      <div className={styles.row}>
-        <div className={styles.rowControl}>
+    <div className="mb-6 flex flex-col gap-2">
+      <div className="text-sm font-medium text-foreground">语言</div>
+      <div className="flex items-center gap-4 py-2">
+        <div className="flex-1">
           <select
-            className={styles.select}
+            className="min-w-[200px] rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
             value={value}
             onChange={(e) => setValue(e.target.value as Language)}
             data-testid="language-select"
@@ -54,7 +53,7 @@ export function LanguageSelect() {
               </option>
             ))}
           </select>
-          <div className={styles.hint}>
+          <div className="mt-1 text-xs text-muted-foreground">
             语言切换将在后续版本启用完整 i18n 支持
           </div>
         </div>

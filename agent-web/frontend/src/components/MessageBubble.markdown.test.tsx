@@ -52,7 +52,7 @@ describe("MessageBubble 富 Markdown 渲染", () => {
       const table = container.querySelector("table")!;
       const wrapper = table.parentElement!;
       expect(wrapper.tagName).toBe("DIV");
-      expect(wrapper.className).toMatch(/tableWrap/);
+      expect(wrapper.className).toMatch(/overflow-x-auto/);
     });
 
     it("未闭合的表格按普通段落渲染且不抛错", () => {

@@ -1,5 +1,4 @@
 import type { SessionStats } from "../api/chat";
-import styles from "./StatsBar.module.css";
 
 interface StatsBarProps {
   stats: SessionStats | null;
@@ -45,7 +44,11 @@ export function StatsBar({ stats }: StatsBarProps) {
     `输入 ${s?.tokens_in ?? 0} tok · 输出 ${s?.tokens_out ?? 0} tok`,
   ];
   return (
-    <div className={styles.bar} data-testid="stats-bar" title={segments.join(" | ")}>
+    <div
+      className="overflow-hidden px-4 pt-1 pb-2 text-[11px] text-muted-foreground tabular-nums whitespace-nowrap text-ellipsis"
+      data-testid="stats-bar"
+      title={segments.join(" | ")}
+    >
       {segments.join(" | ")}
     </div>
   );

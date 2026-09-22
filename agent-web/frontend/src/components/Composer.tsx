@@ -4,7 +4,6 @@ import { type ModelEntry, type PermissionMode } from "../api/chat";
 import { OnlineProvider, useOnline } from "../hooks/useOnline";
 import { useSettingsStore } from "../hooks/useSettingsStore";
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
-import styles from "./Composer.module.css";
 
 interface ComposerProps {
   busy: boolean;
@@ -140,23 +139,31 @@ function ComposerInner({
   const offline = !isOnline;
 
   return (
-    <div className={styles.composer}>
+    <div className="relative flex flex-col border-t border-border bg-card px-4 py-3">
       {/* M2: toast 显示（agent 还在跑 / 已加入队列） */}
-      {toast && <div className={styles.partial}>{toast}</div>}
+      {toast && (
+        <div className="mb-1 self-stretch overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1 text-[0.7em] italic text-muted-foreground opacity-70">
+          {toast}
+        </div>
+      )}
       {/* T6：partial display（输入框正上方，半透明灰色，语音循环未启动不渲染） */}
-      {showPartial && <div className={styles.partial}>{partialText}</div>}
+      {showPartial && (
+        <div className="mb-1 self-stretch overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1 text-[0.7em] italic text-muted-foreground opacity-70">
+          {partialText}
+        </div>
+      )}
       {showSlashHint && (
-        <div className={styles.slashHint}>
+        <div className="absolute bottom-full left-4 flex gap-1 rounded-sm border border-border bg-background px-2 py-1 shadow-md">
           {SLASH_COMMANDS.filter((c) => c.startsWith(trimmed)).map((c) => (
-            <span key={c} className={styles.slashHintItem}>
+            <span key={c} className="rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-xs">
               {c}
             </span>
           ))}
         </div>
       )}
-      <div className={styles.row}>
+      <div className="flex items-end gap-2">
         <textarea
-          className={styles.input}
+          className="min-h-10 max-h-[200px] flex-1 resize-none rounded-md border border-border bg-background px-2.5 py-2 text-sm leading-normal text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-accent-subtle disabled:bg-secondary disabled:text-muted-foreground"
           rows={2}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -167,14 +174,18 @@ function ComposerInner({
         {onVoiceToggle && (
           <button
             type="button"
-            className={`${styles.button} ${voiceActive ? styles.voiceOn : ""}`}
+            className={
+              voiceActive
+                ? "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-none bg-accent text-primary-foreground outline-2 outline-accent-subtle"
+                : "inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-none bg-accent text-primary-foreground disabled:cursor-not-allowed disabled:bg-neutral-300"
+            }
             onClick={onVoiceToggle}
             disabled={offline}
             aria-label={voiceActive ? "关闭自由语音" : "开启自由语音"}
             title={voiceActive ? "关闭自由语音" : "开启自由语音"}
           >
             {voiceState === "loading" ? (
-              <Loader2 size={16} className={styles.spin} />
+              <Loader2 size={16} className="animate-spin" />
             ) : voiceActive ? (
               <Mic size={16} />
             ) : (
@@ -185,7 +196,7 @@ function ComposerInner({
         {onMuteToggle && (
           <button
             type="button"
-            className={styles.button}
+            className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-none bg-accent text-primary-foreground disabled:cursor-not-allowed disabled:bg-neutral-300"
             onClick={onMuteToggle}
             disabled={offline}
             aria-label={muted ? "开启朗读" : "静音朗读"}
@@ -195,14 +206,18 @@ function ComposerInner({
           </button>
         )}
         {busy && onAbort ? (
-          <button type="button" className={`${styles.button} ${styles.abort}`} onClick={onAbort}>
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-none bg-destructive text-primary-foreground"
+            onClick={onAbort}
+          >
             <Square size={16} />
-            <Loader2 size={16} className={styles.spin} />
+            <Loader2 size={16} className="animate-spin" />
           </button>
         ) : (
           <button
             type="button"
-            className={styles.button}
+            className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border-none bg-accent text-primary-foreground disabled:cursor-not-allowed disabled:bg-neutral-300"
             onClick={submit}
             disabled={!trimmed || offline}
             title={offline ? "网络已断开，无法发送" : undefined}
@@ -211,10 +226,10 @@ function ComposerInner({
           </button>
         )}
       </div>
-      <div className={styles.statusBar}>
-        <span className={styles.permission}>
+      <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center">
           <select
-            className={styles.permissionSelect}
+            className="cursor-pointer rounded-sm border border-border bg-background px-1.5 py-0.5 text-[11px] text-foreground focus:border-primary focus:outline-none"
             value={permissionMode}
             onChange={(e) => onPermissionModeChange?.(e.target.value as PermissionMode)}
             aria-label="权限模式"
@@ -230,13 +245,13 @@ function ComposerInner({
         {/* add-models-dropdown-v0: 思考强度下拉；add-provider-catalog-abstract task 10
             改用 options: ReasoningEffort[]（组件自己判断空数组时返回 null） */}
         {onReasoningEffortChange && reasoningEffort !== undefined && (
-          <span className={styles.effort}>
+          <span className="inline-flex items-center gap-1">
             <ReasoningEffortSelect
               options={model?.reasoningEfforts ?? []}
               value={reasoningEffort}
               onChange={onReasoningEffortChange}
             />
-            <span className={styles.effortHint}>下次发送生效</span>
+            <span className="text-[11px] text-muted-foreground">下次发送生效</span>
           </span>
         )}
         <span>{trimmed.length} 字符</span>
