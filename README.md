@@ -159,7 +159,7 @@ flowchart LR
 - ✅ **富 Markdown**：GFM 表格 / 删除线 / 任务列表、KaTeX 公式（双美元块）、`rehype-highlight` 代码高亮、远程与本地图片（新增 `GET /api/fs/raw`，中文文件名 RFC 5987 + CSP `sandbox` 头）、原始 HTML 安全基线、`useDeferredValue` 流式时序
 - ✅ **Mermaid 围栏渲染成图**：rehype 改写把 `language-mermaid` 围栏换 `<mermaid-block>` 自定义标签 + 运行时按需懒加载 + `securityLevel: 'strict'` + 恒定深色 + 闭合判定 + 失败兜底 + PWA 预缓存白名单收敛（避免随库膨胀）
 - ✅ **模型下拉 + 思考强度**：UI 下拉切换 model + 思考强度（low/medium/high）跨会话持久化（localStorage），reasoning 模型自动注入；CLI 配套 `/effort` 命令
-- ✅ **权限模式下拉**：Read Only / Workspace Write / Full Access 三档，会话内生效无持久化
+- ✅ **权限模式 4 档 dsh 命名**：Plan / Ask / Danger Full / Don't Ask，会话内生效无持久化（默认 Plan）；与后端 `SandboxMode` 4 档对齐（旧 `read_only` / `workspace_write` / `full_access` 启动时自动 normalize + INFO 日志 + 写回 settings.yaml）
 
 ### 3.5 PWA & 离线
 
@@ -540,18 +540,43 @@ cd agent-web/frontend && npm run dev   # http://localhost:5173
 
 跨平台危险命令黑名单（强制二次确认）：类 Unix（`rm -rf /`、`mkfs`、`dd`、`shutdown` 等）；Windows（`format`、`diskpart`、`bcdedit` 等）。匹配语义（归一化 basename + 短参数簇展开）见 `docs/design/design.md` §6.6。
 
-### 9.1 权限模式（Web UI 下拉）
+### 9.1 权限模式与 Sandbox Policy（rewrite-permission-mode-dsh；dsh 4 档对齐）
 
-Web UI 输入区右下角有**权限模式下拉**，用于按会话设定全局权限基准（缺省 `Read Only`，仅会话内生效、无持久化）：
+Web UI 输入区右下角有**权限模式下拉** + **设置面板**（持久化到 `general.permission.mode`），用于按会话或全局设定权限基准。**缺省 `plan`，仅会话内切换不写回 settings**：
 
-| 模式 | 读文件/列目录 | 写/编辑（工作目录内）| 写/编辑（工作目录外）| 执行命令 / 其它工具 | 敏感路径 |
-|------|:---:|:---:|:---:|:---:|:---:|
-| **Read Only** | 放行 | 询问 | 询问 | 询问 | 询问 |
-| **Workspace Write** | 放行 | 放行 | 询问 | 询问 | 询问 |
-| **Full access** | 放行 | 放行 | 放行 | 放行 | 放行 |
+| 模式 (dsh) | wire value | 读文件/列目录 | 写/编辑（工作目录内）| 写/编辑（工作目录外）| 执行命令 / 其它工具 | 敏感路径（`~/.ssh/**` 等）|
+|------|---|:---:|:---:|:---:|:---:|:---:|
+| **Plan** | `plan` | 放行 | 询问 | 询问 | 询问 | 询问 |
+| **Ask** | `ask` | 放行 | 放行 | 询问 | 询问 | 询问 |
+| **Danger Full** | `danger-full` | 放行 | 放行 | 放行 | 放行 | 放行 |
+| **Don't Ask** | `dontAsk` | 放行 | 放行（自动） | 拒绝（仅 `writableRoots` 派生根：workspace + `/tmp` + `tmpdir`）| 放行 | 放行 |
 
-- 非放行类别仍走 `permission_request` 弹窗（不静默拒绝）；工具级 `DENY`（危险命令黑名单 / `isDestructive`）始终是终态兜底。
-- 切换即调 `POST /api/chat/{stream_id}/permission`；新会话缺省 `read_only`，随 `POST /api/chat/send` 的 `permission_mode` 设初始模式。
+**核心概念（对齐 dsh `SandboxPolicy`）**：
+
+- **`SandboxPolicyService`** 单例（agent-core `permission` 包），每个 tool call 通过 `resolve(ctx, Capability)` 解析完整 `SandboxPolicy { mode, workspaceRoot, tempRoots, capability }`（per-call 解析粒度，mode 变化无需重建 AgentLoop）。
+- **`writableRoots(policy)`** 单一派生函数：PLAN/ASK/DANGER_FULL 返回空列表（不 fence / 仅 workspace 内）；DONT_ASK 返回 `[workspaceRoot, /tmp, tmpdir]` 经 `Path.toRealPath()` canonicalize 去重（dsh one-home 原则：fs / bash / terminal 三能力共享，不会 drift）。
+- **`FsDenialKind`** 5 种拒绝原因分类（READ_OUT_OF_BOUNDS / WRITE_OUT_OF_BOUNDS / SENSITIVE_PATH / TOOL_DENY / MODE_REJECTED），每种携带推荐 `suggestedMode`（WRITE_OUT_OF_BOUNDS → danger-full）。
+- **TOCTOU 防护**：写之前 `Path.toRealPath()` re-canonicalize，捕获自工具解析以来发生的 symlink swap；`AbstractFileTool.writeWithCas` 用 tmp 文件 + `Files.move(ATOMIC_MOVE)` + 冲突 1 次 retry 实现乐观 CAS。
+- **结构化拒绝反馈**：`PathResult.denied(kind, currentMode, suggestedMode, marker)`，前端渲染 `[sandbox: <kind> under <mode> mode]` marker + 同回合 escalate 升级按钮（点击调 `POST /api/chat/{id}/permission {mode, escalate:true}`，turn 结束自动恢复）。
+
+**端点契约**：
+
+- `POST /api/chat/send` 接受 `permission_mode` 字段（4 档 dsh 或 3 档旧命名均接受；旧值自动 normalize + 响应含 `effective_mode`）。
+- `POST /api/chat/{stream_id}/permission` 接受 `mode` + `escalate: bool`；escalate=true 时临时升级、turn 结束自动恢复，响应含 `effective_mode`。
+- 模式变更广播 SSE `sandbox/mode` 事件（`{ stream_id, from_mode, to_mode, reason, ts }`，reason 取 `initial` / `user_set` / `escalate` / `turn_end_restore`），同时落盘 session.jsonl 供审计。
+- `SessionOwnerRegistry`（Q2 多用户防护）：send 时注册 `stream_id → owner_ip`，permission 切换时校验同 IP（异 IP 403 `ip_mismatch`）；`unknown` / 空 IP mock 兼容。
+
+**旧 wire value 兼容**：`read_only` → `plan` / `workspace_write` → `ask` / `full_access` → `danger-full` 启动时自动 migrate + INFO 日志 + 写回 settings.yaml（`SettingsService.read()` 触发）。
+
+- 工具级 `DENY`（危险命令黑名单 / `isDestructive`）始终是终态兜底，`DANGER_FULL` 也不绕过。
+- **不实现** bash 内核隔离（Seatbelt / bwrap / Landlock / Windows ACL），Shell 仍依赖 denylist + 询问；详见 §"Known Limitations"。
+
+### 9.2 Known Limitations（rewrite-permission-mode-dsh 已知限制）
+
+- **bash 内核隔离未实现**：当前 Shell 工具仍依赖 `DefaultDenylistMatcher`（命令名 + 短参数簇 + flag 包含语义）+ `PermissionManager` 询问兜底；DANGER_FULL 模式**不**提供 Linux Landlock / macOS Seatbelt / Windows SACL 类内核级系统调用隔离，恶意 shell 命令在 agent 进程权限内可绕过 denylist。dsh web 通过 `bash-sandbox` + `sandbox-local` + `windows-acl` 三个 provider 实现真内核隔离（参见 [sandbox README](https://github.com/deepseek-ai/dsh/blob/main/packages/sandbox/sandbox/README.md)）；agent-demo 留 follow-up，预期工作量 ~15d（跨平台 JNI + Landlock API + macOS `sandbox_init` + Windows ACL）。
+- **multi-tenant 防护有限**：`SessionOwnerRegistry` 仅校验 IP（`X-Forwarded-For` 或 remote address），进程内 `ConcurrentHashMap` 存储；进程重启即丢。单机个人使用 OK，**不适合**多用户/公网部署（多租户 follow-up）。
+- **TOCTOU 残余**：`AbstractFileTool.writeWithCas` 通过写之前 `Path.toRealPath()` 收窄窗口，但与 `Files.move` 之间仍有 race；dsh web 用 `openat2` 类原语进一步收紧，agent-demo 不引入 native 依赖。
+- **embedding 语义召回未启用**（spec v0.3 升级路径）：当前 `MemoryRetriever` 用字面 token 重叠 + LLM 二次筛选（`SideQuerySelector`），未引入本地 embedding（与 dsh `sandbox/mode` 设计路径一致，详见 §3.13）。
 
 ---
 
@@ -663,7 +688,7 @@ Web UI 输入区右下角下拉（详见 §9.1）：
 | 添加 Skill 指令卡 | 在 `~/.agent-demo/skills/<name>/SKILL.md` 写 frontmatter |
 | 多工作区并行 | Web UI 左下角「+」→ picker modal 选目录 → 每个工作区独立运行目录 |
 | 删除历史会话（可恢复）| 侧栏会话 `...` 菜单 → 归档 |
-| 锁定权限模式 | Web UI 输入区右下角下拉（Read Only / Workspace Write / Full Access）|
+| 锁定权限模式 | Web UI 输入区右下角下拉（Plan / Ask / Danger Full / Don't Ask 4 档 dsh 命名）|
 | 看 token 消耗 + 吞吐 + 缓存命中 | Web UI 底部状态栏；`/history`（CLI） |
 | 用 Mermaid 画图 | 直接在对话里写 ```` ```mermaid ```` 围栏 |
 | 用 GFM 表格 / KaTeX 公式 / 代码高亮 | 直接在对话里写 Markdown / `$$formula$$` / ` ```code``` ` |

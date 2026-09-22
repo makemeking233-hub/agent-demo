@@ -75,8 +75,12 @@ public class WecomMessageDispatcher {
             String sessionId = sessionMapper.getOrCreate(userId);
             String model = DEFAULT_MODEL;
             // FULL_ACCESS：微信通道默认全放行（绕过 PermissionConfirmer）
+            // rewrite-permission-mode-dsh T12.2: 改用 DANGER_FULL (4 档 dsh 命名)
             ChatStreamService.ActiveStream meta = streamsProvider.getObject().create(
-                    sessionId, model, PermissionMode.FULL_ACCESS, null, null);
+                    sessionId, model,
+                    com.example.agent.permission.PermissionMode.fromSandboxMode(
+                            com.example.agent.permission.SandboxMode.DANGER_FULL),
+                    null, null);
             // 异步订阅 chunks → ReplyPusher；不阻塞 Controller
             String content = event.content() == null ? "" : event.content();
             Flux.from(meta.loop().processTurn(new com.example.agent.core.Message.User(content)))

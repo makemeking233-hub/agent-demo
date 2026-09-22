@@ -78,13 +78,13 @@
 
 ## 12. 兼容迁移（2 个 task）
 
-- [ ] 12.1 `SettingsLoader`：加旧 wire value 迁移（`read_only` → `plan`、`workspace_write` → `ask`、`full_access` → `danger-full`） + INFO 日志 + 写回 YAML
-- [ ] 12.2 `WecomMessageDispatcher`：把 `PermissionMode.FULL_ACCESS` 改为 `SandboxMode.DANGER_FULL`
+- [x] 12.1 `SettingsLoader`：加旧 wire value 迁移（`read_only` → `plan`、`workspace_write` → `ask`、`full_access` → `danger-full`） + INFO 日志 + 写回 YAML
+- [x] 12.2 `WecomMessageDispatcher`：把 `PermissionMode.FULL_ACCESS` 改为 `SandboxMode.DANGER_FULL`
 
 ## 13. 文档与 README
 
-- [ ] 13.1 `README.md`：删除原 §3.x 权限模式章节（3 档老命名），新增 §"权限模式与 Sandbox Policy"（4 档 dsh 命名 + sandbox-policy 服务 + writableRoots + TOCTOU + escalate 流程图）
-- [ ] 13.2 `README.md`：在 §"Known Limitations" 段加 bash 内核隔离未实现（denylist 兜底，留 follow-up）
+- [x] 13.1 `README.md`：删除原 §3.x 权限模式章节（3 档老命名），新增 §"权限模式与 Sandbox Policy"（4 档 dsh 命名 + sandbox-policy 服务 + writableRoots + TOCTOU + escalate 流程图）
+- [x] 13.2 `README.md`：在 §"Known Limitations" 段加 bash 内核隔离未实现（denylist 兜底，留 follow-up）
 
 ## 14. spec archive（按 §2.5 / §2.7.5）
 
