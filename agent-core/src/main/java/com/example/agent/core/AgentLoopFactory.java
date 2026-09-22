@@ -1,6 +1,7 @@
 package com.example.agent.core;
 
 import com.example.agent.config.AgentConfig;
+import com.example.agent.config.AgentPaths;
 import com.example.agent.core.Message;
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.llm.LlmProvider;
@@ -8,7 +9,11 @@ import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.memory.MemoryDir;
 import com.example.agent.memory.MemoryPromptBuilder;
+import com.example.agent.memory.MemoryRecall;
+import com.example.agent.memory.MemoryRetriever;
 import com.example.agent.memory.MemoryScope;
+import com.example.agent.memory.MemorySectionProvider;
+import com.example.agent.memory.MemorySectionSource;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionMode;
 import com.example.agent.prompt.SystemPromptBuilder;
@@ -59,15 +64,32 @@ public final class AgentLoopFactory {
      * @return 对应 provider 实例
      */
     public static LlmProvider buildProvider(AgentConfig cfg, String resolvedKey) {
+        String baseUrl = baseUrlOf(cfg);
         return switch (cfg.provider().type() == null
                 ? "deepseek"
                 : cfg.provider().type().toLowerCase()) {
-            case "deepseek" -> new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey);
-            case "minimax" -> new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey);
+            case "deepseek" -> baseUrl == null
+                    ? new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey)
+                    : new com.example.agent.provider.deepseek.DeepSeekProvider(resolvedKey, baseUrl);
+            case "minimax" -> baseUrl == null
+                    ? new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey)
+                    : new com.example.agent.provider.minimax.MiniMaxProvider(resolvedKey, baseUrl);
             default ->
                     throw new IllegalArgumentException(
                             "未知 provider 类型: " + cfg.provider().type() + "（支持 deepseek / minimax）");
         };
+    }
+
+    /**
+     * 取 cfg.provider().baseUrl，空白视为未设置（fallback 到子类的默认常量）。
+     * fix-provider-baseurl：此前 buildProvider 完全不读此值，
+     * {@code DEEPSEEK_BASE_URL} 与 yml 的 {@code provider.baseUrl} 在 CLI/web 上都是死路径。
+     */
+    private static String baseUrlOf(AgentConfig cfg) {
+        if (cfg.provider() == null) return null;
+        String url = cfg.provider().baseUrl();
+        if (url == null || url.isBlank()) return null;
+        return url.trim();
     }
 
     /**
@@ -109,10 +131,9 @@ public final class AgentLoopFactory {
         tools.register(new ShellTool(adapter, timeoutSec, cfg.shell().maxOutputBytes(), true));
         tools.register(new LsTool());
         // Skills：发现用户级 + 项目级技能并注册为工具
-        String userHome = System.getenv("AGENT_DEMO_HOME") != null
-                        && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                ? System.getenv("AGENT_DEMO_HOME")
-                : System.getProperty("user.home");
+        // fix-agent-home-isolation：基目录统一走 AgentPaths，使其与 WebAgentRuntime 同源
+        // （原先只认 env，不认系统属性 agent.demo.home，测试隔离盖不住这里）
+        String userHome = AgentPaths.homeBase();
         String cwd = System.getProperty("user.dir");
         java.util.List<Path> skillRoots = java.util.List.of(
                 Paths.get(userHome, ".agent-demo", "skills"),
@@ -141,59 +162,94 @@ public final class AgentLoopFactory {
     }
 
     /**
+     * system prompt 的两部分产物（fix-memory-recall-wiring T5）。
+     *
+     * @param basePrompt          基础段：身份 + 行为规范 + 运行时存储 + 附加指引（**不含**记忆段）
+     * @param memorySectionSource 记忆段来源（每轮按当轮提问产出）；{@code null} 表示已回退为
+     *                            「全量索引已内联进 basePrompt」的静态模式
+     */
+    public record PromptParts(String basePrompt, MemorySectionSource memorySectionSource) {}
+
+    /**
      * 组装 system prompt（模型无关默认模板 + provider/model 元数据 + 长期记忆 + 存储说明 + 用户覆盖）。
+     *
+     * <p><b>注意</b>：本方法无 query 上下文，故记忆段为各 scope 的**全量索引**（静态）。需要按当轮
+     * 提问动态召回的装配路径（{@code buildLoop}）应改用 {@link #buildSystemPromptParts}。
      *
      * @param cfg 已加载的配置
      * @param resolvedModel 解析后的模型名
      * @param override 用户 --system-prompt 覆盖（可 null）
-     * @return 完整 system prompt 文本
+     * @return 完整 system prompt 文本（含静态全量索引记忆段）
      */
     public static String buildSystemPrompt(
             AgentConfig cfg, String resolvedModel, String override) {
-        return buildSystemPrompt(cfg, resolvedModel, override, null);
+        return basePromptOf(cfg, resolvedModel, override)
+                + "\n\n"
+                + staticIndexSection(cfg);
     }
 
     /**
-     * 组装 system prompt（含 sideQuery 语义召回）。
+     * 组装 system prompt 的两部分（fix-memory-recall-wiring T5）。
      *
-     * @param provider LLM provider（可空；null 时 memory 注入走纯字面召回，不调 sideQuery）
+     * <p>按 {@code memory.dynamicRetrieval} 分流：
+     *
+     * <ul>
+     *   <li>{@code true}（默认）：返回不含记忆段的 {@code basePrompt} + 一个
+     *       {@link MemorySectionSource}，由 {@code AgentLoop} 每轮按当轮提问追加记忆段
+     *   <li>{@code false}：退回 v0.1 行为——把各 scope 全量索引内联进 {@code basePrompt}，
+     *       {@code memorySectionSource} 为 {@code null}
+     * </ul>
+     *
+     * @param provider LLM provider（可空；{@code null} 时记忆段走纯字面召回，不调 sideQuery）
+     * @return 组装产物
      */
-    public static String buildSystemPrompt(
+    public static PromptParts buildSystemPromptParts(
             AgentConfig cfg, String resolvedModel, String override, LlmProvider provider) {
+        String base = basePromptOf(cfg, resolvedModel, override);
+        if (cfg.memory() == null || !cfg.memory().dynamicRetrieval()) {
+            // 回退：启动期注入各 scope 全量索引（截断 200 行 / 25KB），不做动态召回
+            return new PromptParts(base + "\n\n" + staticIndexSection(cfg), null);
+        }
+        AgentConfig.SideQuery sideQuery = cfg.memory().sideQuery();
+        // retriever 始终构造：provider 为 null（或 sideQuery 关闭）时它内部走**纯字面召回**。
+        // 注意不能传 null retriever——那会让 MemoryPromptBuilder 退化为全量索引注入。
+        LlmProvider recallProvider =
+                (provider != null && sideQuery != null && sideQuery.enabled()) ? provider : null;
+        MemoryRetriever retriever =
+                new MemoryRetriever(recallProvider, resolvedModel, new MemoryRecall(), sideQuery);
+        MemorySectionSource source =
+                new MemorySectionProvider(
+                        retriever, memoryDirs(), String.join("\n", cfg.memoryInject()), 5);
+        return new PromptParts(base, source);
+    }
+
+    /** 组装不含记忆段的基础 prompt（身份 / 行为规范 / 运行时存储 / 附加指引）。 */
+    private static String basePromptOf(AgentConfig cfg, String resolvedModel, String override) {
         String providerName = cfg.provider().type() == null
                 ? "deepseek"
                 : cfg.provider().type().toLowerCase();
-        String userHome = System.getenv("AGENT_DEMO_HOME") != null
-                        && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                ? System.getenv("AGENT_DEMO_HOME")
-                : System.getProperty("user.home");
-        // 三 scope 记忆：USER（跨项目）+ PROJECT（随项目仓库）+ LOCAL（本次会话）
+        // fix-agent-home-isolation：基目录统一走 AgentPaths，使其与 WebAgentRuntime 同源
+        // （原先只认 env，不认系统属性 agent.demo.home，测试隔离盖不住这里）
+        String userHome = AgentPaths.homeBase();
+        String storageSection = buildStorageSection(cfg, userHome);
+        return new SystemPromptBuilder()
+                .buildBase(providerName, resolvedModel, storageSection, List.of(), override);
+    }
+
+    /** 渲染各 scope 全量索引构成的静态记忆段（回退路径用）。 */
+    private static String staticIndexSection(AgentConfig cfg) {
+        java.util.List<MemoryDir> dirs = memoryDirs();
+        return new MemoryPromptBuilder(dirs.get(0)).build(dirs, String.join("\n", cfg.memoryInject()));
+    }
+
+    /** 三 scope 记忆目录：USER（跨项目）+ PROJECT（随项目仓库）+ LOCAL（本次会话）。 */
+    private static java.util.List<MemoryDir> memoryDirs() {
+        String userHome = AgentPaths.homeBase();
         String cwd = System.getProperty("user.dir");
-        java.util.List<MemoryDir> memoryDirs = java.util.List.of(
+        return java.util.List.of(
                 MemoryDir.forScope(MemoryScope.USER, userHome, cwd),
                 MemoryDir.forScope(MemoryScope.PROJECT, userHome, cwd),
                 MemoryDir.forScope(MemoryScope.LOCAL, userHome, cwd));
-        MemoryPromptBuilder builder = new MemoryPromptBuilder(memoryDirs.get(0));
-        String memorySection;
-        AgentConfig.SideQuery sideQuery = cfg.memory() != null ? cfg.memory().sideQuery() : null;
-        if (provider != null && sideQuery != null) {
-            com.example.agent.memory.MemoryRetriever retriever =
-                    new com.example.agent.memory.MemoryRetriever(
-                            provider, resolvedModel, new com.example.agent.memory.MemoryRecall(), sideQuery);
-            memorySection = builder.build("", memoryDirs, retriever,
-                    String.join("\n", cfg.memoryInject()), 5);
-        } else {
-            memorySection = builder.build(memoryDirs, String.join("\n", cfg.memoryInject()));
-        }
-        String storageSection = buildStorageSection(cfg, userHome);
-        return new SystemPromptBuilder()
-                .build(
-                        providerName,
-                        resolvedModel,
-                        memorySection,
-                        storageSection,
-                        List.of(),
-                        override);
     }
 
     /**
@@ -290,7 +346,11 @@ public final class AgentLoopFactory {
         for (Tool<?, ?> t : pluginManager.collectTools()) {
             tools.register(t);
         }
-        String basePrompt = buildSystemPrompt(cfg, model, null, provider);
+        // fix-memory-recall-wiring T5：返回 (基础段, 记忆段来源) 两部分。dynamicRetrieval=true 时
+        // basePrompt 不含记忆段，改由 AgentLoop 每轮按当轮提问追加（记忆段置于 prompt 末尾，
+        // 保持前面的身份/行为/存储/插件前缀稳定，减少上游 prompt 缓存失效）。
+        PromptParts promptParts = buildSystemPromptParts(cfg, model, null, provider);
+        String basePrompt = promptParts.basePrompt();
         String fragment = pluginManager.collectSystemPromptFragment();
         String systemPrompt =
                 (fragment == null || fragment.isEmpty()) ? basePrompt : basePrompt + "\n\n" + fragment;
@@ -309,7 +369,8 @@ public final class AgentLoopFactory {
                         sink,
                         agentDataDir,
                         confirmer,
-                        abortSignal);
+                        abortSignal,
+                        promptParts.memorySectionSource());
         if (mode != null) {
             loop.setPermissionMode(mode);
         }
@@ -362,8 +423,9 @@ public final class AgentLoopFactory {
     public static String buildStorageSection(AgentConfig cfg, String userHome) {
         String logsDir = cfg.logging() != null && cfg.logging().dir() != null
                 ? cfg.logging().dir()
-                // 与 AgentConfig 缺省一致：固定 ~/.agent-demo/logs，不随工作目录漂移
-                : Paths.get(System.getProperty("user.home"), ".agent-demo", "logs").toString();
+                // 与 AgentConfig 缺省一致：固定 <agent 数据目录>/logs，不随工作目录漂移
+                // fix-agent-home-isolation：改走 AgentPaths，与 AgentConfig.logging.dir 同源
+                : AgentPaths.logsDir();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")

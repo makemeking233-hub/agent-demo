@@ -2,9 +2,12 @@
  * SettingsContent (add-settings-foundation M1 + add-settings-general-items M2 + add-settings-menu-placeholders M3).
  *
  * 路由 4 个菜单：通用设置 / 模型 / 插件 / Agent 预设.
+ *
+ * <p>add-provider-catalog-abstract task 9/10：模型菜单的 prop 升级为 `selection: ModelSelection`
+ * + `reasoningEfforts: ReasoningEffort[]`（供 ModelsSection 内的两个子组件消费）。
  */
 
-import { ChatApi, type ModelEntry } from "../api/chat";
+import { ChatApi, type ModelSelection, type ReasoningEffort } from "../api/chat";
 import { AgentPresetsSection } from "./AgentPresetsSection";
 import { AppearanceCards } from "./AppearanceCards";
 import { EnterBehaviorSelect } from "./EnterBehaviorSelect";
@@ -16,20 +19,18 @@ import { PluginsSection } from "./PluginsSection";
 interface SettingsContentProps {
   activeId: string;
   api: ChatApi;
-  model: string;
-  currentModelEntry: ModelEntry | null;
-  reasoningEffort: string;
-  onModelChange: (modelId: string) => void;
+  selection: ModelSelection;
+  reasoningEfforts: ReasoningEffort[];
+  onSelectionChange: (next: ModelSelection) => void;
   onReasoningEffortChange: (effort: string) => void;
 }
 
 export function SettingsContent({
   activeId,
   api,
-  model,
-  currentModelEntry,
-  reasoningEffort,
-  onModelChange,
+  selection,
+  reasoningEfforts,
+  onSelectionChange,
   onReasoningEffortChange,
 }: SettingsContentProps) {
   if (activeId === "general") {
@@ -46,10 +47,9 @@ export function SettingsContent({
     return (
       <ModelsSection
         api={api}
-        model={model}
-        currentModelEntry={currentModelEntry}
-        reasoningEffort={reasoningEffort}
-        onModelChange={onModelChange}
+        selection={selection}
+        reasoningEfforts={reasoningEfforts}
+        onSelectionChange={onSelectionChange}
         onReasoningEffortChange={onReasoningEffortChange}
       />
     );

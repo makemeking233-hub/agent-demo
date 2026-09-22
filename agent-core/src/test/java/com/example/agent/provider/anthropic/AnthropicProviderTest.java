@@ -4,6 +4,7 @@
 package com.example.agent.provider.anthropic;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.example.agent.core.Message;
 import com.example.agent.llm.ChatRequest;
@@ -131,5 +132,41 @@ class AnthropicProviderTest {
         assertThat(AnthropicProvider.isThinkingModel("claude-3-7-sonnet-20250219")).isTrue();
         assertThat(AnthropicProvider.isThinkingModel("claude-3-5-sonnet-20241022")).isFalse();
         assertThat(AnthropicProvider.isThinkingModel(null)).isFalse();
+    }
+
+    // ----- add-provider-catalog-abstract: validateProvider 单测 -----
+
+    @Test
+    void validateProviderAcceptsNullExtra() {
+        // 兼容 v0.1 调用方（req.extra 为 null）
+        ChatRequest req = new ChatRequest(
+                "claude-opus-4-20250514", null,
+                List.of(new Message.User("hi")), List.of(), 1.0, 4096, null);
+        // 不抛异常
+        AnthropicProvider.validateProvider(req);
+    }
+
+    @Test
+    void validateProviderAcceptsExtraWithoutProviderField() {
+        ChatRequest req = new ChatRequest(
+                "claude-opus-4-20250514", null,
+                List.of(new Message.User("hi")), List.of(), 1.0, 4096, Map.of("reasoning_effort", "high"));
+        AnthropicProvider.validateProvider(req);
+    }
+
+    @Test
+    void validateProviderAcceptsMatchingProvider() {
+        ChatRequest req = new ChatRequest(
+                "claude-opus-4-20250514", null,
+                List.of(new Message.User("hi")), List.of(), 1.0, 4096, Map.of("provider", "anthropic"));
+        AnthropicProvider.validateProvider(req);
+    }
+
+    @Test
+    void validateProviderRejectsMismatchedProvider() {
+        ChatRequest req = new ChatRequest(
+                "claude-opus-4-20250514", null,
+                List.of(new Message.User("hi")), List.of(), 1.0, 4096, Map.of("provider", "deepseek"));
+        assertThrows(IllegalArgumentException.class, () -> AnthropicProvider.validateProvider(req));
     }
 }

@@ -108,6 +108,7 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
                         .clientConnector(new ReactorClientHttpConnector(httpClient))
                         .codecs(codecs -> codecs.defaultCodecs().maxInMemorySize(MAX_IN_MEMORY_BYTES))
                         .build();
+        this.baseUrl = baseUrl; // fix-provider-baseurl：baseUrl() 默认实现返回该字段
         this.mapper = new OpenAiCompatibleMapper();
     }
 
@@ -122,7 +123,9 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
     }
 
     @Override
-    public final Flux<StreamChunk> streamChat(ChatRequest req) {
+    public Flux<StreamChunk> streamChat(ChatRequest req) {
+        // add-provider-catalog-abstract: 子类可选覆盖此钩子做 provider 校验（默认放过，兼容 v0.1 调用方）
+        validateProviderHook(req);
         var body = mapper.toRequestBody(req);
         return client.post()
                 .uri(chatEndpoint())
@@ -161,9 +164,16 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
     }
 
     /**
-     * 抽象：API base URL（子类必填）
+     * 构造器传入的 API base URL（fix-provider-baseurl）。
+     *
+     * <p>{@link #baseUrl()} 默认返回此值；子类可选择 override（如需注入路径前缀）。
      */
-    protected abstract String baseUrl();
+    protected final String baseUrl;
+
+    /** 返回构造器传入的 base URL。 */
+    protected String baseUrl() {
+        return baseUrl;
+    }
 
     /**
      * 抽象：上下文窗口 token 数
@@ -182,4 +192,15 @@ public abstract class OpenAiCompatibleProvider implements LlmProvider {
      */
     @Override
     public abstract String name();
+
+    /**
+     * add-provider-catalog-abstract：provider 校验钩子（默认放过，v0.1 兼容）。
+     *
+     * <p>子类可覆盖做严格校验（如 {@link com.example.agent.provider.deepseek.DeepSeekProvider} /
+     * {@link com.example.agent.provider.anthropic.AnthropicProvider}）：从 {@code req.extra().get("provider")}
+     * 读期望 provider id，不匹配抛 {@link IllegalArgumentException}。
+     */
+    protected void validateProviderHook(ChatRequest req) {
+        // 默认放过：v0.1 调用方不写 req.extra.provider
+    }
 }

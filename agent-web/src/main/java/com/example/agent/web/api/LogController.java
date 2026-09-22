@@ -66,7 +66,8 @@ public class LogController {
     public LogController(@Value("${agent.logging.dir:}") String loggingDir) {
         this(Paths.get(
                 loggingDir == null || loggingDir.isBlank()
-                        ? System.getProperty("user.home") + "/.agent-demo/logs"
+                        // fix-agent-home-isolation：日志根走单一入口，与写入侧同源
+                        ? com.example.agent.config.AgentPaths.logsDir()
                         : loggingDir));
     }
 

@@ -2,6 +2,7 @@ package com.example.agent.cli;
 
 import com.example.agent.signal.AbortSignal;
 import com.example.agent.config.AgentConfig;
+import com.example.agent.config.AgentPaths;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
 import com.example.agent.core.AgentLoopFactory;
@@ -138,18 +139,16 @@ public class ChatCommand implements Runnable {
         // baseUrl 由具体 Provider 内部决定（DeepSeek / MiniMax 各自硬编码），此处不再读 cfg
         // 环境变量 base URL 暂时未使用（v0.2 可加 provider-specific 覆盖）
 
-        String userHome =
-                System.getenv("AGENT_DEMO_HOME") != null
-                                && !System.getenv("AGENT_DEMO_HOME").isBlank()
-                        ? System.getenv("AGENT_DEMO_HOME")
-                        : System.getProperty("user.home");
+        // fix-agent-home-isolation：基目录统一走 AgentPaths（原先不认系统属性 agent.demo.home）
+        String userHome = AgentPaths.homeBase();
 
         // 按 provider.type() 路由到具体实现（CLI 与 web 共用 AgentLoopFactory）
         LlmProvider provider = AgentLoopFactory.buildProvider(cfg, resolvedKey);
         TokenEstimator estimator = new TokenEstimator();
 
-        // 组装系统提示词：模型无关默认模板 + provider/model 元数据 + 长期记忆 + 用户 --system-prompt 覆盖
-        String systemPrompt = AgentLoopFactory.buildSystemPrompt(cfg, resolvedModel, this.systemPrompt);
+        // 注：system prompt 不在此处组装。fix-memory-recall-wiring 起，装配统一由
+        // AgentLoopFactory.buildLoop 内部完成（它需要同时拿到 provider 才能构造每轮召回的记忆段来源）；
+        // 此前这里另生成一份 buildSystemPrompt 结果但从未使用，属死代码，已移除。
 
         // AtomicReference: lambda-friendly mutable holder for the active MessageHistory
         // (AtomicReference replaces single-element MessageHistory[] array used in v0.1)
@@ -210,6 +209,18 @@ public class ChatCommand implements Runnable {
         // add-models-dropdown-v0：/effort 切换 AgentLoop.setReasoningEffort，下一轮生效
         // (ctx 已 final，此处 lambda 安全捕获)
         slash.setOnEffort(newEffort -> ctx.loop().setReasoningEffort(newEffort));
+        // add-provider-catalog-abstract task 12.1：/model <provider>/<model> 复合切换
+        slash.setOnSelection(
+                (providerId, modelId) -> {
+                    ctx.loop().setProviderId(providerId);
+                    ctx.loop().setModel(modelId);
+                });
+        // add-provider-catalog-abstract task 12.1：默认 provider（无前缀且无法推断时兜底）
+        String configuredDefaultProvider = System.getenv("AGENT_DEFAULT_PROVIDER");
+        if (configuredDefaultProvider == null || configuredDefaultProvider.isBlank()) {
+            configuredDefaultProvider = "deepseek";
+        }
+        slash.setDefaultProvider(configuredDefaultProvider);
         try {
             runReplLoop(ctx, reader);
         } finally {
@@ -276,9 +287,9 @@ public class ChatCommand implements Runnable {
         String logsDir =
                 cfg.logging() != null && cfg.logging().dir() != null
                         ? cfg.logging().dir()
-                        // 与 AgentConfig 缺省一致：固定 ~/.agent-demo/logs，不随工作目录漂移
-                        : Paths.get(System.getProperty("user.home"), ".agent-demo", "logs")
-                                .toString();
+                        // 与 AgentConfig 缺省一致：固定 <agent 数据目录>/logs，不随工作目录漂移
+                        // fix-agent-home-isolation：改走 AgentPaths，与 AgentConfig.logging.dir 同源
+                        : AgentPaths.logsDir();
         String sessionsDir = Paths.get(userHome, ".agent-demo", "sessions").toString();
         return "- 工作目录（文件工具的相对路径均相对此解析）: `"
                 + System.getProperty("user.dir")
@@ -312,7 +323,8 @@ public class ChatCommand implements Runnable {
      * Load user config (extracted to reduce run() nesting)
      */
     private AgentConfig loadConfig() {
-        Path cfgPath = Paths.get(System.getProperty("user.home"), ".agent-demo", "config.yaml");
+        // fix-agent-home-isolation：配置路径也走 AgentPaths，使测试隔离能盖住 config.yaml
+        Path cfgPath = AgentPaths.agentHome().resolve("config.yaml");
         return new ConfigLoader().load(cfgPath);
     }
 
@@ -419,7 +431,7 @@ public class ChatCommand implements Runnable {
         }
         if (msg != null && msg.contains("404")) {
             return "404 Not Found — baseUrl 或 model 名错（默认 https://api.deepseek.com /"
-                    + " deepseek-chat）";
+                    + " deepseek-v4-flash）";
         }
         if (msg != null && (msg.contains("429") || msg.contains("rate limit"))) {
             return "429 限流 — 稍等 30s 再试，或检查账户余额";
@@ -469,6 +481,7 @@ public class ChatCommand implements Runnable {
                         },
                         newModel -> {
                             // /model 回调：调 AgentLoop.setModel 切换 model，下一轮生效
+                            // （add-provider-catalog-abstract task 12：优先走 onSelection，见 setOnSelection）
                             ctx.loop().setModel(newModel);
                         });
     }

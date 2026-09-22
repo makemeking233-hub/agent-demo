@@ -20,4 +20,4 @@ rules:
   tasks:
     - Each task completable in one session (< 4 hours)
     - Always include test step before commit
-    - TDD 优先: 测试先红 -> 实现 -> 测试转绿
+    - "TDD 优先: 测试先红 -> 实现 -> 测试转绿"

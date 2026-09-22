@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { ChatPanel } from "./ChatPanel";
+import { ChatPanel, attachMetaToTimeline, mapHistoryToItems, type Item } from "./ChatPanel";
+import type { MessageClock } from "../lib/message-clock";
 
 const KEY = "agent-demo.chat.v1";
 
@@ -46,13 +47,14 @@ describe("ChatPanel 会话重进恢复", () => {
   afterEach(() => cleanup());
 
   /**
-   * add-models-dropdown-v0 之后 ChatPanel 新增了 4 个必填 props（model / reasoningEffort /
-   * currentModelEntry / onReasoningEffortChange）。本文件只关心历史恢复与空态，与模型选择无关，
-   * 故统一给固定桩值，避免 4 处重复。
+   * add-models-dropdown-v0 之后 ChatPanel 新增了必填 props（provider / model / reasoningEffort /
+   * currentModelEntry / onReasoningEffortChange；provider 为 add-provider-catalog-abstract task 11.4 新增）。
+   * 本文件只关心历史恢复与空态，与模型选择无关，故统一给固定桩值，避免多处重复。
    */
   function renderPanel() {
     return render(
       <ChatPanel
+        provider="deepseek"
         model="deepseek-chat"
         reasoningEffort="medium"
         currentModelEntry={null}
@@ -176,5 +178,66 @@ describe("ChatPanel 权限模式 (T11.2)", () => {
     expect(select.value).toBe("plan");
     fireEvent.change(select, { target: { value: "ask" } });
     expect((screen.getByLabelText("权限模式") as HTMLSelectElement).value).toBe("ask");
+  });
+});
+
+/** add-message-actions P2：per-message clock 的时间线装配。 */
+describe("ChatPanel per-message clock（P2）", () => {
+  const ts = new Date(2026, 8, 14, 16, 23, 0).getTime();
+  const meta: MessageClock = {
+    uuid: "u-42",
+    duration_ms: 15_000,
+    ttft_ms: 1200,
+    tok_per_sec: 34,
+    timestamp: ts,
+  };
+
+  const assistantItem = (id: string, text = "回复"): Item => ({
+    kind: "text",
+    id,
+    role: "assistant",
+    text,
+  });
+  const userItem = (id: string): Item => ({ kind: "text", id, role: "user", text: "问" });
+
+  it("attachMetaToTimeline 把读数贴到最后一条 assistant 文本项", () => {
+    const out = attachMetaToTimeline([userItem("u1"), assistantItem("a1")], meta);
+    expect((out[1] as Extract<Item, { kind: "text" }>).meta).toEqual(meta);
+    expect((out[1] as Extract<Item, { kind: "text" }>).uuid).toBe("u-42");
+  });
+
+  it("一轮被工具拆成多条 assistant item 时，读数贴到最后一条（整轮读数）", () => {
+    const withTool: Item = {
+      kind: "text",
+      id: "a1",
+      role: "assistant",
+      text: "先说一句",
+      tools: [{ id: "t1", name: "read", status: "ok" }],
+    };
+    const multi: Item[] = [userItem("u1"), withTool, assistantItem("a2", "基于结果再说一句")];
+    const out = attachMetaToTimeline(multi, meta);
+    expect((out[1] as Extract<Item, { kind: "text" }>).meta).toBeUndefined();
+    expect((out[2] as Extract<Item, { kind: "text" }>).meta).toEqual(meta);
+  });
+
+  it("没有 assistant 文本项时原样返回（不抛错）", () => {
+    const only: Item[] = [userItem("u1")];
+    expect(attachMetaToTimeline(only, meta)).toBe(only);
+  });
+
+  it("历史回填把后端 meta / uuid 透传到 item（刷新后 clock 仍在）", () => {
+    const items = mapHistoryToItems([
+      { role: "user", content: "问" },
+      { role: "assistant", content: "答", toolCalls: [], uuid: "u-42", meta },
+    ]);
+    const a = items.find((it) => it.kind === "text" && it.role === "assistant");
+    expect(a).toBeDefined();
+    expect((a as Extract<Item, { kind: "text" }>).meta).toEqual(meta);
+    expect((a as Extract<Item, { kind: "text" }>).uuid).toBe("u-42");
+  });
+
+  it("后端没给读数时 item 的 meta 为 undefined（不渲染 clock）", () => {
+    const items = mapHistoryToItems([{ role: "assistant", content: "旧的回复", toolCalls: [] }]);
+    expect((items[0] as Extract<Item, { kind: "text" }>).meta).toBeUndefined();
   });
 });

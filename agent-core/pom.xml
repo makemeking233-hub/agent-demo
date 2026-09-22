@@ -143,6 +143,22 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- fix-agent-home-isolation：测试 JVM 默认隔离。
+                 这个项目里「跑测试不污染真实 ~/.agent-demo」的正确性此前寄托于每个测试作者
+                 都记得在静态块里 System.setProperty("agent.demo.home", ...)——实测只有 3 个
+                 测试这么做了，其余测试每次运行都在用户真实 logs/sessions 下建目录。
+                 改为默认值后，「忘记设置」的后果变成安全的。
+                 优先级见 com.example.agent.config.AgentPaths（属性 → env → user.home），
+                 未设置时行为与改造前逐字一致。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <agent.demo.home>${project.build.directory}/test-home</agent.demo.home>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>

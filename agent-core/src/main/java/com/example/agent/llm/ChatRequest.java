@@ -8,7 +8,7 @@ import java.util.Map;
 /**
  * LLM 聊天请求 DTO（详见 design.md §6.1）。
  *
- * @param model        模型名（如 "deepseek-chat" / "deepseek-reasoner"）
+ * @param model        模型名（如 "deepseek-v4-flash" / "deepseek-reasoner"）
  * @param systemPrompt system prompt 文本；null 表示无 system
  * @param messages     对话历史（user / assistant / tool / system 混合）
  * @param tools        工具 schema 列表（LLM 看到的 JSON Schema）

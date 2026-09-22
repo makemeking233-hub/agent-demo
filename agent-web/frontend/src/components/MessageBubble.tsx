@@ -1,8 +1,10 @@
 import { User } from "lucide-react";
 import styles from "./MessageBubble.module.css";
 import { MarkdownContent } from "./MarkdownContent";
+import { MessageActionRow } from "./MessageActionRow";
 import { ThinkingCollapse } from "./ThinkingCollapse";
 import { ToolCallCard } from "./ToolCallCard";
+import type { MessageClock } from "../lib/message-clock";
 
 export type InlineTool = {
   id: string;
@@ -19,9 +21,15 @@ export function MessageBubble(props: {
   // add-reasoning-thinking-streaming: 推理过程（assistant 消息可携带）
   thinking?: string;
   reasoningTokens?: number;
+  /** add-message-actions P2: per-message 读数（assistant finalize 后才有） */
+  meta?: MessageClock | null;
+  /** add-message-actions P3: 赞踩按钮（extraActions slot） */
+  actions?: React.ReactNode;
 }) {
   const isUser = props.role === "user";
   const tools = props.tools ?? [];
+  // add-message-actions: 流式中（无 text 且无 tool）不显示 action row
+  const showActions = !!props.text;
   return (
     <div className={`${styles.row} ${isUser ? styles.rowUser : styles.rowAssistant}`}>
       <div className={styles.avatar}>
@@ -42,6 +50,12 @@ export function MessageBubble(props: {
         {tools.map((t) => (
           <ToolCallCard key={t.id} name={t.name} status={t.status} text={t.text} durationMs={t.durationMs} />
         ))}
+        {/* add-message-actions P1: action row（copy + 可选 clock/赞踩）；流式中不显示 */}
+        {showActions && (
+          <MessageActionRow text={props.text} meta={isUser ? undefined : props.meta}>
+            {isUser ? undefined : props.actions}
+          </MessageActionRow>
+        )}
       </div>
     </div>
   );

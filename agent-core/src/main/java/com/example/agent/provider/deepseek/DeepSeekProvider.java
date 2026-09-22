@@ -1,6 +1,9 @@
 package com.example.agent.provider.deepseek;
 
+import com.example.agent.llm.ChatRequest;
+import com.example.agent.llm.StreamChunk;
 import com.example.agent.provider.openai.OpenAiCompatibleProvider;
+import reactor.core.publisher.Flux;
 
 import java.time.Duration;
 
@@ -15,13 +18,20 @@ import java.time.Duration;
  * 由于 {@code OpenAiCompatibleMapper.isOpenAiReasonerModel()} 仅识别 {@code o1/o3/o4} 系列，{@code deepseek-*}
  * 模型永远不会被注入 reasoning_effort 到 body。AgentLoop.toRequest() 写入 ChatRequest.extra 的
  * {@code reasoning_effort} 字段对 DeepSeek 无副作用（putAll 到 body 是无害的多余字段，上游忽略）。
+ *
+ * <p>add-provider-catalog-abstract：{@link #PROVIDER_ID} 用于校验 {@code req.extra().get("provider")}；
+ * 与 {@link com.example.agent.provider.anthropic.AnthropicProvider#validateProvider} 同模式。
  */
 public class DeepSeekProvider extends OpenAiCompatibleProvider {
 
+    /** add-provider-catalog-abstract：本 provider 对应的 providerId */
+    private static final String PROVIDER_ID = "deepseek";
+
     /**
-     * DeepSeek API base URL
+     * 默认 base URL（AgentLoopFactory.buildProvider 在 cfg.provider().baseUrl 未设时选用单参 ctor，
+     * 触发此常量）。
      */
-    private static final String BASE_URL = "https://api.deepseek.com";
+    static final String BASE_URL = "https://api.deepseek.com";
 
     /**
      * DeepSeek-chat 上下文窗口（128K tokens）
@@ -67,12 +77,12 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
 
     @Override
     public String name() {
-        return "deepseek";
+        return PROVIDER_ID;
     }
 
     @Override
     protected String baseUrl() {
-        return BASE_URL;
+        return super.baseUrl();
     }
 
     @Override
@@ -83,5 +93,17 @@ public class DeepSeekProvider extends OpenAiCompatibleProvider {
     @Override
     public int maxOutputTokens() {
         return MAX_OUTPUT;
+    }
+
+    @Override
+    protected void validateProviderHook(ChatRequest req) {
+        if (req.extra() == null) return;
+        Object v = req.extra().get("provider");
+        if (v == null) return;
+        if (!PROVIDER_ID.equals(v.toString())) {
+            throw new IllegalArgumentException(
+                    "DeepSeekProvider expected provider=\"" + PROVIDER_ID
+                            + "\" but req.extra.provider=\"" + v + "\"");
+        }
     }
 }

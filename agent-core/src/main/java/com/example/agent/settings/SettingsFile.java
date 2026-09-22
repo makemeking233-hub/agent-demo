@@ -40,7 +40,8 @@ public final class SettingsFile {
     public static Path resolveDefaultHome(String cliHome, String envHome) {
         if (cliHome != null && !cliHome.isBlank()) return Paths.get(cliHome);
         if (envHome != null && !envHome.isBlank()) return Paths.get(envHome);
-        return Paths.get(System.getProperty("user.home"), ".agent-demo");
+        // fix-agent-home-isolation：兜底分支走单一入口，额外获得系统属性 agent.demo.home 覆盖
+        return com.example.agent.config.AgentPaths.agentHome();
     }
 
     public Path home() {

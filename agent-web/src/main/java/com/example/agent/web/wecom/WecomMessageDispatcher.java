@@ -1,6 +1,7 @@
 package com.example.agent.web.wecom;
 
 import com.example.agent.permission.PermissionMode;
+import com.example.agent.web.api.catalog.ProviderCatalogProperties;
 import com.example.agent.web.stream.ChatStreamService;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -32,7 +33,6 @@ import reactor.core.scheduler.Schedulers;
 public class WecomMessageDispatcher {
 
     private static final Logger log = LoggerFactory.getLogger(WecomMessageDispatcher.class);
-    private static final String DEFAULT_MODEL = "deepseek-chat";
 
     private final WecomCrypto crypto;
     private final WecomConfigProperties props;
@@ -40,6 +40,15 @@ public class WecomMessageDispatcher {
     private final WecomReplyPusher pusher;
     /** 用 ObjectProvider 避免 ChatStreamService 启动期循环依赖（构造期未就绪时仍可注入） */
     private final ObjectProvider<ChatStreamService> streamsProvider;
+    /**
+     * 默认模型来源（fix-stale-model-fallback）。
+     *
+     * <p>此前是类内常量 {@code DEFAULT_MODEL = "deepseek-chat"}—— 该 id 已被上游停用且不在
+     * {@code agent.chat.providers} 目录中，等于微信通道每轮都在请求一个已下线的模型。
+     * 改为读配置默认值，其存在性由 {@code ProviderCatalogService} 启动校验保证。
+     */
+    private final ProviderCatalogProperties catalogProps;
+
     private final ConcurrentHashMap<String, ReentrantLock> userLocks = new ConcurrentHashMap<>();
 
     public WecomMessageDispatcher(
@@ -47,12 +56,14 @@ public class WecomMessageDispatcher {
             WecomConfigProperties props,
             WecomSessionMapper sessionMapper,
             WecomReplyPusher pusher,
-            @Lazy ObjectProvider<ChatStreamService> streamsProvider) {
+            @Lazy ObjectProvider<ChatStreamService> streamsProvider,
+            ProviderCatalogProperties catalogProps) {
         this.crypto = crypto;
         this.props = props;
         this.sessionMapper = sessionMapper;
         this.pusher = pusher;
         this.streamsProvider = streamsProvider;
+        this.catalogProps = catalogProps;
     }
 
     /**
@@ -73,7 +84,8 @@ public class WecomMessageDispatcher {
         lock.lock();
         try {
             String sessionId = sessionMapper.getOrCreate(userId);
-            String model = DEFAULT_MODEL;
+            // fix-stale-model-fallback：模型取配置默认值，不再硬编码已停用的 deepseek-chat
+            String model = catalogProps.defaultModel();
             // FULL_ACCESS：微信通道默认全放行（绕过 PermissionConfirmer）
             // rewrite-permission-mode-dsh T12.2: 改用 DANGER_FULL (4 档 dsh 命名)
             ChatStreamService.ActiveStream meta = streamsProvider.getObject().create(

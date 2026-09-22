@@ -91,6 +91,76 @@ class SessionControllerTest {
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
+    // ---------- add-message-actions P2：历史回填 per-message 读数 ----------
+
+    /** 存档里的 {@code message_meta} 条目按 assistant 序号贴回消息 → 刷新后 clock 仍在。 */
+    @Test
+    void messagesAttachPerMessageMetaToAssistant() throws Exception {
+        SessionEntry assistant = SessionEntry.assistant("你好！", java.util.List.of(), null);
+        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+        meta.put("uuid", assistant.uuid());
+        meta.put("duration_ms", 15000L);
+        meta.put("ttft_ms", 1200.0);
+        meta.put("tok_per_sec", 34.0);
+        meta.put("timestamp", 1736700000000L);
+        writeSession(
+                "s-p2",
+                SessionEntry.user("你好", null),
+                assistant,
+                SessionEntry.meta("tokens", java.util.List.of(10, 20)),
+                SessionEntry.meta("message_meta", meta));
+
+        ResponseEntity<SessionMessagesResponse> resp = controller.messages("s-p2");
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        SessionMessagesResponse body = resp.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.messages()).hasSize(2);
+        // user 消息没有读数
+        assertThat(body.messages().get(0).meta()).isNull();
+        assertThat(body.messages().get(0).uuid()).isNull();
+        // assistant 消息带上 uuid + 读数
+        assertThat(body.messages().get(1).uuid()).isEqualTo(assistant.uuid());
+        assertThat(body.messages().get(1).meta()).isNotNull();
+        assertThat(body.messages().get(1).meta()).containsEntry("duration_ms", 15000);
+        assertThat(body.messages().get(1).meta()).containsEntry("ttft_ms", 1200.0);
+        assertThat(body.messages().get(1).meta()).containsEntry("tok_per_sec", 34.0);
+    }
+
+    /** 读数指向的 uuid 不在存档里（或被裁剪）→ 整体放弃，不误贴到别的消息上。 */
+    @Test
+    void messagesIgnoreMetaWhenUuidUnknown() throws Exception {
+        Map<String, Object> meta = new java.util.LinkedHashMap<>();
+        meta.put("uuid", "不存在的-uuid");
+        meta.put("duration_ms", 15000L);
+        writeSession(
+                "s-p2-orphan",
+                SessionEntry.user("你好", null),
+                SessionEntry.assistant("你好！", java.util.List.of(), null),
+                SessionEntry.meta("message_meta", meta));
+
+        ResponseEntity<SessionMessagesResponse> resp = controller.messages("s-p2-orphan");
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        SessionMessagesResponse body = resp.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.messages().get(1).meta()).isNull();
+        assertThat(body.messages().get(1).uuid()).isNull();
+    }
+
+    /** 老会话（没有 message_meta 条目）依旧正常返回，只是没有读数。 */
+    @Test
+    void messagesWithoutMessageMetaStillWork() throws Exception {
+        writeSession("s-p2-old", SessionEntry.user("旧", null), SessionEntry.assistant("旧答", java.util.List.of(), null));
+
+        ResponseEntity<SessionMessagesResponse> resp = controller.messages("s-p2-old");
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().messages()).hasSize(2);
+        assertThat(resp.getBody().messages().get(1).meta()).isNull();
+    }
+
     @Test
     void currentReturnsNullSession() {
         ResponseEntity<Map<String, Object>> resp = controller.current();

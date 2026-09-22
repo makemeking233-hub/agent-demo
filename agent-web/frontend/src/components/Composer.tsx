@@ -227,11 +227,12 @@ function ComposerInner({
             ))}
           </select>
         </span>
-        {/* add-models-dropdown-v0: 思考强度下拉（仅 supportsReasoning 模型显示） */}
-        {model && onReasoningEffortChange && reasoningEffort !== undefined && (
+        {/* add-models-dropdown-v0: 思考强度下拉；add-provider-catalog-abstract task 10
+            改用 options: ReasoningEffort[]（组件自己判断空数组时返回 null） */}
+        {onReasoningEffortChange && reasoningEffort !== undefined && (
           <span className={styles.effort}>
             <ReasoningEffortSelect
-              model={model}
+              options={model?.reasoningEfforts ?? []}
               value={reasoningEffort}
               onChange={onReasoningEffortChange}
             />

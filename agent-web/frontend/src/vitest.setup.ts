@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import 'vitest-axe/extend-expect';
 
 /**
  * jsdom 没有 EventSource（rewrite-permission-mode-dsh T10.2）。

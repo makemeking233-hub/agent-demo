@@ -11,20 +11,15 @@ TBD - created by archiving change add-web-ui-v0-1. Update Purpose after archive.
 
 - WHEN 客户端发送 `POST /api/chat/send`，请求体 JSON 为 `{"content": "你好", "session_id": "<uuid>"}`（`session_id` 可选；缺省时新建 session）
 - AND 请求源 IP 在 trusted-hosts 白名单内（或 server 绑 127.0.0.1）
-- THEN 服务端在 200ms 内返回 `200 OK`，响应体 `{"stream_id": "<uuid>", "session_id": "<uuid>", "model": "deepseek-chat"}`
+- THEN 服务端在 200ms 内返回 `200 OK`，响应体 `{"stream_id": "<uuid>", "session_id": "<uuid>", "model": "<解析后的模型 id>"}`
 - AND 服务端开始在 `GET /api/chat/stream/{stream_id}` 上推送 SSE 事件
 
-#### Scenario: 空内容被拒
+#### Scenario: 服务端用配置/环境变量覆盖上游 base URL
 
-- WHEN 客户端发送 `POST /api/chat/send`，且 `content` 为空或全空白
-- THEN 服务端返回 `400 Bad Request`，响应体 `{"error": "content_empty"}`
-- AND 不创建 stream
+- WHEN yml 配 `agent.chat.providers[].baseUrl` 或环境变量 `DEEPSEEK_BASE_URL` 指向自部署/代理的 base URL
+- THEN `LlmProvider` 实例的上游 HTTP 请求实际打到该 URL（不是默认 `https://api.deepseek.com`）
 
-#### Scenario: provider 未配置
-
-- WHEN 客户端发送 `POST /api/chat/send`，且 `provider.apiKey` 在配置（环境变量 + yaml）中都缺失
-- THEN 服务端返回 `503 Service Unavailable`，响应体 `{"error": "provider_not_configured", "hint": "set DEEPSEEK_API_KEY"}`
-- AND 不创建 stream
+> 此前：覆盖值被读、合并、丢弃；现修复为真正生效。MiniMaxProvider 同语义。
 
 ### Requirement: 流式聊天（SSE）
 
@@ -1362,18 +1357,27 @@ Web UI SHALL 检测新版本 Service Worker，并在 `<PwaUpdatePrompt />` 弹 S
 
 ### Requirement: /api/chat/models 端点
 
-后端 SHALL 新增 `GET /api/chat/models` 端点，返回 `{"models": [{"id":"deepseek-chat","name":"DeepSeek Chat","supportsReasoning":false}, {"id":"deepseek-reasoner","name":"DeepSeek Reasoner","supportsReasoning":true}]}`。
+后端 SHALL 提供 `GET /api/chat/models` 端点，返回 provider / model 分层目录 `{"providers": [{"id": "<provider id>", "name": "...", "models": [{"id": "...", "name": "...", "supportsReasoning": <bool>, "reasoningEfforts": [...]}]}], "defaultProvider": "<provider id>", "defaultModel": "<model id>"}`。
 
-#### Scenario: 列出 supported-models
+`providers` SHALL 取自配置 `agent.chat.providers`；`defaultProvider` / `defaultModel` SHALL 取自配置 `agent.chat.default-provider` / `agent.chat.default-model`。响应同时 SHALL 保留平铺 `models[]` 字段以供过渡期前端消费。
 
-- **WHEN** 客户端发 `GET /api/chat/models`
-- **THEN** 返回当前 `agent.chat.supported-models` 配置的所有模型
-- **AND** 每项含 `id` / `name` / `supportsReasoning` 三个字段
+#### Scenario: 列出 providers 与默认值
+
+- WHEN 客户端发 `GET /api/chat/models`
+- THEN 返回 `providers[]`，每项含 `id` / `name` / `models[]`，每个 model 含 `id` / `name` / `supportsReasoning` / `reasoningEfforts`
+- AND 顶层 `defaultProvider` 与 `defaultModel` 分别等于配置的 `agent.chat.default-provider` 与 `agent.chat.default-model`
+- AND `defaultModel` 必定存在于 `providers[]` 的某个 `models[]` 中
+
+#### Scenario: 平铺字段与嵌套结构一致
+
+- WHEN 客户端发 `GET /api/chat/models`
+- THEN 平铺 `models[]` 是 `providers[].models[]` 的扁平化结果
+- AND 两者包含完全相同的 model id 集合
 
 #### Scenario: trusted-host 鉴权
 
-- **WHEN** 客户端源 IP 不在 trusted-hosts 白名单
-- **THEN** 返回 `403 host_not_trusted`
+- WHEN 客户端源 IP 不在 trusted-hosts 白名单
+- THEN 返回 `403 host_not_trusted`
 
 ### Requirement: abort 同时停 thinking + text
 
@@ -1657,105 +1661,147 @@ Provider SHALL 在按行解析 SSE 前重组跨 `DataBuffer` 的半截行，不�
 
 ### Requirement: 前端 ModelSelect 组件
 
-`TopBar` SHALL 在右上角渲染 `ModelSelect` 组件,展示当前会话使用的模型名(如 `DeepSeek Chat` / `DeepSeek Reasoner`)。点击下拉框 SHALL 弹出从 `GET /api/chat/models` 拉取的模型列表,选择某项 SHALL 更新当前会话的 `model` 字段(下次 `send` 时生效,流中不切)。
+`TopBar` SHALL 渲染 `ModelSelect` 两层菜单组件，接受 `value: ModelSelection`（provider + model + reasoningEffort?）。trigger SHALL 显示「provider 名 · model 名」+ effort 徽标。点击 SHALL 打开两层菜单：左栏 provider 列表，右栏当前 provider 的 model 列表；支持 reasoning 的 model 行 SHALL 内联 effort 档位。选择 SHALL 更新完整 `ModelSelection`（下次 `send` 时生效，流中不切）。
 
-#### Scenario: TopBar 显示当前 model
+#### Scenario: trigger 显示完整选择
 
-- **WHEN** ChatPanel 初始化并从 localStorage 读到 `model=deepseek-reasoner`
-- **THEN** TopBar 的 ModelSelect trigger 按钮显示 "DeepSeek Reasoner"
-- **AND** 该按钮 aria-label 为 "选择模型"
+- **WHEN** `value = {provider:"deepseek", model:"deepseek-reasoner", reasoningEffort:"high"}`
+- **THEN** trigger 显示 provider 名 `DeepSeek` + model 名 `DeepSeek Reasoner` + effort 徽标 `High`
 
-#### Scenario: 点击下拉弹出模型列表
+#### Scenario: 两层菜单打开
 
-- **WHEN** 用户点击 ModelSelect trigger
-- **THEN** 弹出列表显示 `ModelsResponse.models[]` 中所有项
-- **AND** 当前选中项前显示 ✓ 标记
+- **WHEN** 用户点击 trigger
+- **THEN** 出现 `role=menu` 面板
+- **AND** 左栏列出所有 provider；右栏仅列出当前高亮 provider 的 model
 
-#### Scenario: 选中后 trigger 更新
+#### Scenario: 切换 provider 刷新右栏
 
-- **WHEN** 用户在下拉列表中点选 `deepseek-chat`
-- **THEN** trigger 按钮文字变为 "DeepSeek Chat"
-- **AND** localStorage `agent-demo:model-selection` 的 `model` 字段更新为 `deepseek-chat`
-- **AND** 下次 `send` 时 `SendRequest.model = "deepseek-chat"`
+- **WHEN** 用户在左栏点击另一个 provider
+- **THEN** 右栏刷新为该 provider 的 model 列表
+- **AND** 原 provider 的 model 不再出现
 
-#### Scenario: 键盘 ↑↓ Enter Esc 导航
+#### Scenario: 选中 model 触发 onChange
 
-- **WHEN** 下拉打开且当前焦点在 trigger
-- **THEN** 按 `↓` 移到下一项,`↑` 移到上一项,`Enter` 选中,`Esc` 关闭下拉
-- **AND** 焦点环可见(无障碍)
+- **WHEN** 用户在右栏点击某个 model
+- **THEN** `onChange({provider, model, reasoningEffort})` 被调用
+- **AND** 切换到的 model 若支持 reasoning 且原 effort 仍在其档位内则保留原值，否则取第一档；不支持则 `reasoningEffort` 为 `undefined`
+
+#### Scenario: effort 子档位联动
+
+- **WHEN** 当前 model 支持 reasoning，用户点击其行下方的 effort chip
+- **THEN** `onChange` 带上相同 provider/model + 新 effort
+
+#### Scenario: 关闭路径
+
+- **WHEN** 用户在面板外按下鼠标 / 按下 `Esc`
+- **THEN** 面板关闭
+
+#### Scenario: providers 为空时禁用
+
+- **WHEN** `GET /api/chat/models` 返回空 `providers`
+- **THEN** trigger 为 `disabled`
 
 ### Requirement: 前端 ReasoningEffortSelect 组件
 
-`Composer` 状态栏 SHALL 在 `permission_mode` 旁边渲染 `ReasoningEffortSelect` 下拉框,选项为 `["low", "medium", "high"]` 三档,仅当当前 model 的 `supportsReasoning=true` 时启用,否则隐藏。
+`Composer` 状态栏 SHALL 在 `permission_mode` 旁边渲染 `ReasoningEffortSelect`，prop 为 `options: ReasoningEffort[]`（v0.1 为 `model: ModelEntry`，v0.2 升级）。`options` 为空数组时组件 SHALL 返回 `null`（从 DOM 移除）。
 
-#### Scenario: 当前 model 支持 reasoning 时下拉可见
+#### Scenario: options 渲染
 
-- **WHEN** ChatPanel 当前 model = `deepseek-reasoner`(`supportsReasoning=true`)
-- **THEN** Composer 状态栏显示 ReasoningEffortSelect 下拉,默认选中 `medium`
-- **AND** 右侧显示 "下次发送生效" 提示文字
+- **WHEN** `options = [{id:"low",name:"Low"},{id:"medium",name:"Medium"},{id:"high",name:"High"}]`，`value = "medium"`
+- **THEN** trigger 显示 `思考 Medium`
+- **AND** 打开后 3 个 `role=option` 文案分别为 `思考 Low` / `思考 Medium` / `思考 High`
 
-#### Scenario: 当前 model 不支持 reasoning 时下拉隐藏
+#### Scenario: 空 options 隐藏
 
-- **WHEN** ChatPanel 当前 model = `deepseek-chat`(`supportsReasoning=false`)
-- **THEN** Composer 状态栏**不**显示 ReasoningEffortSelect(从 DOM 移除)
-- **AND** 不占用布局空间
+- **WHEN** `options = []`
+- **THEN** 组件返回 `null`，不占用布局空间
 
-#### Scenario: 选中 effort 后持久化
+#### Scenario: 选中 effort 后回调
 
 - **WHEN** 用户在下拉中选 `high`
-- **THEN** localStorage `agent-demo:model-selection` 的 `reasoningEffort` 字段更新为 `high`
-- **AND** 下次 `send` 时 `SendRequest.reasoning_effort = "high"`
+- **THEN** `onChange("high")` 被调用
 
 ### Requirement: 前端 localStorage 模型持久化
 
-ChatPanel SHALL 在初始化时从 `localStorage["agent-demo:model-selection"]` 读取 `{model, reasoningEffort}`,缺省时使用 server default(`deepseek-chat` + `medium`)。ModelSelect / ReasoningEffortSelect 变更 SHALL 同步写回 localStorage。
+App SHALL 在初始化时从 `localStorage["agent-demo:model-selection"]` 读取 `{provider, model, reasoningEffort?}`（v0.1 为 `{model, reasoningEffort}`；读到旧格式时 `provider` 为空串，SHALL 用 `inferProvider(model)` 推断）。ModelSelect / ReasoningEffortSelect 变更 SHALL 同步写回。
 
-#### Scenario: 首次访问(localStorage 空)
+#### Scenario: 新格式 localStorage
 
-- **WHEN** 用户首次打开 Web UI,localStorage 无 `agent-demo:model-selection` 键
-- **THEN** 当前 model 默认为 `deepseek-chat`,reasoningEffort 默认 `medium`
-- **AND** 首次下拉变更后立即写入 localStorage
+- **WHEN** localStorage 存 `{provider:"deepseek", model:"deepseek-reasoner", reasoningEffort:"high"}`
+- **THEN** 读回后三字段一致
 
-#### Scenario: localStorage 数据无效(model 不在 supported 列表)
+#### Scenario: 旧格式 localStorage 兼容
 
-- **WHEN** localStorage 的 `model` 字段值为 `gpt-5`(不在 `/api/chat/models` 返回的列表)
-- **THEN** 忽略该值,fallback 到 server default `deepseek-chat`
+- **WHEN** localStorage 存 v0.1 格式 `{model:"deepseek-chat", reasoningEffort:"medium"}`（无 provider）
+- **THEN** 读回 `provider` 为空串，`model` / `reasoningEffort` 保留
+- **AND** 调用方按 model 前缀推断 provider（`deepseek-` → `deepseek`）
+
+#### Scenario: localStorage 数据无效(model 不在目录)
+
+- **WHEN** localStorage 的 `model` 字段值不在 `/api/chat/models` 返回的目录里
+- **THEN** 忽略该值，fallback 到 `deepseek-chat`，再退到第一个 provider 的第一个 model
 - **AND** 不抛错(优雅降级)
 
 #### Scenario: localStorage reasoningEffort 不在模型 supported 列表
 
-- **WHEN** 当前 model `supportsReasoning=true`,localStorage 的 `reasoningEffort=low` 不在 `model.reasoningEfforts` 中
-- **THEN** 忽略该值,fallback 到数组中第一个元素(默认 `low`)
+- **WHEN** 当前 model `supportsReasoning=true`，localStorage 的 `reasoningEffort` 不在该 model 档位中
+- **THEN** 忽略该值，fallback 到数组中第一个元素
+
+#### Scenario: 损坏 JSON 不抛错
+
+- **WHEN** localStorage 值为非法 JSON
+- **THEN** `readModelSelection()` 返回 `null`
 
 ### Requirement: 后端 SendRequest.reasoning_effort 透传
 
-`POST /api/chat/send` SHALL 接受 `reasoning_effort` 字段(`null`/缺省 = 不传,使用 server default),并在 `ChatController` 调用 `ChatStreamService.create(...)` 时把该值传给 `WebAgentRuntime`,最终写入 `AgentLoop.reasoningEffort` volatile 字段。
+`POST /api/chat/send` SHALL 接受 `provider` 与 `reasoning_effort` 字段（`null`/缺省 = 不传），在 `ChatController` 调用 `ChatStreamService.create(...)` 时把 `provider` 传给 `AgentLoop.setProviderId`、`reasoning_effort` 传给 `AgentLoop.setReasoningEffort`。
 
 #### Scenario: 客户端不传 reasoning_effort
 
 - **WHEN** 客户端发 `{"content":"hi","model":"deepseek-reasoner"}`(无 `reasoning_effort` 字段)
 - **THEN** `AgentLoop.reasoningEffort` 保持 `null`(后续由 Provider 内部 fallback)
-- **AND** ProviderRequest.reasoningEffort = `null`
 
 #### Scenario: 客户端传 reasoning_effort=high
 
 - **WHEN** 客户端发 `{"content":"hi","model":"deepseek-reasoner","reasoning_effort":"high"}`
 - **THEN** `AgentLoop.reasoningEffort = "high"`
-- **AND** ProviderRequest.reasoningEffort = `"high"`
 - **AND** `OpenAiCompatibleMapper` 把 `reasoning_effort: "high"` 写入请求 body(原硬编码 `medium` 改读 req)
+
+#### Scenario: 客户端传 provider
+
+- **WHEN** 客户端发 `{"content":"hi","provider":"deepseek","model":"deepseek-reasoner"}`
+- **THEN** `AgentLoop.providerId = "deepseek"`
+- **AND** `ChatRequest.extra["provider"] = "deepseek"`
+
+#### Scenario: 客户端不传 provider 时从 model 推断
+
+- **WHEN** 客户端发 `{"content":"hi","model":"o1"}`(无 provider)
+- **THEN** 后端用 `ProviderInference.inferProvider("o1")` 推断为 `"openai"`
+- **AND** `AgentLoop.providerId = "openai"`
+
+#### Scenario: 推断失败时从 default-provider 兜底
+
+- **WHEN** 客户端发 `{"content":"hi","model":"abab6.5s-chat"}`（该 model 在 supported-models 内但前缀无法推断）
+- **THEN** 后端读 `agent.chat.default-provider`；未配置或为空时回退硬编码 `deepseek`
 
 ### Requirement: 后端 ModelsResponse.Model.reasoningEfforts
 
-`GET /api/chat/models` SHALL 返回 `{"models":[{"id":"...","name":"...","supportsReasoning":true,"reasoningEfforts":["low","medium","high"]}]}`,其中 `reasoningEfforts` 数组根据模型能力动态返回:`deepseek-chat` 返回 `[]`,`deepseek-reasoner` 返回 `["low","medium","high"]`,OpenAI o1/o3/o4 返回 `["low","medium","high"]`,Anthropic claude-4 thinking 返回 `["low","medium","high"]`。
+`GET /api/chat/models` SHALL 在嵌套结构的每个 model 上返回 `reasoningEfforts` 数组，元素为 `{id, name, description?}` 对象（v0.1 为 `string[]`，v0.2 升级为对象数组以携带显示名）。数组根据模型能力动态返回:不支持 reasoning 的 model 返回 `[]`,支持者返回其配置档位。
 
 #### Scenario: supported-models 配置默认
 
-- **WHEN** `application-web.yml` 配置 `agent.chat.supported-models: [deepseek-chat, deepseek-reasoner]`
-- **THEN** `/api/chat/models` 返回 `[{id:"deepseek-chat", supportsReasoning:false, reasoningEfforts:[]}, {id:"deepseek-reasoner", supportsReasoning:true, reasoningEfforts:["low","medium","high"]}]`
+- **WHEN** `application-web.yml` 配置 `agent.chat.providers` 含 `deepseek-v4-flash`（supports-reasoning=false）与 `deepseek-reasoner`（supports-reasoning=true，3 档）
+- **THEN** 响应中 `deepseek-v4-flash` 的 `reasoningEfforts` 为 `[]`
+- **AND** `deepseek-reasoner` 的 `reasoningEfforts` 为 `[{id:"low",name:"Low"},{id:"medium",name:"Medium"},{id:"high",name:"High"}]`
+
+#### Scenario: description 为 null 时不输出字段
+
+- **WHEN** 某档位未配置 `description`
+- **THEN** 该档位 JSON 中不含 `description` 键（`@JsonInclude.NON_NULL`）
 
 ### Requirement: 后端 ProviderRequest.reasoningEffort 透传
 
-`ProviderRequest` SHALL 新增 `reasoningEffort: String` 字段(`null` = 不传)。`AgentLoop` SHALL 在每次构造 `ProviderRequest` 时把 volatile `reasoningEffort` 写入该字段。`OpenAiCompatibleProvider` / `DeepSeekProvider` / `AnthropicProvider` SHALL 各自按规则把该字段映射到上游请求 body。
+`ProviderRequest` SHALL 含 `reasoningEffort: String` 字段(`null` = 不传)。`AgentLoop` SHALL 在每次构造 `ProviderRequest` 时把 volatile `reasoningEffort` 与 `providerId` 写入。`OpenAiCompatibleProvider` / `DeepSeekProvider` / `AnthropicProvider` SHALL 各自按规则把该字段映射到上游请求 body。
 
 #### Scenario: OpenAI o1 透传 reasoning_effort
 
@@ -1772,6 +1818,12 @@ ChatPanel SHALL 在初始化时从 `localStorage["agent-demo:model-selection"]` 
 - **WHEN** `ProviderRequest.reasoningEffort = "high"` 且 model 为 `deepseek-reasoner`
 - **THEN** `DeepSeekProvider` 不写任何 `reasoning_effort` 字段(DeepSeek 不接受该参数,reasoner 自动控制)
 - **AND** 上游响应 reasoning_content 仍正常返回
+
+#### Scenario: provider 字段写入 extra
+
+- **WHEN** `AgentLoop.providerId = "openai"` 或 `reasoningEffort != null`
+- **THEN** `ChatRequest.extra` 至少含 `provider` / `reasoning_effort` 之一
+- **AND** 两者均为 null 时 `extra` 为 null（不产生空 map）
 
 ### Requirement: 本地文件内容读取接口
 
@@ -1848,4 +1900,262 @@ Composer SHALL 在用户主输入框正上方独立一行半透明显示 Vosk `p
 
 - **WHEN** Vosk final 已提交至 `/voice-correction` 等待响应
 - **THEN** partial UI 显示"纠错中..."占位文本，纠错完成或超时降级后清空
+
+### Requirement: 后端 ModelCatalog 抽象启动时构建
+
+`agent-web` 启动时 SHALL 由 `ProviderCatalogService` 从 `agent.chat.providers` yml 配置构造不可变 `ModelCatalog` 实例。`ModelCatalog` SHALL 支持 `providers() / provider(id) / model(providerId, modelId) / supportedEfforts(providerId, modelId)` 四个查询方法。
+
+#### Scenario: 启动加载 yaml
+
+- **WHEN** `application-web.yml` 含 `agent.chat.providers` 嵌套列表
+- **THEN** Spring 启动时 `ProviderCatalogService` 解析并构造 `ModelCatalog`(不可变)
+
+#### Scenario: 启动配置校验失败 fail-fast
+
+- **WHEN** `agent.chat.providers` 配置中 `supports-reasoning=false` 但 `reasoning-efforts` 非空
+- **THEN** Spring 启动失败,日志输出明确的字段路径错误
+- **AND** 不进入 web 监听状态
+
+### Requirement: 后端 AgentLoop.setProviderId 与 setSelection
+
+`AgentLoop` SHALL 新增 volatile `providerId` 字段 + `setProviderId(String)` + `model()` getter + `setSelection(providerId, model, reasoningEffort)` 复合 setter。三者均只影响切换之后的新 `ChatRequest`。
+
+#### Scenario: setSelection 同时切三字段
+
+- **WHEN** 调用 `agentLoop.setSelection("openai", "o1", "high")`
+- **THEN** `AgentLoop.providerId() == "openai"`、`model() == "o1"`、`reasoningEffort() == "high"`
+
+#### Scenario: 旧调用方不传 provider
+
+- **WHEN** 5 参 `ChatStreamService.create` 被调用（providerId 为 null）
+- **THEN** `AgentLoop.providerId()` 保持 `null`（不改默认）
+
+#### Scenario: blank providerId 视同 null
+
+- **WHEN** `setProviderId("   ")` 经 6 参 `create` 传入
+- **THEN** `AgentLoop.providerId()` 仍为 `null`
+
+### Requirement: Provider 校验 providerId 一致性
+
+多 provider 共存时，各 Provider SHALL 校验 `ChatRequest.extra["provider"]` 与自身 provider id 一致，不匹配时抛 `IllegalArgumentException`。`extra` 为 null 或不含 `provider` 字段时 SHALL 跳过校验（向后兼容 v0.1 调用方）。
+
+#### Scenario: provider 匹配时放行
+
+- **WHEN** `extra = {provider: "deepseek"}` 且调用 `DeepSeekProvider.streamChat`
+- **THEN** 不抛异常
+
+#### Scenario: provider 不匹配时抛错
+
+- **WHEN** `extra = {provider: "anthropic"}` 且调用 `DeepSeekProvider.streamChat`
+- **THEN** 抛 `IllegalArgumentException`，消息含期望与实际 provider id
+
+#### Scenario: extra 为 null 时跳过校验
+
+- **WHEN** `extra == null`
+- **THEN** 不抛异常（v0.1 调用方兼容）
+
+#### Scenario: extra 不含 provider 字段时跳过校验
+
+- **WHEN** `extra = {reasoning_effort: "high"}`
+- **THEN** 不抛异常
+
+### Requirement: ProviderInference 模型名前缀推断
+
+agent-core SHALL 提供 `ProviderInference.inferProvider(model)` 工具方法，按模型名前缀返回 provider id：`o1` / `o3` / `o4` / `gpt-` → `openai`；`claude-` → `anthropic`；`deepseek-` → `deepseek`；其他 / null → `null`。匹配 SHALL 大小写不敏感。
+
+#### Scenario: 三大 provider 家族
+
+- **WHEN** 传入 `o1-preview` / `claude-opus-4-20250514` / `deepseek-chat`
+- **THEN** 分别返回 `openai` / `anthropic` / `deepseek`
+
+#### Scenario: 大小写不敏感
+
+- **WHEN** 传入 `DeepSeek-Chat` / `GPT-4o`
+- **THEN** 分别返回 `deepseek` / `openai`
+
+#### Scenario: 无法推断返回 null
+
+- **WHEN** 传入 `abab6.5s-chat` / `gemini-pro` / `null` / `""`
+- **THEN** 返回 `null`
+
+### Requirement: 模型选择真源单一
+
+系统 SHALL 以配置 `agent.chat.providers`（经 `ProviderCatalogService` 构造的 `ModelCatalog`）作为「哪些模型合法」的**唯一**真源。任何校验、默认值、列表端点 SHALL NOT 依赖第二个来源（如独立配置 key 或代码内硬编码的模型 id 常量）。
+
+`ProviderCatalogService` SHALL 在启动时校验配置的 `default-provider` 与 `default-model` 均存在于目录中，任一不匹配则启动失败（fail-fast），SHALL NOT 让一个非法的默认值进入运行时。
+
+#### Scenario: 默认模型不在目录中则启动失败
+
+- WHEN 配置 `agent.chat.default-model` 为一个不在 `agent.chat.providers` 中的 id
+- THEN `ProviderCatalogService` 初始化抛 `IllegalStateException`
+- AND 应用启动失败，不进入可服务状态
+
+#### Scenario: 默认 provider 不在目录中则启动失败
+
+- WHEN 配置 `agent.chat.default-provider` 为一个不在 `agent.chat.providers` 中的 id
+- THEN `ProviderCatalogService` 初始化抛 `IllegalStateException`
+- AND 应用启动失败，不进入可服务状态
+
+#### Scenario: 默认值合法则正常启动
+
+- WHEN `agent.chat.default-provider` 与 `agent.chat.default-model` 均能匹配到目录中的 provider / model
+- THEN 应用正常启动
+- AND `GET /api/chat/models` 返回的 `defaultProvider` / `defaultModel` 与配置一致
+
+### Requirement: 非法模型被拒绝
+
+当客户端在 `POST /api/chat/send` 中显式指定了 `model`，系统 SHALL 以 `ModelCatalog` 校验其合法性：
+
+- `model` 为 `null` 或缺省或全空白 → 视为「未指定」，使用 `agent.chat.default-model`；
+- `model` 命中目录 → 原样使用；
+- `model` 非空但未命中目录 → 返回 `400 Bad Request`，响应体含 `{"error": "invalid_model", "requested": "<收到的值>", "supported": ["<合法 id>", ...]}`，且 SHALL NOT 创建 stream。
+
+系统 SHALL NOT 把未通过校验的模型 id 透传给上游 Provider，也 SHALL NOT 在一个非法 `model` 上静默回退后继续执行回合。
+
+#### Scenario: 未指定模型走配置默认值
+
+- WHEN 客户端发送 `POST /api/chat/send`，请求体不含 `model` 字段（或 `model` 为空白串）
+- THEN 服务端返回 `200 OK`，响应体 `model` 等于 `agent.chat.default-model`
+- AND 该值必定存在于 `agent.chat.providers` 目录中
+
+#### Scenario: 合法模型原样透传
+
+- WHEN 客户端发送 `{"content": "hi", "model": "<目录中的某个 id>"}`
+- THEN 服务端返回 `200 OK`，响应体 `model` 与请求中的值逐字符相等
+- AND 该 model 被透传到 `AgentLoop`
+
+#### Scenario: 非法模型被拒且不创建流
+
+- WHEN 客户端发送 `{"content": "hi", "model": "deepseek-chat"}`（该 id 不在 `agent.chat.providers` 目录中）
+- THEN 服务端返回 `400 Bad Request`，响应体 `error` 为 `invalid_model`
+- AND 响应体 `requested` 为 `deepseek-chat`，`supported` 列出目录中全部合法 model id
+- AND **不创建 stream**（响应中无 `stream_id`）
+- AND 上游 Provider SHALL NOT 收到任何请求
+
+### Requirement: 统一 token 系统与主题机制
+
+MUST 把现状 token 系统（`--dsw-static-*` + `--dsw-alias-*`）统一为单层 shadcn 语义命名
+（`--background` / `--foreground` / `--primary` / `--border` / `--destructive` 等）。
+现状 `src/styles/tokens.css` 与 `src/styles/tokens-dark.css` 仅作为颜色值出处保留；
+不再有别名层。
+
+MUST 废弃 `body[data-ds-dark-theme]` 主题机制；统一使用 `<html data-theme>`（已存在的
+`useThemeApplication` 机制）。`lib/theme.ts` 的 `toggleTheme` / `applyTheme` 等旧 API
+可保留作为内部实现，但不再用于切换 dark。
+
+#### Scenario: dark 主题切换后页面背景与文字正确变化
+
+- **WHEN** 用户在 settings 选择 `appearance.preference=dark`
+- **THEN** `<html data-theme="dark">` 生效
+- **AND** 所有 `--dsw-static-*` 颜色变量被 `.dark` 选择器覆盖（或迁移到 `:root[data-theme="dark"]`）
+- **AND** 三主题（light / dark / hc）切换视觉一致
+
+#### Scenario: high-contrast 主题可启用
+
+- **WHEN** 用户选择 `appearance.preference=hc`（如果 §1 决定保留三主题）
+- **THEN** `<html data-theme="hc">` 生效
+- **AND** 对比度 ≥ 7:1（WCAG AAA）
+
+### Requirement: 引入 vitest-axe 自动化 a11y 扫描
+
+MUST 在 `vitest.setup.ts` 中集成 `vitest-axe` 提供 `expect(...).toHaveNoViolations()` 断言。
+
+#### Scenario: 渲染 ReasoningEffortSelect 触发 axe 检查
+
+- **WHEN** 测试代码 `await expect(screen.getByRole(...)).toHaveNoViolations()`
+- **THEN** axe 扫描该 DOM 节点
+- **AND** 报告 0 个违规（或显式列出现有违规）
+
+### Requirement: SettingsModal 使用 shadcn Dialog
+
+MUST 使用 shadcn `Dialog` + `DialogContent` 替换原手搓 `<div role="dialog">`，
+以获得 Radix 提供的 focus trap / Esc 关闭 / 焦点还原 / 外点击关闭 / portal 渲染。
+
+对调用方 props 接口 MUST 保持不变：
+
+```ts
+interface SettingsModalProps {
+  open: boolean;
+  onClose: () => void;
+  triggerElement?: HTMLElement | null;
+  api: ChatApi;
+  selection: ModelSelection;
+  reasoningEfforts: ReasoningEffort[];
+  onSelectionChange: (next: ModelSelection) => void;
+  onReasoningEffortChange: (effort: string) => void;
+}
+```
+
+`data-testid="settings-modal"` MUST 保留以兼容现有测试与自动化。
+
+#### Scenario: 打开设置 modal
+
+- **WHEN** 用户点击 trigger（`open` 变为 true）
+- **THEN** 渲染 shadcn Dialog，`data-testid="settings-modal"` 存在
+- **AND** 左侧渲染 4 个 nav 项（general / models / plugins / agent-presets）+ "设置" 标题
+- **AND** 右侧渲染 SettingsContent（默认 `settings-content-general`）
+
+#### Scenario: 关闭 modal
+
+- **WHEN** 用户点击关闭按钮
+- **THEN** `onClose` 被调用一次
+- **AND** Radix 自动把焦点还原到 trigger 元素
+
+### Requirement: ThemeToggle 支持 high-contrast 主题
+
+`AppearancePreference` MUST 支持 `"light" | "dark" | "system" | "hc"` 四个值。
+`useThemeApplication` MUST 把 `preference="hc"` 映射为 `<html data-theme="hc">`。
+`ThemeToggle` MUST 在 preference 为 hc 时显示高对比度图标与「高对比度」标签。
+
+#### Scenario: 用户选择高对比度
+
+- **WHEN** 用户点击 `appearance-card-hc`
+- **THEN** settings store 的 `general.appearance.preference` 被 patch 为 `"hc"`
+- **AND** `useThemeApplication` 把 `<html data-theme>` 设为 `"hc"`
+- **AND** `src/index.css` 中 `[data-theme="hc"]` 选择器覆盖 `--dsw-*` 颜色变量
+
+#### Scenario: 保留跟随系统
+
+- **WHEN** 用户选择「跟随系统」（`preference="system"`）
+- **THEN** `data-theme` 跟随 `prefers-color-scheme`（dark → `"dark"`，否则 `"light"`）
+- **AND** 新增 hc 不破坏既有 system 行为
+
+### Requirement: 淘汰无引用的 Dropdown 组件
+
+`Dropdown.tsx` / `Dropdown.test.tsx` / `Dropdown.module.css` MUST 被删除
+（仅由 ReasoningEffortSelect 使用，而后者已迁至 shadcn Popover + RadioGroup）。
+
+#### Scenario: 代码库中不再有 Dropdown 引用
+
+- **WHEN** 执行 `grep -r "components/Dropdown" agent-web/frontend/src`
+- **THEN** 无任何匹配
+- **AND** 前端测试与构建仍全绿
+
+### Requirement: ReasoningEffortSelect 使用 shadcn Popover + RadioGroup
+
+MUST 使用 shadcn `Popover` + `RadioGroup` 替换原 `<details>` 元素手搓实现。
+该 requirement 仅在 prototype 阶段有效；后续 §2/§3 change 将进一步把组件迁完。
+
+prototype 阶段针对的 `agent-web/frontend/src/components/ReasoningEffortSelect.tsx`
+使用 shadcn `Popover` + `RadioGroup` 替换原 `<details>` 元素手搓实现。
+对外接口保持不变：
+
+```ts
+interface ReasoningEffortSelectProps {
+  options: ReasoningEffort[];
+  value?: string;
+  onChange: (effort: string) => void;
+}
+```
+
+#### Scenario: 用户打开 effort 选择下拉
+
+- **WHEN** 用户点击 trigger
+- **THEN** 弹出 shadcn `Popover` 内容区
+- **AND** 内容区列出 `options` 每一项为 `RadioGroupItem`
+
+#### Scenario: 用户切换三主题视觉一致
+
+- **WHEN** 用户在 light / dark / high-contrast 之间切换 `data-theme`
+- **THEN** trigger 与内容区的颜色随主题变量变化，视觉与现状一致
 

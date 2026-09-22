@@ -1,6 +1,7 @@
 package com.example.agent.web.stream;
 
 import com.example.agent.config.AgentConfig;
+import com.example.agent.config.AgentPaths;
 import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoop;
 import com.example.agent.core.AgentLoopFactory;
@@ -133,15 +134,9 @@ public class WebAgentRuntime {
      * @return 数据目录
      */
     static Path resolveDataDir() {
-        String override = System.getProperty(AGENT_DEMO_HOME_PROPERTY);
-        if (override == null || override.isBlank()) {
-            override = System.getenv("AGENT_DEMO_HOME");
-        }
-        String home =
-                override != null && !override.isBlank()
-                        ? override
-                        : System.getProperty("user.home");
-        return Paths.get(home, ".agent-demo");
+        // fix-agent-home-isolation：解析逻辑已收敛到 AgentPaths（全仓唯一入口）。
+        // 本方法保留为兼容入口，语义与改造前逐字一致（属性 → env → user.home）。
+        return AgentPaths.agentHome();
     }
 
     /** 解析默认 agent 数据目录（保持既有调用点语义）。 */
@@ -291,6 +286,22 @@ public class WebAgentRuntime {
         SessionRecorder recorder = recorderFor(workspace, sessionId);
         if (recorder == null) return sseSink == null ? SessionLogSink.NOOP : sseSink;
         return new CompositeSessionLogSink(sseSink, recorder);
+    }
+
+    /**
+     * 取已存在的落盘录制器（**不创建**）。
+     *
+     * <p>与 {@link #recorderFor(String, String)} 的区别：本方法只查缓存，绝不会因为一次查询就
+     * 给该会话凭空开出一个 {@code .jsonl} 存档。add-message-actions P2 的 {@code message_meta}
+     * 推送需要读录制器上的 uuid，但推送本身不应产生副作用。
+     *
+     * @param workspace 工作区（可空 = 默认工作区）
+     * @param sessionId 会话 id
+     * @return 已装配的录制器；未装配（该会话不落盘）时 {@code null}
+     */
+    public SessionRecorder recorderIfPresent(String workspace, String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return null;
+        return sessionRecorders.get(key(workspace, sessionId));
     }
 
     /** 按会话懒创建（并缓存）落盘录制器；失败时该会话降级为不落盘并返回 null。 */

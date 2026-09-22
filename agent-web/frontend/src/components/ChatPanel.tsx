@@ -7,6 +7,7 @@ import { createVoskStt } from "../lib/stt";
 import { useVoiceChat } from "../lib/useVoiceChat";
 import { useSettingsStore } from "../hooks/useSettingsStore";
 import { DEFAULT_PERMISSION_MODE } from "./PermissionModeSelect";
+import type { MessageClock } from "../lib/message-clock";
 import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
@@ -25,6 +26,10 @@ export type Item =
       reasoningTokens?: number;
       // assistant 消息项可携带内联工具调用（按到达顺序与文本交错展示）
       tools?: InlineTool[];
+      // add-message-actions P2: 该条 assistant 在会话存档里的条目 uuid（message_meta / 历史回填带过来）
+      uuid?: string | null;
+      // add-message-actions P2: per-message 读数（clock）
+      meta?: MessageClock | null;
     }
   | { kind: "tool"; id: string; name: string; toolCallId: string; status: "running" | "ok" | "fail"; text?: string; durationMs?: number; denial?: SandboxDenial }
   | { kind: "perm"; id: string; toolName: string; reason: string; permissionId: string; choices: ("yes" | "no" | "always")[]; toolCallId: string };
@@ -96,6 +101,9 @@ export function mapHistoryToItems(messages: HistoryMessage[]): Item[] {
         role: "assistant",
         text: m.content,
         tools: tools.length ? tools : undefined,
+        // add-message-actions P2：后端已把读数贴到正确的 assistant 消息上，这里直接透传
+        uuid: m.uuid ?? undefined,
+        meta: m.meta ?? undefined,
       });
       const itemIdx = items.length - 1;
       tools.forEach((t, toolIdx) => toolIndex.set(t.id, { itemIdx, toolIdx }));
@@ -265,10 +273,35 @@ export function appendToolToTimeline(items: Item[], tool: InlineTool, id: string
   ];
 }
 
+/**
+ * 把 per-message 读数贴到「最近一条 assistant 文本项」上（纯函数，便于单测）。
+ *
+ * <p>一轮对话可能因为工具调用拆成多条 assistant item（每次迭代一段文本）；后端的
+ * {@code message_meta} 是**按轮**下发的，读数描述的是整轮（含工具执行），所以贴到最后一条
+ * 上——那正是「本条回复说完」的位置，与 DSH 把 clock 挂在该条 message 末尾的观感一致。
+ *
+ * @param items 现有渲染项
+ * @param meta 读数（来自 message_meta 事件）
+ * @returns 新的渲染项数组；找不到 assistant 文本项时原样返回
+ */
+export function attachMetaToTimeline(items: Item[], meta: MessageClock): Item[] {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (it.kind === "text" && it.role === "assistant") {
+      const updated = [...items];
+      updated[i] = { ...it, meta, uuid: meta.uuid ?? it.uuid } as Item;
+      return updated;
+    }
+  }
+  return items;
+}
+
 export function ChatPanel(props: {
   currentSessionId?: string | null;
   workspace?: string;
   // add-models-dropdown-v0：model/reasoningEffort 由 App 持有并传入（避免 ChatPanel 与 TopBar 状态不同步）
+  /** add-provider-catalog-abstract task 11.4：随 send 透传到后端的 provider id（可为空串） */
+  provider: string;
   model: string;
   reasoningEffort: string;
   currentModelEntry: ModelEntry | null;
@@ -290,7 +323,7 @@ export function ChatPanel(props: {
   const [sessionPermissionMode, setSessionPermissionMode] = useState<PermissionMode | null>(null);
   const permissionMode: PermissionMode = sessionPermissionMode ?? settingsPermissionMode;
   // add-models-dropdown-v0：model/reasoningEffort/currentModelEntry 由 props 传入（App.tsx 持有，避免双 state 不同步）
-  const { model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
+  const { provider, model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
   // （React 闭包捕获的是函数创建时的值；SSE 异步到达时闭包里的 streamId 可能仍是 null → 权限提交被跳过）。
   const streamIdRef = useRef<string | null>(null);
@@ -423,6 +456,8 @@ export function ChatPanel(props: {
         session_id: sessionIdRef.current ?? undefined,
         permission_mode: permissionMode,
         // add-models-dropdown-v0：透传 model + reasoningEffort 到后端
+        // add-provider-catalog-abstract task 11.4：透传 provider（空串时不发，后端按 model 前缀推断）
+        provider: provider || undefined,
         model,
         reasoning_effort: reasoningEffort,
       });
@@ -453,6 +488,17 @@ export function ChatPanel(props: {
     } else if (ev.type === "message_delta" && ev.delta_type === "thinking") {
       // add-reasoning-thinking-streaming: 累加 thinking 到最后一条 assistant
       appendThinkingToLastAssistant(ev.content);
+    } else if (ev.type === "message_meta") {
+      // add-message-actions P2：把本轮读数（Ran for / TTFT / tok/s）贴到刚定稿的 assistant 消息上
+      setItems((prev) =>
+        attachMetaToTimeline(prev, {
+          uuid: ev.uuid,
+          duration_ms: ev.duration_ms,
+          ttft_ms: ev.ttft_ms,
+          tok_per_sec: ev.tok_per_sec,
+          timestamp: ev.timestamp,
+        }),
+      );
     } else if (ev.type === "turn_stats") {
       // add-session-stats-bar：用累计统计刷新底部状态栏
       setStats({
@@ -579,7 +625,7 @@ export function ChatPanel(props: {
           </div>
         )}
         {items.map((it) => {
-          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} thinking={it.thinking} reasoningTokens={it.reasoningTokens} />;
+          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} thinking={it.thinking} reasoningTokens={it.reasoningTokens} meta={it.meta} />;
           if (it.kind === "tool") return <ToolCallCard key={it.id} name={it.name} status={it.status} text={it.text} durationMs={it.durationMs} denial={it.denial} onEscalate={(m) => handleEscalate(m as PermissionMode)} />;
           if (it.kind === "perm") return <PermissionCard key={it.id} toolName={it.toolName} reason={it.reason} choices={it.choices} onChoose={(d) => submitPermission(it.permissionId, d, it.id)} />;
           return null;

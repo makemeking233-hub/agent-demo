@@ -28,8 +28,8 @@ public class WecomBeans {
     @Bean
     public WecomSessionMapper wecomSessionMapper() {
         // 与 ChatCommand 行为一致：~/.agent-demo/wecom/ 持久化 userId→sessionId 映射
-        Path agentDataDir = java.nio.file.Paths.get(
-                System.getProperty("user.home"), ".agent-demo");
+        // fix-agent-home-isolation：走单一入口，使测试隔离（agent.demo.home）也能盖住 wecom 映射
+        Path agentDataDir = com.example.agent.config.AgentPaths.agentHome();
         return new WecomSessionMapper(agentDataDir.resolve("wecom"));
     }
 

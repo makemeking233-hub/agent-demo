@@ -32,11 +32,18 @@ describe("AppearanceCards", () => {
     mockStore.snapshot = { ...mockSnapshot, general: { appearance: { preference: "system" } } };
   });
 
-  it("renders 3 cards", () => {
+  it("renders 4 cards（含 shadcn-components-p1 新增 hc）", () => {
     const { getByTestId } = render(<AppearanceCards />);
     expect(getByTestId("appearance-card-light")).toBeInTheDocument();
     expect(getByTestId("appearance-card-dark")).toBeInTheDocument();
     expect(getByTestId("appearance-card-system")).toBeInTheDocument();
+    expect(getByTestId("appearance-card-hc")).toBeInTheDocument();
+  });
+
+  it("点击 hc 卡片写入 preference=hc", () => {
+    const { getByTestId } = render(<AppearanceCards />);
+    fireEvent.click(getByTestId("appearance-card-hc"));
+    expect(noopPatch).toHaveBeenCalledWith("general.appearance.preference", "hc");
   });
 
   it("shows selected state based on preference", () => {

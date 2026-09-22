@@ -69,7 +69,16 @@ public record AgentConfig(
             int retentionMaxAgeDays,
             int retentionKeepSessions) {}
 
-    public record Memory(SideQuery sideQuery) {}
+    /**
+     * Memory 配置。
+     *
+     * @param sideQuery        sideQuery 语义召回补充配置
+     * @param dynamicRetrieval 是否启用「每轮按当前用户提问动态召回」（fix-memory-recall-wiring）。
+     *                         {@code true}（默认）= 每轮请求组装时按当轮 query 召回并注入记忆段；
+     *                         {@code false} = 回退为启动期注入各 scope 全量索引（截断 200 行 / 25KB），
+     *                         即 v0.1 兼容行为。关闭可省去每轮的索引解析与 sideQuery 调用开销。
+     */
+    public record Memory(SideQuery sideQuery, boolean dynamicRetrieval) {}
 
     public record SideQuery(boolean enabled, int maxCandidates, int minCandidates) {}
 
@@ -119,7 +128,7 @@ public record AgentConfig(
 
     public static AgentConfig defaults() {
         return new AgentConfig(
-                new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-chat", 8192),
+                new Provider("deepseek", "", "https://api.deepseek.com", "deepseek-v4-flash", 8192),
                 new Permission(
                         "ask-write",
                         List.of(
@@ -141,19 +150,19 @@ public record AgentConfig(
                 List.of(),
                 new Logging(
                         true,
-                        // 日志根固定为 ~/.agent-demo/logs（improve-failure-observability）：
-                        // 此前是 ${user.dir}/logs，随进程工作目录漂移，且与 /api/logs 读取的
-                        // ~/.agent-demo/logs 不一致。
-                        System.getProperty("user.home") + "/.agent-demo/logs/",
+                        // 日志根固定为 <agent 数据目录>/logs（improve-failure-observability）：
+                        // 此前是 ${user.dir}/logs，随进程工作目录漂移，且与 /api/logs 读取位置不一致。
+                        // fix-agent-home-isolation：改由 AgentPaths 单一入口解析，使系统属性
+                        // agent.demo.home 也能覆盖日志根（此前只有 WebAgentRuntime 认它，
+                        // 导致测试日志照样写进用户真实 ~/.agent-demo/logs）。
+                        AgentPaths.logsDir(),
                         30_000,
                         2_000,
                         30,
                         50),
-                new Memory(new SideQuery(true, 8, 3)),
+                new Memory(new SideQuery(true, 8, 3), true),
                 new Mcp(List.of()),
-                new Worktree(
-                        false,
-                        System.getProperty("user.home") + "/.agent-demo/worktrees"),
+                new Worktree(false, AgentPaths.worktreesDir()),
                 List.of(),
                 new Search("", 5, 60_000),
                 // improve-voice-accuracy T8: 默认开启 ASR 后处理（语义纠错）；DeepSeek key 由启动门禁校验。

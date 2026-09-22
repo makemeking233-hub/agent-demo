@@ -4,6 +4,7 @@ import com.example.agent.core.AgentLoop;
 import com.example.agent.core.Message;
 import com.example.agent.core.TurnResult;
 import com.example.agent.log.SessionLogSink;
+import com.example.agent.log.SessionRecorder;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionMode;
 import com.example.agent.session.WorkspaceStore;
@@ -103,6 +104,33 @@ public class ChatStreamService {
             PermissionMode mode,
             String workspace,
             String reasoningEffort) {
+        return create(null, sessionId, model, mode, workspace, reasoningEffort);
+    }
+
+    /**
+     * 创建一条活动流（add-provider-catalog-abstract task 7.1：新增 6 参重载）。
+     *
+     * <p>新增 {@code providerId} 字段透传到 {@code AgentLoop.setProviderId(providerId)}；多 provider 路由
+     * （v0.2）会在 {@code WebAgentRuntime.createLoop} 按 providerId 选 provider bean。当前 v0.1
+     * 仍只路由 DeepSeek，故 providerId 仅写到 AgentLoop 用于后续 validateProvider 校验，不影响
+     * 实际 HTTP 路由。
+     *
+     * @param providerId   provider 标识（{@code deepseek} / {@code openai} / {@code anthropic}）；
+     *                     {@code null} = 不切换（沿用 AgentLoop 默认）
+     * @param sessionId    会话 id
+     * @param model        模型名
+     * @param mode         初始权限模式
+     * @param workspace    工作区
+     * @param reasoningEffort 思考强度
+     * @return 活动流元数据
+     */
+    public ActiveStream create(
+            String providerId,
+            String sessionId,
+            String model,
+            PermissionMode mode,
+            String workspace,
+            String reasoningEffort) {
         String streamId = UUID.randomUUID().toString();
         // replay().all(): 延迟订阅者(客户端 turn 完成后再连)能收到全部事件 + complete,
         // 支撑 spec §resume/Last-Event-ID 与测试中 send→stream 的先后时序。
@@ -131,6 +159,14 @@ public class ChatStreamService {
         // add-models-dropdown-v0：透传 reasoningEffort 到 AgentLoop volatile 字段
         if (reasoningEffort != null && !reasoningEffort.isBlank()) {
             loop.setReasoningEffort(reasoningEffort);
+        }
+        // add-provider-catalog-abstract task 7.2：透传 provider + model 到 AgentLoop
+        // loop 可能在测试中 mock 为 null（只验证 createLoop 参数），用 null-check 跳过副作用调用
+        if (loop != null) {
+            if (providerId != null && !providerId.isBlank()) {
+                loop.setProviderId(providerId);
+            }
+            loop.setModel(model);
         }
         ActiveStream meta =
                 new ActiveStream(
@@ -161,6 +197,15 @@ public class ChatStreamService {
                     try {
                         loop.processTurn(new Message.User(content))
                                 .block(Duration.ofMinutes(30));
+                        // fix-stale-model-fallback：成功路径也记 model。此前**只有失败路径**记，
+                        // 于是「前端选了什么模型 vs 上游实际收到什么模型」无法靠日志对照，
+                        // 只能靠浏览器抓包。字段与下面的 turn failed 逐字对齐，便于直接比对。
+                        log.info(
+                                "turn completed stream={} session={} workspace={} model={}",
+                                streamId,
+                                meta.sessionId(),
+                                meta.workspace(),
+                                meta.model());
                     } catch (Throwable t) {
                         // JVM 级致命错误（OOM / StackOverflow）原样抛出，不降级为回合失败
                         com.example.agent.core.Throwables.reraiseIfJvmFatal(t);
@@ -252,6 +297,33 @@ public class ChatStreamService {
     public boolean submitDecision(String streamId, String permissionId, String decision) {
         if (actives.get(streamId) == null) return false;
         return permissionBridge.submitDecision(permissionId, decision);
+    }
+
+    /**
+     * 推送单条 assistant 消息的读数（add-message-actions P2）。
+     *
+     * <p>在 {@code turn_stats} 与 {@code message_stop} **之前**推送，携带本轮（而非会话累计）的
+     * wall time / TTFT / 吞吐，供前端在消息底部渲染 DSH 风格 clock。
+     *
+     * <p>uuid 取该会话落盘录制器记录的「本轮最后一条 assistant 条目 uuid」；会话不落盘时为
+     * {@code null}（前端退化为只显示时间）。派生指标复用 {@link SessionStats} 的口径，
+     * 保证与底部统计栏一致。
+     *
+     * @param streamId   流 id
+     * @param result     本轮结果（可空；空时读数退化为 N/A）
+     * @param durationMs 本轮 wall time（毫秒）
+     */
+    public void emitMessageMeta(String streamId, TurnResult result, long durationMs) {
+        ActiveStream meta = actives.get(streamId);
+        if (meta == null) return;
+        SessionRecorder recorder = runtime.recorderIfPresent(meta.workspace(), meta.sessionId());
+        String uuid = recorder == null ? null : recorder.lastAssistantUuid();
+        TurnDelta delta = result != null ? result.delta() : null;
+        SessionStats perTurn = SessionStats.empty().plus(delta);
+        emit(
+                meta,
+                new SseEvent.MessageMeta(
+                        uuid, durationMs, perTurn.avgTtftMs(), perTurn.tokPerSec(), System.currentTimeMillis()));
     }
 
     /**

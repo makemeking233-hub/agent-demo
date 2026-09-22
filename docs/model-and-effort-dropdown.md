@@ -1,6 +1,23 @@
 # 模型 + 思考强度下拉（add-models-dropdown-v0）
 
-> **状态**: add-models-dropdown-v0 已落地（v0.1 简化版）。后续 v0.2 由 `add-provider-catalog-abstract` 升级为完整 provider 分层目录（对齐 dsh web `ModelSelection`）。
+> **状态**: add-models-dropdown-v0 已落地（v0.1 简化版）。
+>
+> **v0.2 起已由 `add-provider-catalog-abstract` 升级为分层 provider 目录**（两层菜单 + `ModelSelection` + provider 推断）。
+> **本文档保留 v0.1 设计记录**，描述已不再对应当前实现的部分见下方「v0.2 变更摘要」；
+> 当前实现请看 [`provider-catalog.md`](./provider-catalog.md)。
+
+## 0. v0.2 变更摘要（add-provider-catalog-abstract）
+
+| 本文档描述的 v0.1 行为 | v0.2 现状 |
+|----------------------|-----------|
+| `ModelsResponse.models[]` 平铺 | `ModelsResponse.providers[]` 嵌套（**BREAKING**，平铺字段已移除） |
+| `ModelEntry.reasoningEfforts: string[]` | `ModelEntry.reasoningEfforts: ReasoningEffort[]`（`{id,name,description?}`） |
+| localStorage `{model, reasoningEffort}` | `{provider, model, reasoningEffort}`（旧格式读到 provider 为空串 → 前缀推断） |
+| 单层模型下拉 | `ModelSelect` 两层菜单（左 provider / 右 model + 内联 effort chip） |
+| `ReasoningEffortSelect` prop `model: ModelEntry` | prop `options: ReasoningEffort[]` |
+| `/model <model>` 白名单 | `/model <provider>/<model>` 完整路径 + 别名 + 前缀推断简写 |
+
+> 下文内容为 v0.1 设计记录，未逐条改写。
 
 ## 1. 目标
 

@@ -7,6 +7,7 @@ import com.example.agent.llm.StreamChunk;
 import com.example.agent.llm.ToolCall;
 import com.example.agent.llm.ToolSpec;
 import com.example.agent.log.SessionLogSink;
+import com.example.agent.memory.MemorySectionSource;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionDecision;
 import com.example.agent.permission.PermissionManager;
@@ -49,7 +50,7 @@ public class AgentLoop {
     /**
      * 默认模型（v0.1 单 provider；从 cfg 传入覆盖）
      */
-    private static final String DEFAULT_MODEL = "deepseek-chat";
+    private static final String DEFAULT_MODEL = "deepseek-v4-flash";
 
     /**
      * 默认 temperature（DeepSeek 推荐 1.0）
@@ -97,6 +98,18 @@ public class AgentLoop {
     private volatile String model;
 
     /**
+     * Provider id 标识（add-provider-catalog-abstract；{@code null} = 由 caller 兜底）。
+     *
+     * <p>v0.1 (add-models-dropdown-v0) 只有 deepseek 单 provider,本字段是 v0.2 升级为多层 provider
+     * 后引入。运行时由 {@link #setProviderId(String)} 切换;多线程可见({@code volatile})。
+     * 每次构造 {@code ChatRequest} 时通过 {@code extra} map 透传给 Provider。
+     *
+     * <p>注:与上面的 {@link #provider} LlmProvider 字段不同——那是注入的 LLM 客户端实例,
+     * 本字段是 provider id 字符串(如 "deepseek" / "openai" / "anthropic")。
+     */
+    private volatile String providerId;
+
+    /**
      * 思考强度（add-models-dropdown-v0；{@code null} = 不传，由 Provider 内部 fallback）。
      *
      * <p>运行时由 {@link #setReasoningEffort(String)} 切换；多线程可见（{@code volatile}）。
@@ -108,6 +121,25 @@ public class AgentLoop {
      * 系统提示词（{@code null} 表示不注入 system 消息；由 SystemPromptBuilder 组装或用户 --system-prompt 覆盖）
      */
     private final String systemPrompt;
+
+    /**
+     * 记忆段来源（fix-memory-recall-wiring；可空）。
+     *
+     * <p>非空时，构造参数 {@code systemPrompt} 被视作**不含记忆段的基础 prompt**，
+     * {@link #toRequest()} 会在每轮把按当轮用户提问召回的记忆段追加其后。为空时
+     * {@code systemPrompt} 即为最终值，行为与改造前完全一致。
+     */
+    private final MemorySectionSource memorySectionSource;
+
+    // ---- fix-memory-recall-wiring：轮内记忆段缓存 ----
+    // toRequest() 在同一轮内可能被多次调用（每次工具迭代一次），而 query 不变；
+    // 缓存上次结果可避免重复解析 MEMORY.md 索引、重复发起 sideQuery 的 LLM 调用。
+
+    /** 上次解析记忆段所用的 query */
+    private volatile String memoryQuery;
+
+    /** 上次解析出的记忆段 */
+    private volatile String memorySection;
 
     /**
      * 会话日志观察者（可空；默认 no-op，见 {@link SessionLogSink#NOOP}）
@@ -201,6 +233,27 @@ public class AgentLoop {
     }
 
     /**
+     * 构造 Agent 主循环（带记忆段来源；无 sink / agentDataDir / confirmer / abortSignal）。
+     *
+     * <p>fix-memory-recall-wiring T4：供每轮按当前提问动态召回记忆段的场景使用。
+     *
+     * @param memorySectionSource 记忆段来源（{@code null} = 不动态召回，{@code systemPrompt} 即最终值）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt,
+            MemorySectionSource memorySectionSource) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, systemPrompt,
+                SessionLogSink.NOOP, null, null, null, memorySectionSource);
+    }
+
+    /**
      * 构造 Agent 主循环（带会话日志观察者）。
      *
      * @param provider          LLM provider
@@ -287,6 +340,32 @@ public class AgentLoop {
             Path agentDataDir,
             PermissionConfirmer confirmer,
             AbortSignal abortSignal) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, systemPrompt,
+                sink, agentDataDir, confirmer, abortSignal, null);
+    }
+
+    /**
+     * 构造 Agent 主循环（带记忆段来源；fix-memory-recall-wiring T4）。
+     *
+     * <p>与 12 参构造器的唯一差别是 {@code memorySectionSource}：非空时 {@code systemPrompt} 被当作
+     * 基础段，每轮按当前用户提问召回的记忆段会被追加其后；为空时行为与 12 参版本完全一致。
+     *
+     * @param memorySectionSource 记忆段来源（{@code null} = 不动态召回）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt,
+            SessionLogSink sink,
+            Path agentDataDir,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal,
+            MemorySectionSource memorySectionSource) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
@@ -294,6 +373,7 @@ public class AgentLoop {
         this.maxToolIterations = maxToolIterations;
         this.model = model;
         this.systemPrompt = systemPrompt;
+        this.memorySectionSource = memorySectionSource;
         this.sink = sink != null ? sink : SessionLogSink.NOOP;
         this.confirmer = confirmer;
         AbortSignal signal = abortSignal != null ? abortSignal : () -> false;
@@ -326,6 +406,15 @@ public class AgentLoop {
     }
 
     /**
+     * 当前 model 名（add-provider-catalog-abstract：供 UI / 测试读取切换后的值）。
+     *
+     * @return 当前 model 名
+     */
+    public String model() {
+        return model;
+    }
+
+    /**
      * 运行时切换思考强度（add-models-dropdown-v0；{@code /effort} slash 命令 + 前端下拉用）。volatile 保证多线程可见。
      *
      * <p>仅影响切换之后的新 ChatRequest，正在进行的 turn 不受影响（流中不切）。
@@ -339,6 +428,36 @@ public class AgentLoop {
     /** 当前思考强度（供 UI / 测试读取）。 */
     public String reasoningEffort() {
         return reasoningEffort;
+    }
+
+    /**
+     * add-provider-catalog-abstract：运行时切换 provider id。仅影响切换之后的新 {@code ChatRequest}。
+     *
+     * @param newProviderId 新 provider id（{@code null} 视为不切换）
+     */
+    public void setProviderId(String newProviderId) {
+        this.providerId = newProviderId;
+    }
+
+    /** 当前 provider id（供 UI / 测试读取；可能为 {@code null}）。 */
+    public String providerId() {
+        return providerId;
+    }
+
+    /**
+     * add-provider-catalog-abstract：复合 setter,同时切 providerId + model + reasoningEffort。
+     *
+     * <p>对齐 dsh web {@code setModelSelection} 语义。前端 ModelSelect 切换一次触发三个 volatile
+     * 字段一起更新,无需三次原子操作。
+     *
+     * @param newProviderId 新 provider id（{@code null} 保留旧值）
+     * @param newModel      新 model id（{@code null} 保留旧值）
+     * @param newEffort     新 reasoning effort（{@code null} 保留旧值）
+     */
+    public void setSelection(String newProviderId, String newModel, String newEffort) {
+        if (newProviderId != null) this.providerId = newProviderId;
+        if (newModel != null) this.model = newModel;
+        if (newEffort != null) this.reasoningEffort = newEffort;
     }
 
     /**
@@ -568,29 +687,81 @@ public class AgentLoop {
         for (var t : tools.list()) {
             specs.add(new ToolSpec(t.name(), t.description(), t.inputSchema()));
         }
-        // 配对修复（repair-dangling-tool-calls）：某一轮若在「assistant(tool_calls) 已入 history、
-        // tool_result 尚未回流」之间被打断，内存历史就带着空洞；直接发出去会被上游 400
-        // （assistant 的 tool_calls 缺少对应 tool 消息）。这里对**将要发送的消息列表**补齐，
-        // 使同一进程内不必等重启也能继续对话（幂等，已配对时无改动）。
+        // 配对修复（repair-dangling-tool-calls + snip-pairing-repair）：内存历史可能带着两个方向的
+        // 污染，直接发出去都会被上游 400 ——
+        //   正向：某一轮在「assistant(tool_calls) 已入 history、tool_result 尚未回流」之间被打断；
+        //   反向：历史前缀被 snip 裁掉，留下无前置 tool_calls 的孤儿 tool 结果。
+        // 这里对**将要发送的消息列表**把两个方向都补齐，使同一进程内不必等重启也能继续对话。
+        // 只作用于本次请求的副本，不写回 history（幂等，已配对时逐元素无改动）。
         List<com.example.agent.core.Message> msgs =
-                ToolCallPairing.repair(history.all());
+                ToolCallPairing.repairOrphanResults(ToolCallPairing.repair(history.all()));
         sink.onContextSnapshot(buildSnapshot(specs));
-        // add-models-dropdown-v0：把 volatile reasoningEffort 透传到 ChatRequest.extra，
-        // 让 OpenAI/Anthropic mapper 按各自规则写入请求 body（DeepSeek 忽略）。
-        // 用 LinkedHashMap 保留插入顺序，便于上游 mapper 调试日志可读。
+        // add-models-dropdown-v0 + add-provider-catalog-abstract：把 volatile reasoningEffort
+        // + providerId 透传到 ChatRequest.extra,让 OpenAI/Anthropic mapper 按各自规则写入
+        // 请求 body（DeepSeek 忽略 providerId）。用 LinkedHashMap 保留插入顺序,便于上游 mapper
+        // 调试日志可读。
         Map<String, Object> extra = null;
-        if (reasoningEffort != null) {
+        if (reasoningEffort != null || providerId != null) {
             extra = new LinkedHashMap<>();
-            extra.put("reasoning_effort", reasoningEffort);
+            if (providerId != null) extra.put("provider", providerId);
+            if (reasoningEffort != null) extra.put("reasoning_effort", reasoningEffort);
         }
         return new ChatRequest(
                 model != null ? model : DEFAULT_MODEL,
-                systemPrompt,
+                resolveSystemPrompt(),
                 msgs,
                 specs,
                 DEFAULT_TEMPERATURE,
                 DEFAULT_MAX_TOKENS,
                 extra);
+    }
+
+    /**
+     * 解析本轮实际使用的 system prompt（fix-memory-recall-wiring T4）。
+     *
+     * <p>无记忆段来源时直接返回构造时传入的 {@code systemPrompt}（行为与改造前一致）。有来源时以其为
+     * 基础段，追加按当轮用户提问召回的记忆段；记忆段为空则不追加，避免引入多余分隔符。
+     *
+     * @return 本轮 system prompt
+     */
+    private String resolveSystemPrompt() {
+        if (memorySectionSource == null) return systemPrompt;
+        String section = memorySectionFor(latestUserQuery());
+        if (section == null || section.isBlank()) return systemPrompt;
+        if (systemPrompt == null || systemPrompt.isBlank()) return section;
+        return systemPrompt + "\n\n" + section;
+    }
+
+    /**
+     * 解析记忆段（轮内缓存）。
+     *
+     * <p>同一轮内 {@link #toRequest()} 会因工具迭代被多次调用，但 query 不变，故命中缓存直接复用，
+     * 避免重复解析索引与重复发起 sideQuery 的 LLM 调用。
+     *
+     * @param query 当轮用户提问
+     * @return 记忆段文本（无则空串）
+     */
+    private String memorySectionFor(String query) {
+        if (query == null || query.isBlank()) return "";
+        if (query.equals(memoryQuery)) return memorySection;
+        String section = memorySectionSource.sectionFor(query);
+        if (section == null) section = "";
+        memorySection = section;
+        memoryQuery = query;
+        return section;
+    }
+
+    /**
+     * 取历史中最近一条 user 消息内容作为当轮提问。
+     *
+     * @return 最近的 user 消息内容；历史中无 user 消息时返回 {@code null}
+     */
+    private String latestUserQuery() {
+        List<Message> all = history.all();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            if (all.get(i) instanceof Message.User u) return u.content();
+        }
+        return null;
     }
 
     /**

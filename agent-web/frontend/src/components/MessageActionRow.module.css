@@ -1,0 +1,48 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.row:hover {
+  opacity: 1;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-fg-muted, #6b7280);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--dsw-static-surface-sunken, rgba(0, 0, 0, 0.06));
+  color: var(--dsw-alias-fg, #1f2937);
+}
+
+.action[aria-pressed="true"] {
+  color: var(--dsw-alias-accent, #2563eb);
+}
+
+/* per-message clock（P2）：16:23 · Ran for 15s · TTFT 1.2s · 34 tok/s */
+.clock {
+  margin-left: 4px;
+  font-size: 0.7em;
+  color: var(--dsw-alias-fg-muted, #6b7280);
+  white-space: nowrap;
+}
+
+.clockDot {
+  margin: 0 4px;
+  opacity: 0.55;
+}

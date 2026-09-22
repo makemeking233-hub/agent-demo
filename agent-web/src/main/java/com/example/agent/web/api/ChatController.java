@@ -1,11 +1,16 @@
 package com.example.agent.web.api;
 
 import com.example.agent.permission.PermissionMode;
+import com.example.agent.provider.ProviderInference;
+import com.example.agent.web.api.catalog.ModelCatalog;
+import com.example.agent.web.api.catalog.ProviderCatalogProperties;
 import com.example.agent.web.api.dto.AbortResponse;
 import com.example.agent.web.api.dto.PermissionModeRequest;
 import com.example.agent.web.api.dto.SendRequest;
 import com.example.agent.web.api.dto.SendResponse;
 import com.example.agent.web.stream.ChatStreamService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
@@ -26,14 +31,25 @@ import java.util.UUID;
 @RequestMapping("/api/chat")
 @Profile("web")
 public class ChatController {
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
+
     private final ChatStreamService streams;
     private final Environment env;
     private final SessionOwnerRegistry ownerRegistry;
+    private final ModelCatalog catalog;
+    private final ProviderCatalogProperties catalogProps;
 
-    public ChatController(ChatStreamService streams, Environment env, SessionOwnerRegistry ownerRegistry) {
+    public ChatController(
+            ChatStreamService streams,
+            Environment env,
+            SessionOwnerRegistry ownerRegistry,
+            ModelCatalog catalog,
+            ProviderCatalogProperties catalogProps) {
         this.streams = streams;
         this.env = env;
         this.ownerRegistry = ownerRegistry;
+        this.catalog = catalog;
+        this.catalogProps = catalogProps;
     }
 
     @PostMapping("/send")
@@ -60,9 +76,30 @@ public class ChatController {
             return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "workspace_not_found")));
         }
         String model = resolveModel(req.model());
+        if (model == null) {
+            // fix-stale-model-fallback：非法 model 必须当场拒绝，不再静默兜回。
+            // 修复前的兜底值是 deepseek-chat（同样是被上游停用的 id），两个非法值首尾相接，
+            // 最终原样发给上游且无人知晓。合法取值见 /api/chat/models。
+            String requested = req.model();
+            log.warn("rejecting unknown model requested={} supported={}", requested, catalog.modelIds());
+            return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of(
+                            "error", "invalid_model",
+                            "requested", requested,
+                            "supported", catalog.modelIds())));
+        }
+        // add-provider-catalog-abstract task 6.3 + 7.3：按 model 名推断 provider；推断为 null
+        // 时从配置的 agent.chat.default-provider 兜底（ProviderCatalogProperties 已绑定该键）。
+        String providerId = ProviderInference.inferProvider(model);
+        if (providerId == null) {
+            String defaultProvider = catalogProps.defaultProvider();
+            providerId = (defaultProvider != null && !defaultProvider.isBlank())
+                    ? defaultProvider : "deepseek";
+        }
         // add-models-dropdown-v0：透传 reasoningEffort（null/blank = 不切换，沿用 Provider 默认）
+        // add-provider-catalog-abstract：6 参重载透传 providerId 到 AgentLoop.setProviderId
         ChatStreamService.ActiveStream meta =
-                streams.create(sessionId, model, mode, req.workspace(), req.reasoningEffort());
+                streams.create(providerId, sessionId, model, mode, req.workspace(), req.reasoningEffort());
         // Q2: 注册 stream owner IP (permission 切换时校验)
         ownerRegistry.register(meta.streamId(), clientIp(exchange));
         streams.start(meta.streamId(), req.content());
@@ -77,13 +114,28 @@ public class ChatController {
     }
 
     /**
-     * add-reasoning-thinking-streaming: 解析模型名。null/空用默认 {@code deepseek-chat}；
-     * 非法（不在 supported-models 列表）回退默认（前端可调 /api/chat/models 看合法列表）。
+     * 解析请求中的模型名（fix-stale-model-fallback）。
+     *
+     * <p>以 {@link ModelCatalog}（配置 {@code agent.chat.providers}）为**唯一真源**：
+     *
+     * <ul>
+     *   <li>{@code null}/空白 → 配置默认值 {@code agent.chat.default-model}（启动期已校验其存在于目录中）
+     *   <li>命中目录 → 原样返回
+     *   <li>非空但未命中 → 返回 {@code null}，由调用方转 400（fail-closed）
+     * </ul>
+     *
+     * <p>返回 {@code null} 表示「调用方发了一个非法模型」，与「未指定」是两回事：
+     * 前者必须拒绝，后者才走默认值。这个区分是本 bug 的关键 —— 修复前两者被混为一谈，
+     * 于是非法值被静默「修好」成了一个同样非法的值。
+     *
+     * @param requested 请求体中的 model（可为 null/空白）
+     * @return 可用的模型 id；非法时返回 {@code null}
      */
     private String resolveModel(String requested) {
-        String fallback = "deepseek-chat";
-        if (requested == null || requested.isBlank()) return fallback;
-        return ModelRegistry.isSupported(requested, env) ? requested : fallback;
+        if (requested == null || requested.isBlank()) {
+            return catalogProps.defaultModel();
+        }
+        return catalog.modelById(requested).isPresent() ? requested : null;
     }
 
     @PostMapping("/abort/{streamId}")
