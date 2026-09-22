@@ -31,10 +31,12 @@ interface ComposerProps {
 }
 
 const SLASH_COMMANDS = ["/help", "/clear", "/resume", "/history", "/quit"];
+/** dsh 4 档命名（rewrite-permission-mode-dsh T10：与后端 SandboxMode 对齐） */
 const PERMISSION_LABELS: Record<PermissionMode, string> = {
-  read_only: "Read Only",
-  workspace_write: "Workspace Write",
-  full_access: "Full access",
+  plan: "Plan",
+  ask: "Ask",
+  "danger-full": "Danger Full",
+  dontAsk: "Don't Ask",
 };
 
 export function Composer(props: ComposerProps) {
@@ -53,7 +55,7 @@ function ComposerInner({
   onSend,
   onAbort,
   placeholder = "输入消息或 /help...",
-  permissionMode = "read_only",
+  permissionMode = "plan",
   onPermissionModeChange,
   voiceState = "idle",
   muted = false,

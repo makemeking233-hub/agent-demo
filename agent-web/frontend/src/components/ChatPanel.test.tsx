@@ -1,9 +1,27 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ChatPanel, attachMetaToTimeline, mapHistoryToItems, type Item } from "./ChatPanel";
 import type { MessageClock } from "../lib/message-clock";
 
 const KEY = "agent-demo.chat.v1";
+
+// rewrite-permission-mode-dsh T10.2/T11.2：ChatPanel 从 settings 读权限模式。
+// 用可变 store 让各测试控制 general.permission.mode。
+const settingsStore = {
+  snapshot: {
+    version: 1,
+    general: { permission: { mode: "plan" as string } },
+    revision: 0,
+  } as { version: number; general: { permission: { mode?: string } }; revision: number },
+  status: "ready" as const,
+  error: null,
+  patch: vi.fn().mockResolvedValue(undefined),
+  refresh: vi.fn(),
+};
+
+vi.mock("../hooks/useSettingsStore", () => ({
+  useSettingsStore: (selector: (s: typeof settingsStore) => unknown) => selector(settingsStore),
+}));
 
 describe("ChatPanel 会话重进恢复", () => {
   beforeAll(() => {
@@ -97,6 +115,70 @@ describe("ChatPanel 会话重进恢复", () => {
     renderPanel();
     const { waitFor } = await import("@testing-library/react");
     await waitFor(() => expect(screen.getByText(/开始对话/)).toBeInTheDocument());
+  });
+});
+
+// ---- rewrite-permission-mode-dsh T11.2: ChatPanel 从 settings 读权限模式 ----
+
+describe("ChatPanel 权限模式 (T11.2)", () => {
+  beforeAll(() => {
+    Object.defineProperty(Element.prototype, "scrollTo", {
+      configurable: true,
+      value: () => {},
+    });
+  });
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    settingsStore.snapshot = {
+      version: 1,
+      general: { permission: { mode: "plan" } },
+      revision: 0,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ session_id: "s-1", messages: [] }),
+      }),
+    );
+  });
+  afterEach(() => cleanup());
+
+  function renderPanel() {
+    return render(
+      <ChatPanel
+        provider="deepseek"
+        model="deepseek-chat"
+        reasoningEffort="medium"
+        currentModelEntry={null}
+        onReasoningEffortChange={() => {}}
+      />,
+    );
+  }
+
+  it("Composer 权限下拉反映 settings 中的 mode", () => {
+    settingsStore.snapshot.general.permission.mode = "danger-full";
+    renderPanel();
+    const select = screen.getByLabelText("权限模式") as HTMLSelectElement;
+    expect(select.value).toBe("danger-full");
+  });
+
+  it("settings 无 mode 时缺省 plan", () => {
+    settingsStore.snapshot.general.permission = {};
+    renderPanel();
+    const select = screen.getByLabelText("权限模式") as HTMLSelectElement;
+    expect(select.value).toBe("plan");
+  });
+
+  it("用户在 Composer 切换 mode 时 session 级覆盖生效", () => {
+    settingsStore.snapshot.general.permission.mode = "plan";
+    renderPanel();
+    const select = screen.getByLabelText("权限模式") as HTMLSelectElement;
+    expect(select.value).toBe("plan");
+    fireEvent.change(select, { target: { value: "ask" } });
+    expect((screen.getByLabelText("权限模式") as HTMLSelectElement).value).toBe("ask");
   });
 });
 

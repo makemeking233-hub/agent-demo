@@ -126,4 +126,28 @@ public sealed interface SseEvent {
             this("error", code, message);
         }
     }
+
+    /**
+     * 权限模式变更事件（rewrite-permission-mode-dsh T8.1；spec §"SSE sandbox/mode 事件广播"）。
+     *
+     * <p>reason 取值：
+     *
+     * <ul>
+     *   <li>{@code initial} — 新 stream 创建时设置初始 mode
+     *   <li>{@code user_set} — 用户经 POST /api/chat/{id}/permission 显式切换
+     *   <li>{@code escalate} — 同回合临时升级（turn 结束自动恢复）
+     *   <li>{@code turn_end_restore} — turn 结束时恢复 escalate 前的 mode
+     * </ul>
+     */
+    record SandboxModeChanged(
+            @JsonProperty("type") String type,
+            @JsonProperty("stream_id") String streamId,
+            @JsonProperty("from_mode") String fromMode,
+            @JsonProperty("to_mode") String toMode,
+            @JsonProperty("reason") String reason,
+            @JsonProperty("ts") long ts) implements SseEvent {
+        public SandboxModeChanged(String streamId, String fromMode, String toMode, String reason, long ts) {
+            this("sandbox/mode", streamId, fromMode, toMode, reason, ts);
+        }
+    }
 }

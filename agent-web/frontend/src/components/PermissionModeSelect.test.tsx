@@ -54,4 +54,25 @@ describe("PermissionModeSelect", () => {
     fireEvent.change(select, { target: { value: "danger-full" } });
     expect(noopPatch).toHaveBeenCalledWith("general.permission.mode", "danger-full");
   });
+
+  // ---- rewrite-permission-mode-dsh T11.1 ----
+
+  it("defaults to plan when settings has no mode", () => {
+    mockStore.snapshot = {
+      ...mockSnapshot,
+      general: { permission: {} },
+    } as unknown as typeof mockSnapshot;
+    const { getByTestId } = render(<PermissionModeSelect />);
+    const select = getByTestId("permission-mode-select") as HTMLSelectElement;
+    expect(select.value).toBe("plan");
+  });
+
+  it("renders all four dsh mode options with labels", () => {
+    const { getAllByRole } = render(<PermissionModeSelect />);
+    const options = getAllByRole("option") as HTMLOptionElement[];
+    const values = options.map((o) => o.value);
+    expect(values).toEqual(["plan", "ask", "danger-full", "dontAsk"]);
+    expect(options[0].textContent).toContain("Plan");
+    expect(options[2].textContent).toContain("Danger Full");
+  });
 });
