@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ToolCallCard } from "./ToolCallCard";
+import { ToolCallCard, type SandboxDenial } from "./ToolCallCard";
 
 describe("ToolCallCard", () => {
   it("renders running state with accent label", () => {
@@ -41,5 +41,98 @@ describe("ToolCallCard", () => {
     // 无 text prop → <pre> 不应出现（即使展开也没有）
     fireEvent.click(screen.getByText(/Ls/));
     expect(container.querySelector("pre")).toBeNull();
+  });
+});
+
+// ---- rewrite-permission-mode-dsh T11.3: sandbox denial 渲染 ----
+
+const denialWithSuggestion: SandboxDenial = {
+  kind: "write-out-of-bounds",
+  currentMode: "ask",
+  suggestedMode: "danger-full",
+  marker:
+    "[sandbox: write-out-of-bounds under ask mode] 路径越界（mode=ask）: ../escape.txt Escalate: POST /api/chat/{streamId}/permission with mode=danger-full",
+};
+
+const denialWithoutSuggestion: SandboxDenial = {
+  kind: "sensitive-path",
+  currentMode: "ask",
+  suggestedMode: null,
+  marker: "[sandbox: sensitive-path under ask mode] 命中敏感路径",
+};
+
+describe("ToolCallCard sandbox denial (T11.3)", () => {
+  it("renders denial marker when denial present", () => {
+    render(
+      <ToolCallCard
+        name="WriteFile"
+        status="fail"
+        denial={denialWithSuggestion}
+        onEscalate={() => {}}
+      />,
+    );
+    const marker = screen.getByTestId("sandbox-denial-marker");
+    expect(marker.textContent).toContain("[sandbox: write-out-of-bounds under ask mode]");
+    expect(marker.textContent).toContain("danger-full");
+  });
+
+  it("renders denial metadata (current mode + kind)", () => {
+    render(<ToolCallCard name="WriteFile" status="fail" denial={denialWithSuggestion} />);
+    const banner = screen.getByTestId("sandbox-denial");
+    expect(banner.textContent).toContain("当前模式：ask");
+    expect(banner.textContent).toContain("拒绝原因：write-out-of-bounds");
+  });
+
+  it("shows escalate button when suggestedMode is non-null", () => {
+    const onEscalate = vi.fn();
+    render(
+      <ToolCallCard
+        name="WriteFile"
+        status="fail"
+        denial={denialWithSuggestion}
+        onEscalate={onEscalate}
+      />,
+    );
+    const btn = screen.getByTestId("sandbox-escalate-button");
+    expect(btn.textContent).toContain("升级到 danger-full");
+    fireEvent.click(btn);
+    expect(onEscalate).toHaveBeenCalledWith("danger-full");
+  });
+
+  it("hides escalate button when suggestedMode is null but keeps marker", () => {
+    render(
+      <ToolCallCard
+        name="ReadFile"
+        status="fail"
+        denial={denialWithoutSuggestion}
+        onEscalate={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("sandbox-escalate-button")).toBeNull();
+    expect(screen.getByTestId("sandbox-denial-marker")).toBeInTheDocument();
+  });
+
+  it("hides escalate button when onEscalate not provided", () => {
+    render(<ToolCallCard name="WriteFile" status="fail" denial={denialWithSuggestion} />);
+    expect(screen.queryByTestId("sandbox-escalate-button")).toBeNull();
+  });
+
+  it("renders nothing denial-related when no denial prop", () => {
+    render(<ToolCallCard name="WriteFile" status="ok" text="写入成功" />);
+    expect(screen.queryByTestId("sandbox-denial")).toBeNull();
+  });
+
+  it("still renders normal tool card header alongside denial", () => {
+    render(
+      <ToolCallCard
+        name="WriteFile"
+        status="fail"
+        text="路径越界"
+        durationMs={12}
+        denial={denialWithSuggestion}
+      />,
+    );
+    expect(screen.getByLabelText(/WriteFile 工具调用/)).toBeInTheDocument();
+    expect(screen.getByTestId("sandbox-denial")).toBeInTheDocument();
   });
 });

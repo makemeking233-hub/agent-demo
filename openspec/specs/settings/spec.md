@@ -153,20 +153,6 @@ The system SHALL allow the user to select one of three appearance preferences: `
 - **AND** the OS theme changes
 - **THEN** the `<html data-theme>` SHALL update without page reload
 
-### Requirement: User can change permission mode
-
-The system SHALL allow the user to select one of four permission modes: `plan`, `ask`, `danger-full`, `dontAsk`.
-
-#### Scenario: User selects plan mode
-- **WHEN** the user selects "plan" from the permission dropdown
-- **THEN** the system SHALL PATCH `general.permission.mode` with value `"plan"`
-- **AND** the local store SHALL reflect the new value immediately
-
-#### Scenario: Permission mode persistence across reload
-- **WHEN** the user has set mode to `"danger-full"`
-- **AND** the user reloads the page
-- **THEN** the dropdown SHALL display "danger-full" as the current value
-
 ### Requirement: User can change language preference
 
 The system SHALL allow the user to select between Chinese and English.
