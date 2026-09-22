@@ -1,5 +1,4 @@
 import type { ComponentPropsWithoutRef } from "react";
-import styles from "./MarkdownContent.module.css";
 
 /**
  * 消息内链接（add-rich-markdown-rendering，design.md D5）。
@@ -15,7 +14,7 @@ import styles from "./MarkdownContent.module.css";
 export function MarkdownLink(props: ComponentPropsWithoutRef<"a">) {
   const href = typeof props.href === "string" ? props.href : "";
   if (!href) {
-    return <span className={styles.linkDisabled}>{props.children}</span>;
+    return <span className="text-muted-foreground">{props.children}</span>;
   }
   return <a {...props} href={href} target="_blank" rel="noopener noreferrer" />;
 }

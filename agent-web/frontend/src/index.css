@@ -134,3 +134,93 @@
   outline: 3px solid var(--dsw-static-accent-default);
   outline-offset: 2px;
 }
+
+/* Markdown 正文样式（shadcn-components-p2：MarkdownContent.module.css → @apply）
+ * 不引入 @tailwindcss/typography 依赖；用 @apply 把 30+ 个后代选择器
+ * 翻译成 Tailwind utility，集中在一处维护。 */
+@layer components {
+  .prose-sm {
+    @apply text-sm leading-relaxed;
+  }
+  .prose-sm p {
+    @apply mb-2;
+  }
+  .prose-sm p:last-child {
+    @apply mb-0;
+  }
+  .prose-sm h1,
+  .prose-sm h2,
+  .prose-sm h3,
+  .prose-sm h4,
+  .prose-sm h5,
+  .prose-sm h6 {
+    @apply mt-3 mb-1.5 text-base font-semibold leading-tight;
+  }
+  .prose-sm h1 {
+    @apply text-xl;
+  }
+  .prose-sm h2 {
+    @apply text-lg;
+  }
+  .prose-sm h3 {
+    @apply text-base;
+  }
+  .prose-sm h4 {
+    @apply text-[15px];
+  }
+  .prose-sm h5 {
+    @apply text-sm;
+  }
+  .prose-sm h6 {
+    @apply text-[13px] text-muted-foreground;
+  }
+  .prose-sm h1:first-child,
+  .prose-sm h2:first-child,
+  .prose-sm h3:first-child {
+    @apply mt-0;
+  }
+  .prose-sm pre {
+    @apply mb-2 overflow-x-auto rounded-sm bg-neutral-900 p-2 text-[13px] text-neutral-100;
+  }
+  .prose-sm code {
+    @apply rounded-[3px] bg-secondary px-1 py-px font-mono text-[13px];
+  }
+  .prose-sm pre code {
+    @apply bg-transparent p-0;
+  }
+  .prose-sm ul,
+  .prose-sm ol {
+    @apply my-1 ml-5;
+  }
+  .prose-sm li {
+    @apply my-0.5;
+  }
+  .prose-sm li > input[type="checkbox"] {
+    @apply mr-1.5;
+  }
+  .prose-sm table {
+    @apply border-collapse text-[13px];
+  }
+  .prose-sm th,
+  .prose-sm td {
+    @apply border border-border px-2.5 py-1.5 text-left align-top;
+  }
+  .prose-sm th {
+    @apply whitespace-nowrap bg-secondary font-semibold;
+  }
+  .prose-sm img {
+    @apply mb-2 block h-auto max-w-full rounded-sm;
+  }
+  .prose-sm blockquote {
+    @apply my-2 border-l-4 border-border py-0.5 pl-3 text-muted-foreground;
+  }
+  .prose-sm hr {
+    @apply my-3 border-0 border-t border-border;
+  }
+  .prose-sm del {
+    @apply text-muted-foreground;
+  }
+  .prose-sm a {
+    @apply text-[color:var(--dsw-static-text-link)];
+  }
+}
