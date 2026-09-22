@@ -39,6 +39,7 @@ public class ChatController {
     private final ModelCatalog catalog;
     private final ProviderCatalogProperties catalogProps;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ChatController(
             ChatStreamService streams,
             Environment env,
@@ -50,6 +51,20 @@ public class ChatController {
         this.ownerRegistry = ownerRegistry;
         this.catalog = catalog;
         this.catalogProps = catalogProps;
+    }
+
+    /**
+     * 4 参便捷构造（add-provider-catalog-abstract 测试用）：{@code ownerRegistry} 用默认实例。
+     *
+     * <p>默认 registry 对未注册 stream 的 {@code verify} 返回 true（向后兼容），
+     * 因此不影响只关心 model/provider 解析的测试。
+     */
+    public ChatController(
+            ChatStreamService streams,
+            Environment env,
+            ModelCatalog catalog,
+            ProviderCatalogProperties catalogProps) {
+        this(streams, env, new SessionOwnerRegistry(), catalog, catalogProps);
     }
 
     @PostMapping("/send")
@@ -195,8 +210,9 @@ public class ChatController {
                 "effective_mode", mode.toSandboxMode().wireValue())));
     }
 
-    /** 提取客户端 IP（X-Forwarded-For 优先，否则用 remote address）。 */
+    /** 提取客户端 IP（X-Forwarded-For 优先，否则用 remote address；{@code exchange} 可空 → "unknown"）。 */
     private static String clientIp(ServerWebExchange exchange) {
+        if (exchange == null) return "unknown";
         String xff = exchange.getRequest().getHeaders().getFirst("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
             int comma = xff.indexOf(',');

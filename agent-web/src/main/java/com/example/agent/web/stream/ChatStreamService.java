@@ -60,6 +60,7 @@ public class ChatStreamService {
      * @param sinkAdapter SSE 事件观察者（把 AgentLoop 回调转 SSE 事件）
      * @param aborted 中断标记
      * @param workspace 归属工作区（add-session-stats-bar：统计按工作区路由）
+     * @param logSink 复合 session sink（SSE + 落盘；rewrite-permission-mode-dsh T8.2 引入，可空）
      */
     public record ActiveStream(
             String streamId,
@@ -71,7 +72,21 @@ public class ChatStreamService {
             SseSessionLogSink sinkAdapter,
             java.util.concurrent.atomic.AtomicBoolean aborted,
             String workspace,
-            SessionLogSink logSink) {}
+            SessionLogSink logSink) {
+        /** 9 参便捷构造：{@code logSink} 为 {@code null}（仅 SSE，不落盘）。 */
+        public ActiveStream(
+                String streamId,
+                String sessionId,
+                String model,
+                long startedAt,
+                Sinks.Many<ServerSentEvent<Object>> sink,
+                AgentLoop loop,
+                SseSessionLogSink sinkAdapter,
+                java.util.concurrent.atomic.AtomicBoolean aborted,
+                String workspace) {
+            this(streamId, sessionId, model, startedAt, sink, loop, sinkAdapter, aborted, workspace, null);
+        }
+    }
 
     public ActiveStream create(String sessionId, String model) {
         return create(sessionId, model, null);

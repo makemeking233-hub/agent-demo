@@ -88,11 +88,11 @@
 
 ## 14. spec archive（按 §2.5 / §2.7.5）
 
-- [ ] 14.1 全量 `mvn -o -pl agent-core,agent-web verify` 全绿（含新增 SandboxPolicy 系列测试 + 迁移后 PermissionManager 测试）
-- [ ] 14.2 全量 `npx vitest run` 全绿（含前端 PermissionModeSelect / ChatPanel / ToolResult 改造）
-- [ ] 14.3 `npx tsc --noEmit` 错误数不超过基线（7）
-- [ ] 14.4 同步 main：`git fetch origin main && git merge origin/main`（若有冲突解决冲突后回到任务 14.1 重跑门禁）
-- [ ] 14.5 `openspec archive rewrite-permission-mode-dsh`：把 `specs/sandbox-policy/spec.md` 内容合并到 `openspec/specs/sandbox-policy/spec.md`；把 `specs/permission-mode/spec.md` 的 REMOVED 段处理；把 `specs/settings/spec.md` 的 REMOVED 段处理
+- [x] 14.1 全量 `mvn -o -pl agent-core,agent-web verify` 全绿（测试全绿；jacoco check 为 pre-existing 失败，已在干净 origin/main 上复现，按门禁 1 规则 5 记录放行）
+- [x] 14.2 全量 `npx vitest run` 全绿（含前端 PermissionModeSelect / ChatPanel / ToolCard 改造；340 passed / 1 skipped）
+- [x] 14.3 `npx tsc --noEmit` 错误数不超过基线（7）（实测 0）
+- [x] 14.4 同步 main：`git fetch origin main && git merge origin/main`（解决 5 文件 9 处冲突 + 4 处合并副作用后重跑门禁全绿）
+- [x] 14.5 `openspec archive rewrite-permission-mode-dsh`：把 `specs/sandbox-policy/spec.md` 内容合并到 `openspec/specs/sandbox-policy/spec.md`；把 `specs/permission-mode/spec.md` 的 REMOVED 段处理；把 `specs/settings/spec.md` 的 REMOVED 段处理
 - [ ] 14.6 合并回 main：`git checkout main && git merge feat/rewrite-permission-mode-dsh --no-ff`
 - [ ] 14.7 main 复验：`mvn -o -pl agent-core,agent-web verify` + `npx vitest run` 全绿
 - [ ] 14.8 push main：`git push origin main`
