@@ -17,6 +17,8 @@
         <picocli.version>4.7.6</picocli.version>
         <jline.version>3.25.1</jline.version>
         <jtokkit.version>0.6.1</jtokkit.version>
+        <onnxruntime.version>1.19.2</onnxruntime.version>
+        <lucene.version>9.11.1</lucene.version>
     </properties>
     <dependencies>
         <!-- picocli + Spring Boot 注解扫描 -->
@@ -55,6 +57,23 @@
             <groupId>com.knuddels</groupId>
             <artifactId>jtokkit</artifactId>
             <version>${jtokkit.version}</version>
+        </dependency>
+        <!-- add-embedding-rag：本地 ONNX 推理（bge-small-zh-v1.5 embedding 模型） -->
+        <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime</artifactId>
+            <version>${onnxruntime.version}</version>
+        </dependency>
+        <!-- add-embedding-rag：Lucene HNSW 向量索引（KnnFloatVectorField + KNN 检索） -->
+        <dependency>
+            <groupId>org.apache.lucene</groupId>
+            <artifactId>lucene-core</artifactId>
+            <version>${lucene.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.lucene</groupId>
+            <artifactId>lucene-analysis-common</artifactId>
+            <version>${lucene.version}</version>
         </dependency>
         <!-- 测试 -->
         <dependency>

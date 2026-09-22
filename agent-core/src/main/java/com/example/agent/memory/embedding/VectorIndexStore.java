@@ -176,16 +176,20 @@ public class VectorIndexStore implements AutoCloseable {
         return title + " " + desc;
     }
 
+    /** 索引子目录名（位于 {@code <scopeDir>/.vectors/index/}，与 mtime.json 分开放）。 */
+    private static final String LUCENE_INDEX_DIR = "index";
+
     private VectorIndex newIndex(MemoryDir dir) {
         Path vectorsDir = dir != null && dir.dir() != null ? dir.dir().resolve(VECTORS_DIR) : null;
-        if (vectorsDir != null) {
+        Path luceneDir = vectorsDir == null ? null : vectorsDir.resolve(LUCENE_INDEX_DIR);
+        if (luceneDir != null) {
             try {
-                Files.createDirectories(vectorsDir);
+                Files.createDirectories(luceneDir);
             } catch (IOException ex) {
-                log.warn("cannot create vectors dir {}: {}", vectorsDir, ex.toString());
+                log.warn("cannot create vectors dir {}: {}", luceneDir, ex.toString());
             }
         }
-        return new LuceneVectorIndex(vectorsDir, dimensions);
+        return new LuceneVectorIndex(luceneDir, dimensions);
     }
 
     private static long lastModified(Path file) {

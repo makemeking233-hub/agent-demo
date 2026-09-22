@@ -135,6 +135,8 @@ class VectorIndexStoreTest {
         var store = new VectorIndexStore(provider, 512);
         store.indexFor(MemoryScope.USER, dir, entries("a.md", "b.md"));
         store.flush();
+        // 必须先关掉 store，否则下一个 store 打开同一 Lucene 目录会撞 write.lock
+        store.close();
 
         // 损坏缓存文件
         Path cache = mtimeCache(dir);
@@ -147,7 +149,6 @@ class VectorIndexStoreTest {
         assertNotNull(store2.indexFor(MemoryScope.USER, dir, entries("a.md", "b.md")));
         assertEquals(2, provider2.calls.get(), "缓存损坏时应自愈为全量重算");
         store2.close();
-        store.close();
     }
 
     @Test
