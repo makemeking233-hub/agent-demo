@@ -6,13 +6,13 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交并 
 
 ## 1. 配置：`memory.embedding` 段
 
-- [ ] 1.1 测试先红：`AgentConfig` 增加 `Embedding(enabled, modelPath, HnswConfig(m, efConstruction))` 与 `Memory(..., embedding)` 扩展；断言 `defaults().memory().embedding().enabled()==true`、缺省 modelPath 指向 `<agentHome>/models/bge-small-zh-v1.5/model.onnx`、HnswConfig 默认 `(16, 200)`
-- [ ] 1.2 实现：`AgentConfig.Memory` record 增加 `Embedding embedding` 字段；`AgentConfig.Memory.Embedding` / `AgentConfig.Memory.HnswConfig` record；`defaults()` 给 embedding=true, m=16, efConstruction=200；`ConfigLoader.mergeMemory` 解析 `memory.embedding.*`（enabled / modelPath / hnsw.m / hnsw.efConstruction），缺失保持 base 值
-- [ ] 1.3 `mvn -o -pl agent-core test -Dtest='ConfigLoaderTest'` 转绿后 commit + push 本分支
+- [x] 1.1 测试先红：`AgentConfig` 增加 `Embedding(enabled, modelPath, HnswConfig(m, efConstruction))` 与 `Memory(..., embedding)` 扩展；断言 `defaults().memory().embedding().enabled()==true`、缺省 modelPath 指向 `<agentHome>/models/bge-small-zh-v1.5/model.onnx`、HnswConfig 默认 `(16, 200)`
+- [x] 1.2 实现：`AgentConfig.Memory` record 增加 `Embedding embedding` 字段；`AgentConfig.Memory.Embedding` / `AgentConfig.Memory.HnswConfig` record；`defaults()` 给 embedding=true, m=16, efConstruction=200；`ConfigLoader.mergeMemory` 解析 `memory.embedding.*`（enabled / modelPath / hnsw.m / hnsw.efConstruction），缺失保持 base 值
+- [x] 1.3 `mvn -o -pl agent-core test -Dtest='ConfigLoaderTest'` 转绿后 commit + push 本分支
 
 ## 2. EmbeddingProvider 接口 + ONNX 实现
 
-- [ ] 2.1 测试先红：`EmbeddingProviderTest` —— `MockEmbeddingProvider` 返回固定 512 维向量；`OnnxEmbeddingProvider` 在模型文件缺失时 `isReady()=false`（不抛异常）；`isReady()=true` 时 `embed()` 返回非空 float[512]；`dimensions()==512`
+- [x] 2.1 测试先红：`EmbeddingProviderTest` —— `MockEmbeddingProvider` 返回固定 512 维向量；`OnnxEmbeddingProvider` 在模型文件缺失时 `isReady()=false`（不抛异常）；`isReady()=true` 时 `embed()` 返回非空 float[512]；`dimensions()==512`
 - [ ] 2.2 实现：`memory/embedding/EmbeddingProvider` 接口（`embed(text)`, `dimensions()`, `isReady()`）；`OnnxEmbeddingProvider` 实现懒加载 ONNX session（首次 embed 时 `OrtEnvironment.getEnvironment()` + `OrtSession.create(modelPath)`），捕获异常记 WARN 并保持 `unavailable`；暴露模型路径解析（`AgentPaths.agentHome() + "/models/bge-small-zh-v1.5/model.onnx"`）；线程安全
 - [ ] 2.3 新增 `OnnxEmbeddingProviderTest` 端到端（用测试 fixture 写一个最小可用的 ONNX 模型文件 or 用 Mock 替换 session 加载逻辑）—— 验证模型加载成功路径
 - [ ] 2.4 `mvn -o -pl agent-core test -Dtest='EmbeddingProviderTest'` 转绿后 commit + push
