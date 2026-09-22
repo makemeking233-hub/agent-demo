@@ -14,6 +14,9 @@ import com.example.agent.memory.MemoryRetriever;
 import com.example.agent.memory.MemoryScope;
 import com.example.agent.memory.MemorySectionProvider;
 import com.example.agent.memory.MemorySectionSource;
+import com.example.agent.memory.embedding.EmbeddingProvider;
+import com.example.agent.memory.embedding.OnnxEmbeddingProvider;
+import com.example.agent.memory.embedding.VectorIndexStore;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionMode;
 import com.example.agent.prompt.SystemPromptBuilder;
@@ -215,8 +218,27 @@ public final class AgentLoopFactory {
         // 注意不能传 null retriever——那会让 MemoryPromptBuilder 退化为全量索引注入。
         LlmProvider recallProvider =
                 (provider != null && sideQuery != null && sideQuery.enabled()) ? provider : null;
+
+        // add-embedding-rag T6：按 memory.embedding.enabled 决定是否接入 embedding 粗排层。
+        // 模型缺失 / 加载失败时 OnnxEmbeddingProvider.isReady()=false，MemoryRetriever 会自动
+        // 跳过 embedding 阶段（退化为字面 + sideQuery 两层），不影响装配与对话。
+        EmbeddingProvider embeddingProvider = null;
+        VectorIndexStore indexStore = null;
+        AgentConfig.Embedding embeddingCfg = cfg.memory().embedding();
+        if (embeddingCfg != null && embeddingCfg.enabled()) {
+            embeddingProvider = new OnnxEmbeddingProvider(Path.of(embeddingCfg.modelPath()));
+            indexStore = new VectorIndexStore(embeddingProvider, embeddingProvider.dimensions());
+        }
+
         MemoryRetriever retriever =
-                new MemoryRetriever(recallProvider, resolvedModel, new MemoryRecall(), sideQuery);
+                new MemoryRetriever(
+                        recallProvider,
+                        resolvedModel,
+                        new MemoryRecall(),
+                        sideQuery,
+                        embeddingProvider,
+                        indexStore,
+                        MemoryRetriever.DEFAULT_K_EMBED);
         MemorySectionSource source =
                 new MemorySectionProvider(
                         retriever, memoryDirs(), String.join("\n", cfg.memoryInject()), 5);

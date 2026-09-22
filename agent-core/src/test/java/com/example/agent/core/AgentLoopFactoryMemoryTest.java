@@ -223,4 +223,98 @@ class AgentLoopFactoryMemoryTest {
                 systemPrompt.contains("# Memory Index"),
                 "动态模式下不应同时内联全量索引（避免索引与召回重复）");
     }
+
+    // ---- add-embedding-rag T6：装配层接入 embedding ----
+
+    /** 复制配置，改 embedding 开关（保留 hnsw / modelPath）。 */
+    private static AgentConfig withEmbedding(AgentConfig base, boolean enabled) {
+        AgentConfig.Embedding e = base.memory().embedding();
+        return new AgentConfig(
+                base.provider(),
+                base.permission(),
+                base.cost(),
+                base.context(),
+                base.shell(),
+                base.memoryInject(),
+                base.logging(),
+                new AgentConfig.Memory(
+                        base.memory().sideQuery(),
+                        base.memory().dynamicRetrieval(),
+                        new AgentConfig.Embedding(enabled, e.modelPath(), e.hnsw())),
+                base.mcp(),
+                base.worktree(),
+                base.plugins(),
+                base.search(),
+                base.voice());
+    }
+
+    /**
+     * embedding 启用但模型缺失（测试环境的常态）时，装配与首轮对话都不应失败——
+     * OnnxEmbeddingProvider.isReady()=false 让 MemoryRetriever 自动跳过 embedding 阶段，
+     * 退化为字面 + sideQuery 两层。这是本 change 最关键的降级保证。
+     */
+    @Test
+    void embeddingEnabledWithMissingModelStillWorks() throws Exception {
+        writeUserMemory("java17.md", "Java 17 安装", "JDK 安装步骤与版本切换");
+        AgentConfig cfg = withEmbedding(AgentConfig.defaults(), true);
+
+        LlmProvider provider = mock(LlmProvider.class);
+        when(provider.contextWindow()).thenReturn(100_000);
+        when(provider.maxOutputTokens()).thenReturn(8192);
+        when(provider.streamChat(any()))
+                .thenReturn(
+                        Flux.just(
+                                new StreamChunk.TextDelta("ok"),
+                                new StreamChunk.Finished(
+                                        FinishReason.STOP, new StreamChunk.Usage(1, 1, 0))));
+        ToolRegistry tools = mock(ToolRegistry.class);
+        when(tools.list()).thenReturn(List.of());
+
+        AgentLoop loop =
+                AgentLoopFactory.buildLoop(
+                        cfg, provider, tools, new MessageHistory(new TokenEstimator()),
+                        new StreamingPrinter(), "deepseek-chat", null, null, null);
+
+        // 不应抛异常
+        loop.processTurn(new Message.User("安装 Java")).block();
+
+        org.mockito.ArgumentCaptor<ChatRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ChatRequest.class);
+        org.mockito.Mockito.verify(provider, org.mockito.Mockito.atLeastOnce())
+                .streamChat(captor.capture());
+        String systemPrompt = captor.getValue().systemPrompt();
+
+        assertTrue(systemPrompt.contains("agent-demo"));
+        assertTrue(systemPrompt.contains("(relevant)"), "字面层仍应产出召回格式记忆段");
+        assertTrue(systemPrompt.contains("java17.md"));
+    }
+
+    /** embedding 关闭时不构造 provider，行为与 v0.4 两层架构一致。 */
+    @Test
+    void embeddingDisabledKeepsTwoLayerBehavior() throws Exception {
+        writeUserMemory("java17.md", "Java 17 安装", "JDK 安装步骤与版本切换");
+        AgentConfig cfg = withEmbedding(AgentConfig.defaults(), false);
+
+        AgentLoopFactory.PromptParts parts =
+                AgentLoopFactory.buildSystemPromptParts(cfg, "deepseek-chat", null, null);
+        String section = parts.memorySectionSource().sectionFor("安装 Java");
+
+        assertTrue(section.contains("(relevant)"));
+        assertTrue(section.contains("java17.md"));
+    }
+
+    /** embedding 启用时 buildSystemPromptParts 仍返回可用的记忆段来源（不因接线而抛）。 */
+    @Test
+    void embeddingEnabledStillReturnsUsableSource() throws Exception {
+        writeUserMemory("java17.md", "Java 17 安装", "JDK 安装步骤与版本切换");
+        AgentConfig cfg = withEmbedding(AgentConfig.defaults(), true);
+
+        AgentLoopFactory.PromptParts parts =
+                AgentLoopFactory.buildSystemPromptParts(cfg, "deepseek-chat", null, null);
+
+        assertNotNull(parts.memorySectionSource());
+        assertFalse(parts.basePrompt().contains("Persistent Agent Memory"));
+        // 模型缺失 → embedding 层跳过，但字面层仍工作
+        assertTrue(parts.memorySectionSource().sectionFor("安装 Java").contains("java17.md"));
+    }
 }
