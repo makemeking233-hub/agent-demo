@@ -423,6 +423,26 @@ git push origin --delete feat/<change-id>   # 若该分支已 push 过
 
 **新增组件时注意**：补了该文件之后，"新加一个 `.module.css` 就多一条 TS2307"这条规律**不再成立**。若基线数字再变，先确认是不是又出现了同类假报错，而不要直接认定是自己写错了。
 
+#### 2.7.8 门禁命令与「应用正在运行」的冲突（2026-09-23 实测）
+
+主工作区跑着 web 应用时，`verify` 会在两处撞车，两处的正确处置**完全不同**：
+
+| 撞车点 | 现象 | ✅ 正确处置 | ❌ 错误处置 |
+|--------|------|-----------|-----------|
+| `spring-boot:repackage` | `Unable to rename 'agent-web.jar' to 'agent-web.jar.original'` | **先停掉应用**（release jar）再跑门禁；测试与 jacoco 在 repackage 之前已跑完，可据此判定用例结果 | 加 `-Dspring-boot.repackage.skip=true` —— 见下方「副作用」 |
+| 排障时排查端口占用 | `Port 18080 was already in use` | `Get-NetTCPConnection -LocalPort 18080 -State Listen` 找到 PID，确认是本项目的旧实例后停掉 | 直接换端口启动 —— 会掩盖「旧实例还在跑」这件事 |
+
+**`-Dspring-boot.repackage.skip=true` 的副作用（真实踩过）**：它跳过 repackage 后，`maven-jar-plugin`
+产出的**普通 jar 会覆盖掉可执行 fat jar**，manifest 里没有 `Main-Class` / `Start-Class`。
+于是 README §7.4 记的启动方式 `java -jar agent-web/target/agent-web.jar` 会静默失效
+（`no main manifest attribute`），而**门禁仍然是绿的**——绿色门禁掩盖了启动能力的丢失。
+若确实用了该参数，跑完必须补一次真 repackage：
+
+```bash
+mvn -o -pl agent-core,agent-web package -DskipTests -DskipNpm=true
+# 校验：manifest 必须含 Start-Class: com.example.agent.web.WebApplication
+```
+
 ### 2.8 外部源码参考目录
 
 后续 agent 接到「参考 xxx 源码」类需求时，应优先在 `E:\claude-projects\` 目录下查找——该目录托管常用源码项目，包括但不限于：
@@ -460,7 +480,8 @@ git push origin --delete feat/<change-id>   # 若该分支已 push 过
 ---
 
 > 修订记录：
-> - v0.1.7（2026-09-22）：🔴 **§2.7 由「分支隔离（默认）」升格为「worktree 隔离（强制，无例外）」**（用户明确要求，每次必须严格执行）——新增 5 条强制条款（worktree 是唯一允许的隔离方式、接到需求第一件事就是建 worktree、绝不在 main 上直接改、作业期间 pwd 必须在 worktree 内、测试全绿才可合并）+「违反=该次改动视为未完成」；§2.7.1 事故表新增第 4 条（2026-09-22 运行中应用被同工作区并发构建替换 fat jar 打断，`NoClassDefFoundError: DefaultPromise$1`）；§2.7.2 删掉「或 git checkout -b」并新增「开工自检」四步表；§2.7.6 豁免表按「是否碰 `src/` 代码」重写（修 bug/重构/性能优化一律必须 worktree，紧急 hotfix 也需 worktree）；§2.2、§2.5.4、§3 同步改为 worktree 强制
+> - v0.1.8（2026-09-22）：🔴 **§2.7 由「分支隔离（默认）」升格为「worktree 隔离（强制，无例外）」**（用户明确要求，每次必须严格执行）——新增 5 条强制条款（worktree 是唯一允许的隔离方式、接到需求第一件事就是建 worktree、绝不在 main 上直接改、作业期间 pwd 必须在 worktree 内、测试全绿才可合并）+「违反=该次改动视为未完成」；§2.7.1 事故表新增第 4 条（2026-09-22 运行中应用被同工作区并发构建替换 fat jar 打断，`NoClassDefFoundError: DefaultPromise$1`）；§2.7.2 删掉「或 git checkout -b」并新增「开工自检」四步表；§2.7.6 豁免表按「是否碰 `src/` 代码」重写（修 bug/重构/性能优化一律必须 worktree，紧急 hotfix 也需 worktree）；§2.2、§2.5.4、§3 同步改为 worktree 强制
+> - v0.1.7（2026-09-23）：新增 §2.7.8 门禁命令与「应用正在运行」的冲突——`repackage` 撞 jar 占用该先停应用；`-Dspring-boot.repackage.skip=true` 会把可执行 fat jar 覆盖成普通 jar（启动能力静默丢失而门禁仍绿），若用了必须补真 repackage 并校验 manifest 的 `Start-Class`
 > - v0.1.6（2026-09-13）：§2.7.5.1 门禁 1 的 tsc 基线由 27 更正为 **7**；新增 §2.7.7 说明基线的构成与维护（17 条假报错来自缺失的 `vite-env.d.ts`，剩余 7 条才是真既有问题）
 > - v0.1.5（2026-09-13）：新增 §2.7.5 合并回主分支（测试通过是前提）——5 条合并前门禁（含同步 main 后重跑、既有失败归因）、合并执行、合并后清理、失败回退表、3 次失败兜底；§2.7 引言加「测试全绿才可合并」；§2.7.2 第 5/6 步指向门禁；原 §2.7.5 豁免顺延为 §2.7.6；§2.2 与 §2.5.4 各加一条；§3 加一条
 > - v0.1.4（2026-09-13）：新增 §2.7 分支隔离（迭代需求默认）——分支/worktree 标准流程、命名约定、多 agent 并行的提交纪律（禁用 `git add -A`）、豁免清单；§2.2「commit 即 push」明确为推送当前分支；§2.5.4 强制门禁加一行；§3 加一条
