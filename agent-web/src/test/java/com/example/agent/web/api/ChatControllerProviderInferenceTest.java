@@ -81,7 +81,7 @@ class ChatControllerProviderInferenceTest {
 
     private ResponseEntity<?> send(String model) {
         SendRequest req = new SendRequest("hi", "sess-1", "read_only", null, model, null);
-        return (ResponseEntity<?>) controller.send(req).block();
+        return (ResponseEntity<?>) controller.send(req, null).block();
     }
 
     private String providerIdFor(String model) {

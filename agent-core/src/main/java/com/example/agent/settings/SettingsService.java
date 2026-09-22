@@ -25,6 +25,16 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class SettingsService {
     private static final Logger log = LoggerFactory.getLogger(SettingsService.class);
 
+    /**
+     * 旧 3 档 wire value → 新 4 档 dsh 命名（rewrite-permission-mode-dsh T12.1）。
+     *
+     * <p>settings.yaml 升级时 read() 检测到旧值则 normalize + INFO 日志 + 写回 YAML。
+     */
+    private static final Map<String, String> LEGACY_PERMISSION_MODE_MIGRATION = Map.of(
+            "read_only", "plan",
+            "workspace_write", "ask",
+            "full_access", "danger-full");
+
     private final SettingsFile file;
     private final SettingsChangeBroadcaster broadcaster;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -43,14 +53,22 @@ public class SettingsService {
 
     /** 读取完整 settings；不存在则返回默认值；保留未知字段 */
     public SettingsView read() throws IOException {
+        SettingsView view = readInternal();
+        // T12.1: 检测到旧 3 档 wire value 时, 单独在 writeLock 下迁移写回
+        if (needsMigration(view)) {
+            view = migrateAndRewrite();
+        }
+        return view;
+    }
+
+    /** 读取 settings（仅读锁, 不修改磁盘）。 */
+    private SettingsView readInternal() throws IOException {
         lock.readLock().lock();
         try {
             file.ensureFile();
             String content = Files.readString(file.file());
             if (content.isBlank()) {
-                SettingsView view = new SettingsView(1, SettingsView.defaultGeneral(), revision);
-                view.setRevision(revision);
-                return view;
+                return new SettingsView(1, SettingsView.defaultGeneral(), revision);
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> raw = yaml.readValue(content, Map.class);
@@ -60,6 +78,64 @@ public class SettingsService {
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    /**
+     * 迁移并写回 (writeLock 一次性读 + 改 + 写)。{@code readInternal} 已有检查,
+     * 写回时直接 overwrite。
+     */
+    private SettingsView migrateAndRewrite() throws IOException {
+        lock.writeLock().lock();
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> raw = yaml.readValue(Files.readString(file.file()), Map.class);
+            String oldValue = detectLegacyPermissionMode(raw);
+            if (oldValue == null) {
+                // 另一线程已迁移; 重新 read
+                SettingsView v = toView(raw);
+                v.setRevision(revision);
+                return v;
+            }
+            String newValue = LEGACY_PERMISSION_MODE_MIGRATION.get(oldValue);
+            log.info("migrated permission mode from '{}' to '{}' in settings.yaml", oldValue, newValue);
+            applyMigration(raw, oldValue, newValue);
+            SettingsView view = toView(raw);
+            return writeAtomic(view);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    /** 检测 view 的 general.permission.mode 是否为旧 3 档（无需锁, 读已 immutable view）。 */
+    @SuppressWarnings("unchecked")
+    private static boolean needsMigration(SettingsView view) {
+        if (view == null || view.getGeneral() == null) return false;
+        Map<String, Object> permission = (Map<String, Object>) view.getGeneral().get("permission");
+        if (permission == null) return false;
+        Object mode = permission.get("mode");
+        return mode instanceof String s && LEGACY_PERMISSION_MODE_MIGRATION.containsKey(s);
+    }
+
+    /** 检测 general.permission.mode 是否为旧 3 档；是则返回旧值（用于日志），否则 null。 */
+    @SuppressWarnings("unchecked")
+    private static String detectLegacyPermissionMode(Map<String, Object> raw) {
+        Map<String, Object> general = (Map<String, Object>) raw.get("general");
+        if (general == null) return null;
+        Map<String, Object> permission = (Map<String, Object>) general.get("permission");
+        if (permission == null) return null;
+        Object modeObj = permission.get("mode");
+        if (!(modeObj instanceof String mode)) return null;
+        return LEGACY_PERMISSION_MODE_MIGRATION.containsKey(mode) ? mode : null;
+    }
+
+    /** 原地替换 general.permission.mode = newValue。 */
+    @SuppressWarnings("unchecked")
+    private static void applyMigration(Map<String, Object> raw, String oldValue, String newValue) {
+        Map<String, Object> general = (Map<String, Object>) raw.get("general");
+        if (general == null) return;
+        Map<String, Object> permission = (Map<String, Object>) general.get("permission");
+        if (permission == null) return;
+        permission.put("mode", newValue);
     }
 
     /** 原子写入；写前调用校验；写完广播 */

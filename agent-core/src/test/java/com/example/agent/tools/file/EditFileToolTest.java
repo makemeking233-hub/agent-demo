@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.agent.permission.PermissionManager;
+import com.example.agent.permission.SandboxMode;
+import com.example.agent.permission.SandboxPolicyService;
 import com.example.agent.tools.Tool;
 
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,8 @@ class EditFileToolTest {
     @TempDir Path tmp;
 
     private Tool.ToolContext ctx() {
-        return new Tool.ToolContext(tmp, new PermissionManager(), () -> false);
+        var svc = SandboxPolicyService.createForTest(SandboxMode.PLAN, tmp);
+        return new Tool.ToolContext(tmp, new PermissionManager(), () -> false, null, svc);
     }
 
     @Test
