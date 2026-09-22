@@ -19,15 +19,16 @@
 
 ## F2: REST 端点（agent-web，~45min）
 
-- [ ] 2.1 新增 `agent-web/src/main/java/com/example/agent/web/api/FeedbackController.java`
+- [x] 2.1 新增 `agent-web/src/main/java/com/example/agent/web/api/FeedbackController.java`
       （`@Profile("web")`）：`GET /api/feedback/{sessionId}`、`PUT /api/feedback/{sessionId}/{messageId}`、
       `DELETE /api/feedback/{sessionId}/{messageId}`
-- [ ] 2.2 DTO：`FeedbackPutRequest {rating, ifVersion}` / `FeedbackDeleteRequest {ifVersion}` /
-      `FeedbackItemDto {rating, version}` / `FeedbackResponse {items}`
-- [ ] 2.3 错误码：非法 rating → 400 `{error:"rating_invalid"}`；CAS 冲突 → 409 `{current}`；
-      sessionId / messageId 非法（白名单校验防路径穿越）→ 400
-- [ ] 2.4 `FeedbackControllerTest`（直接调控制器方法，遵循 `SessionControllerTest` 惯例）：
-      3 端点 happy path + 400 + 409 + 空 session 返回 `{items:{}}`（5+ 用例）
+- [x] 2.2 DTO：`FeedbackPutRequest {rating, ifVersion}` / `FeedbackDeleteRequest {ifVersion}` /
+      `FeedbackItemDto {rating, version, updated_at}` / `FeedbackResponse {session_id, items}`
+- [x] 2.3 错误码：非法 rating → 400 `{error:"rating_invalid"}`；CAS 冲突 → 409 `{current}`；
+      sessionId / messageId 非法（白名单校验防路径穿越）→ 400；未知 session → 404
+- [x] 2.4 `FeedbackControllerTest`（直接调控制器方法，`@TempDir` 隔离）：13 用例全绿
+      （GET 空/GET 含数据/GET 非法 id/PUT happy/PUT 非法 rating/PUT 404/PUT 路径穿越/
+      PUT CAS 冲突/PUT 版本错配/DELETE 匹配/DELETE 缺失/DELETE 版本错配/快照排序）
 
 ## F3: 前端赞踩（~1h）
 
