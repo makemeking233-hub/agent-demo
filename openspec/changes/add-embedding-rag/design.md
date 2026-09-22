@@ -64,6 +64,32 @@ public interface EmbeddingProvider {
 
 **备选**：每次推理重新加载。否决——95MB 模型加载慢。
 
+#### D2.1: tokenizer 组件（实施期补充）
+
+**实施期发现的计划遗漏**：D2 原设计只写「加载 ONNX 模型」，未识别出 **tokenizer** 是必需组件。bge-small-zh-v1.5 是 BERT 架构：
+
+```
+文本 "安装 Java"
+    ↓  [1] tokenizer（本组件，原设计遗漏）
+token ids [101, 2345, 6789, 102]
+    ↓  [2] ONNX 模型推理（OrtSession.run）
+last_hidden_state [1, seq_len, 512]
+    ↓  [3] CLS 池化 + L2 归一化
+512 维归一化向量
+```
+
+**[1] BERT WordPiece tokenizer**：中文版实现需 BasicTokenizer（CJK 逐字切分 + 标点切分 + 小写）+ WordPieceTokenizer（`##` 前缀贪心最长匹配，未登录词 → `[UNK]`）。依赖 `vocab.txt`（约 110KB，与模型同源下载，加入 `scripts/download-embedding-model.sh`）。
+
+**[2] ONNX 推理**：输入三张 int64 张量（`input_ids` / `attention_mask` / `token_type_ids`），形状 `[1, seq_len]`。
+
+**[3] 池化**：bge 系列用 `[CLS]` 位置（`last_hidden_state[0][0]`）作为句向量，随后 L2 归一化（使 cosine 退化为点积，检索更快）。
+
+**备选**：引入 `ai.djl.huggingface:tokenizers`（~10MB，含 native binding）。
+
+**决策**：**手写 WordPiece**。理由：算法固定且短（约 200 行），无额外 native 依赖，与项目「最小依赖」倾向一致；只需 vocab.txt（110KB）而非完整 tokenizer 库；纯函数便于单元测试。代价是需自行处理 BERT 中文分词边界（CJK 区间、全角标点、lowercase/accent 规则），需较完整测试覆盖。
+
+**关键安全约束**（T8b.0 实测教训）：**推理未接通期间 `isReady()` 必须为 `false`**。否则 `embed()` 返回零向量，而零向量对所有条目的 cosine 都是 0，KNN 会任意返回 k 条——等于往召回结果注入无关条目。即「模型存在但推理未接通」比「模型缺失」更危险。
+
 ### D3: VectorIndex 接口
 
 ```java
