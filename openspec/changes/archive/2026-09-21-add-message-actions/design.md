@@ -1,5 +1,9 @@
 # Design: add-message-actions
 
+> **归档说明（2026-09-22）**：第 3 节（D2 feedback sidecar + CAS）与第 3.3 节（toggle 语义）
+> 属原 P3，已拆到 `openspec/changes/add-message-feedback/`，本 change 未实施；保留原文供追溯。
+> P1/P2 的实际实现与本文的收敛见第 7 节。
+
 ## 1. 架构（DSH 对齐）
 
 ```mermaid
@@ -163,3 +167,28 @@ async function onCopy() {
 | CAS 冲突频繁（多标签页同时点赞） | 冲突返回 `current` 让前端调和；不做重试 |
 | `ttftMs` 采集不准（provider 不返回 usage） | 显示 `N/A`（与 add-session-stats-bar 一致） |
 | feedback 写失败（磁盘满/权限） | REST 返回 500；前端回滚乐观更新 |
+
+## 7. 实施记录（P2，2026-09-22）
+
+实现与原设计的三处收敛，均以实际代码为准：
+
+| # | 设计原文 | 实际实现 | 原因 |
+|---|---------|---------|------|
+| A | `SseSessionLogSink.onAssistant()` 采集时序并发送 | 时序**采集**拆在 `onUser`（wall time 起点）与 `onAssistant`（定稿时刻）；`message_meta` 在 `onTurnEnd` **发送** | `ttft_ms` / `tok_per_sec` 只有 `TurnResult.delta()` 才有（`onAssistant` 阶段拿不到 usage 汇总）；发送点仍在 `message_stop` 之前，契约不变 |
+| B | 前端「按 uuid 存到 `Map<uuid, MessageMeta>`」 | 前端不做 uuid 索引，读数经 `attachMetaToTimeline` 直接贴到**本轮最后一条** assistant 消息项 | 一轮可能因工具调用拆成多条 item，而 `message_meta` 是按轮下发的；贴到最后一条才符合「这条回复说完了」的语义。uuid 仍写进 item，供后续赞踩（`add-message-feedback`）当 `messageId` |
+| C | 派生指标不可用时显示 `N/A` | 该段**整体省略**（`16:23 · Ran for 15s`） | 与 DSH 观感一致；一行里出现 2–3 次 `N/A` 反而噪声 |
+
+新增文件（P2）：
+
+| 文件 | 作用 |
+|------|------|
+| `agent-web/frontend/src/lib/message-clock.ts` | `formatClock` 及 4 个分段格式化函数（纯函数，18 用例） |
+| `agent-web/frontend/src/lib/message-clock.test.ts` | 上者的单测 |
+
+落盘口径：`SessionRecorder` 在回合结束追加 `SessionEntry.meta("message_meta", {uuid, duration_ms, ttft_ms, tok_per_sec, timestamp})`。
+`duration_ms` 为 wall time（`onUser` → 最后一条 assistant 落盘），与 SSE 事件同源；`ttft_ms` / `tok_per_sec`
+复用 `SessionStats.plus(delta)` 的派生口径，保证 clock 与底部统计栏读数一致。
+
+历史回填的已知边界：`SessionController.loadAssistantMeta` 用存档里 assistant 条目的**序号**把读数贴回消息列表。
+若存档的 assistant 条目数与 `messagesFor` 返回的 assistant 消息数不一致（例如孤儿 `tool_result` 触发了
+`injectOrphanSkeletons` 合成骨架），读数会整体放弃（`aligned=false`），宁可不显示也不贴错。

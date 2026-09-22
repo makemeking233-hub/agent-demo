@@ -1,5 +1,12 @@
 # Memory 系统详解 —— 现状（v0.4）与 Agent Loop 拼装路径
 
+> **修复状态（2026-09-03 更新）**：本文档 §5.2「关键事实 2」与 §6.5 记录的**召回链路断点**已由 OpenSpec change
+> `fix-memory-recall-wiring` 修复并归档。修复后记忆段改为**每轮按当轮用户提问动态召回**，`MemoryRetriever` /
+> `SideQuerySelector` 在生产路径上可达。下文对断点的描述保留为历史记录（含证据链与归因方法），阅读时请以「已修复」为前提；
+> §7.1 列出的改造项即该 change 的实施内容。
+>
+> 本文档另修正了原先的一处错误表述：曾把「启动期一次性生成 system prompt」称为「已知简化，不是 bug」，实为**应当修复的架构缺陷**。
+
 > 本文档从代码视角把 Memory 系统的全链路拆开讲清楚：每轮对话时 sideQuery 召回如何发生、scope 如何隔离、system prompt 是怎么一段一段拼起来的，以及「LLM 选择式」与「真正的向量检索」的本质区别。
 >
 > 适用版本：agent-demo v0.4（Memory 三 scope 已完成、sideQuery LLM 选择式已上线）。下一阶段目标 v0.5 / RAG 向量检索的具体方案另起 `openspec/changes/` 提案。
@@ -438,22 +445,38 @@ You have a persistent, file-based memory system organized by scope.
 
 > 问题 2 是根因：**只要注入发生在启动期，就不可能有「按当轮提问召回」**。因此修复的核心不是「把 query 传对」，而是「把召回挪到每轮」。这也正是 embedding RAG 改造必须站在其上的地基——详见 `openspec/changes/` 下的对应 change。
 
+**实施结果（change `fix-memory-recall-wiring`，已归档）**：
+
+| # | 实施内容 |
+|:--:|---------|
+| 1 | 新增 `MemorySectionSource` 接口 + `MemorySectionProvider` 实现，把「按 query 产出记忆段」封装为可注入对象；`AgentLoop.toRequest()` 取 `history` 中最近一条 user 消息作为 query 调用它 |
+| 2 | `SystemPromptBuilder` 拆出 `buildBase()`（不含记忆段）；`AgentLoop` 新增 `memorySectionSource` 字段，每轮把记忆段追加到基础段末尾；`AgentLoopFactory.buildSystemPromptParts()` 返回 `PromptParts(basePrompt, source)` 由 `buildLoop` 注入 |
+| 附加 | `memory.dynamicRetrieval` 开关（默认 `true`），关闭时回退 v0.1 全量索引行为 |
+| 附加 | 修复实施中发现的连带缺陷：retriever 在 provider 为 null 时被置空，导致 `MemoryPromptBuilder` 守卫失效而退化为全量索引——现改为始终构造（provider 可空，内部走纯字面召回） |
+| 回归防线 | 新增 `AgentLoopFactoryMemoryTest`，含「经 `buildLoop` 构建 agent 并触发一轮对话、断言 system prompt 含 `(relevant)` 与命中条目」的端到端连线测试 |
+
+> 留待后续 change：`--system-prompt` 用户覆盖当前仍不生效（`ChatCommand` 中生成的结果被 `buildLoop` 内部重新生成所覆盖）——这是清理死代码时发现的第二个既有缺陷，涉及「用户完整覆盖 vs 仍追加记忆段」的语义抉择，需单独设计。
+
 ---
 
 ## 7. 改造路线（分两步，顺序不可颠倒）
 
 改造必须分两步走。**第一步（修通召回时机）是第二步（换 embedding）的地基**——因为无论用 LLM 选择还是向量检索，「按当轮提问召回」都需要注入发生在每轮，而当前架构没有这个位置。
 
-### 7.1 第一步：修通每轮召回（前置，对应 §6.5 断点）
+### 7.1 第一步：修通每轮召回（前置，对应 §6.5 断点）—— ✅ 已完成
+
+> 本节列出的 6 项已由 change `fix-memory-recall-wiring` 全部实施并归档。实际落地与计划的差异：抽取了
+> `MemorySectionSource` 接口（而非直接把 `retriever` 塞进 `AgentLoop`），并新增了 `memory.dynamicRetrieval`
+> 开关与 `AgentLoopFactoryMemoryTest` 端到端连线测试。
 
 | 改动 | 文件 / 方法 | 性质 |
 |------|-----------|------|
-| 1. `AgentLoop` 持有 retriever + dirs，新增每轮生成 memory 段的路径 | `agent-core/core/AgentLoop.java` | 行为变更 |
-| 2. `toRequest()` 用当轮 query 调 `retrieve()`，动态拼 system prompt | `agent-core/core/AgentLoop.java:582` | 行为变更 |
+| 1. `AgentLoop` 持有记忆段来源，新增每轮生成 memory 段的路径 | `agent-core/core/AgentLoop.java` | 行为变更 |
+| 2. `toRequest()` 用当轮 query 调 `sectionFor()`，动态拼 system prompt | `agent-core/core/AgentLoop.java` | 行为变更 |
 | 3. 拆出「基础 system prompt（身份/行为/存储）」与「memory 段」两部分，前者启动期生成、后者每轮生成 | `agent-core/prompt/SystemPromptBuilder.java` | API 变更 |
-| 4. 装配层把 retriever + dirs 传给 `AgentLoop` | `agent-core/core/AgentLoopFactory.java:309` | API 变更 |
-| 5. 补端到端装配测试：断言 `buildSystemPrompt` 产物含召回结果（`(relevant)` 指纹） | `agent-core/src/test/.../AgentLoopFactoryTest.java` | 测试补全 |
-| 6. 清理 `ChatCommand.java:150` 的死代码 | `agent-core/cli/ChatCommand.java` | 清理 |
+| 4. 装配层把记忆段来源传给 `AgentLoop` | `agent-core/core/AgentLoopFactory.java` | API 变更 |
+| 5. 补端到端装配测试：断言装配产物含召回结果（`(relevant)` 指纹） | `agent-core/src/test/.../AgentLoopFactoryMemoryTest.java` | 测试补全 |
+| 6. 清理 `ChatCommand` 的死代码 | `agent-core/cli/ChatCommand.java` | 清理 |
 
 > 这一阶段完成后，system prompt 里的小节标题会从 `### USER Scope (<路径>)` 变成 `### USER Scope (relevant)`——这是验证接通的指纹。
 

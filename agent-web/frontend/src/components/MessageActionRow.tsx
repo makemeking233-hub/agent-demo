@@ -13,24 +13,26 @@
 
 import { Check, Copy } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { formatClock, type MessageClock } from "../lib/message-clock";
 
 export interface MessageActionRowProps {
   /** 复制到剪贴板的纯文本 */
   text: string;
-  /** 可选：per-message clock 读数（P2：时间 + Ran for + TTFT + tok/s） */
-  clock?: ReactNode;
+  /** 可选：per-message 读数（P2：时间 + Ran for + TTFT + tok/s）；null/缺失则不渲染 clock */
+  meta?: MessageClock | null;
   /** 可选：额外按钮（P3：赞踩） */
   children?: ReactNode;
   className?: string;
 }
 
-export function MessageActionRow({ text, clock, children, className }: MessageActionRowProps) {
+export function MessageActionRow({ text, meta, children, className }: MessageActionRowProps) {
   const [copied, setCopied] = useState(false);
   const copyPending = useRef(false);
   // 用 number 而非 ReturnType<typeof setTimeout>：装了 @types/node 后后者会解析成
   // NodeJS.Timeout，与 window.setTimeout 返回的 number 不兼容（tsc TS2322）。
   const copyTimer = useRef<number | null>(null);
   const copyEpoch = useRef(0);
+  const clockText = formatClock(meta);
 
   // unmount 清理：递增 epoch 让 pending 的 promise 回调失效；清 timer
   useEffect(
@@ -76,7 +78,15 @@ export function MessageActionRow({ text, clock, children, className }: MessageAc
         {copied ? <Check size={13} /> : <Copy size={13} />}
       </button>
       {children}
-      {clock}
+      {clockText && (
+        <span
+          className="ml-1 text-[0.7em] whitespace-nowrap text-muted-foreground"
+          data-testid="msg-clock"
+          title={clockText}
+        >
+          {clockText}
+        </span>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import com.example.agent.core.AgentLoop;
 import com.example.agent.core.Message;
 import com.example.agent.core.TurnResult;
 import com.example.agent.log.SessionLogSink;
+import com.example.agent.log.SessionRecorder;
 import com.example.agent.permission.PermissionConfirmer;
 import com.example.agent.permission.PermissionMode;
 import com.example.agent.session.WorkspaceStore;
@@ -291,6 +292,33 @@ public class ChatStreamService {
     public boolean submitDecision(String streamId, String permissionId, String decision) {
         if (actives.get(streamId) == null) return false;
         return permissionBridge.submitDecision(permissionId, decision);
+    }
+
+    /**
+     * 推送单条 assistant 消息的读数（add-message-actions P2）。
+     *
+     * <p>在 {@code turn_stats} 与 {@code message_stop} **之前**推送，携带本轮（而非会话累计）的
+     * wall time / TTFT / 吞吐，供前端在消息底部渲染 DSH 风格 clock。
+     *
+     * <p>uuid 取该会话落盘录制器记录的「本轮最后一条 assistant 条目 uuid」；会话不落盘时为
+     * {@code null}（前端退化为只显示时间）。派生指标复用 {@link SessionStats} 的口径，
+     * 保证与底部统计栏一致。
+     *
+     * @param streamId   流 id
+     * @param result     本轮结果（可空；空时读数退化为 N/A）
+     * @param durationMs 本轮 wall time（毫秒）
+     */
+    public void emitMessageMeta(String streamId, TurnResult result, long durationMs) {
+        ActiveStream meta = actives.get(streamId);
+        if (meta == null) return;
+        SessionRecorder recorder = runtime.recorderIfPresent(meta.workspace(), meta.sessionId());
+        String uuid = recorder == null ? null : recorder.lastAssistantUuid();
+        TurnDelta delta = result != null ? result.delta() : null;
+        SessionStats perTurn = SessionStats.empty().plus(delta);
+        emit(
+                meta,
+                new SseEvent.MessageMeta(
+                        uuid, durationMs, perTurn.avgTtftMs(), perTurn.tokPerSec(), System.currentTimeMillis()));
     }
 
     /**

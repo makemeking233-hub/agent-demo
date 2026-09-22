@@ -288,6 +288,22 @@ public class WebAgentRuntime {
         return new CompositeSessionLogSink(sseSink, recorder);
     }
 
+    /**
+     * 取已存在的落盘录制器（**不创建**）。
+     *
+     * <p>与 {@link #recorderFor(String, String)} 的区别：本方法只查缓存，绝不会因为一次查询就
+     * 给该会话凭空开出一个 {@code .jsonl} 存档。add-message-actions P2 的 {@code message_meta}
+     * 推送需要读录制器上的 uuid，但推送本身不应产生副作用。
+     *
+     * @param workspace 工作区（可空 = 默认工作区）
+     * @param sessionId 会话 id
+     * @return 已装配的录制器；未装配（该会话不落盘）时 {@code null}
+     */
+    public SessionRecorder recorderIfPresent(String workspace, String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) return null;
+        return sessionRecorders.get(key(workspace, sessionId));
+    }
+
     /** 按会话懒创建（并缓存）落盘录制器；失败时该会话降级为不落盘并返回 null。 */
     public SessionRecorder recorderFor(String sessionId) {
         return recorderFor(null, sessionId);

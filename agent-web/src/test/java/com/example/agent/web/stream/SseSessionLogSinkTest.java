@@ -1,6 +1,8 @@
 package com.example.agent.web.stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -16,6 +18,7 @@ import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
 import com.example.agent.log.SessionLogSink;
 import com.example.agent.render.StreamingPrinter;
+import com.example.agent.stats.TurnDelta;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.tools.ToolResult;
 import com.example.agent.web.api.dto.SseEvent;
@@ -107,6 +110,86 @@ class SseSessionLogSinkTest {
         sink.onThinkingDelta(null);
         sink.onThinkingDelta("");
         verify(stream, times(0)).emit(anyString(), any(SseEvent.MessageDelta.class));
+    }
+
+    // ---------- add-message-actions P2：per-message clock ----------
+
+    /**
+     * task 2.3/2.4：回合结束时先推 {@code message_meta}（per-message 读数），再走
+     * {@code onTurnEnd}（它内部推 turn_stats 并发 message_stop）。顺序不能反。
+     */
+    @Test
+    void onTurnEndEmitsMessageMetaBeforeTurnStatsAndStop() {
+        ChatStreamService stream = mock(ChatStreamService.class);
+        SseSessionLogSink sink = new SseSessionLogSink(stream, "s1");
+        TurnResult result = new TurnResult("final", 1, 2, 0);
+        sink.onUser(new Message.User("hi"));
+        sink.onAssistant(new Message.Assistant("final", null), List.of());
+        sink.onTurnEnd(result);
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(stream);
+        inOrder.verify(stream).emitMessageMeta(eq("s1"), eq(result), anyLong());
+        inOrder.verify(stream).onTurnEnd(eq("s1"), eq(result));
+    }
+
+    /** task 2.4：duration_ms 为「用户输入 → 最后一条 assistant 定稿」的 wall time，恒 ≥ 0。 */
+    @Test
+    void onTurnEndPassesNonNegativeDuration() {
+        ChatStreamService stream = mock(ChatStreamService.class);
+        SseSessionLogSink sink = new SseSessionLogSink(stream, "s1");
+        sink.onTurnEnd(new TurnResult("final", 0, 0, 0));
+        org.mockito.ArgumentCaptor<Long> captor = org.mockito.ArgumentCaptor.forClass(Long.class);
+        verify(stream).emitMessageMeta(eq("s1"), any(TurnResult.class), captor.capture());
+        assertThat(captor.getValue()).isGreaterThanOrEqualTo(0L);
+    }
+
+    /**
+     * task 2.4：真实 {@link ChatStreamService} 下事件顺序为
+     * {@code message_meta → turn_stats → message_stop}，且字段与 per-turn delta 一致。
+     */
+    @Test
+    void messageMetaEventPrecedesMessageStopWithPerTurnFields() {
+        ChatStreamService.ActiveStream[] out = new ChatStreamService.ActiveStream[1];
+        ChatStreamService svc = realService(out);
+        // llm=2000ms, ttft=500ms, tokensOut=300 → 生成 1500ms → 200 tok/s
+        TurnResult result =
+                new TurnResult("final", 100, 300, 0, new TurnDelta(0, 100, 300, 0, 2000, 0, 500, 1, null, null));
+        out[0].sinkAdapter().onTurnEnd(result);
+
+        List<org.springframework.http.codec.ServerSentEvent<Object>> events =
+                svc.stream(out[0].streamId()).collectList().block();
+        assertThat(events).isNotNull();
+        List<String> types = events.stream().map(org.springframework.http.codec.ServerSentEvent::event).toList();
+        assertThat(types).containsSubsequence("message_meta", "turn_stats", "message_stop");
+
+        String metaJson =
+                events.stream()
+                        .filter(e -> "message_meta".equals(e.event()))
+                        .map(e -> String.valueOf(e.data()))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(metaJson).contains("\"type\":\"message_meta\"");
+        assertThat(metaJson).contains("\"ttft_ms\":500.0");
+        assertThat(metaJson).contains("\"tok_per_sec\":200.0");
+        // 该会话在 mock runtime 下没有落盘录制器 → uuid 为 null，前端退化为只显示时间
+        assertThat(metaJson).contains("\"uuid\":null");
+    }
+
+    /** task 2.4：provider 未给出 usage（无 TTFT 样本）时派生指标为 null。 */
+    @Test
+    void messageMetaDerivedFieldsAreNullWithoutUsage() {
+        ChatStreamService.ActiveStream[] out = new ChatStreamService.ActiveStream[1];
+        ChatStreamService svc = realService(out);
+        TurnResult result =
+                new TurnResult("final", 0, 0, 0, new TurnDelta(0, 0, 0, 0, 0, 0, 0, 0, null, null));
+        out[0].sinkAdapter().onTurnEnd(result);
+
+        String metaJson =
+                svc.stream(out[0].streamId())
+                        .filter(e -> "message_meta".equals(e.event()))
+                        .map(e -> String.valueOf(e.data()))
+                        .blockFirst();
+        assertThat(metaJson).contains("\"ttft_ms\":null");
+        assertThat(metaJson).contains("\"tok_per_sec\":null");
     }
 }
 
