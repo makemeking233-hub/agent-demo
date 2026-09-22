@@ -114,16 +114,23 @@
                         <phase>verify</phase>
                         <goals><goal>check</goal></goals>
                         <configuration>
+                            <!-- fix-jacoco-rule：逐包考核（与 agent-web 一致）。
+                                 exclude 清单在 T1 实测后按缺口与「无测试覆盖意图」原则确定。 -->
+                            <excludes>
+                                <!-- AgentCli：JVM 入口，main() 不在单测中调用；
+                                     既有 AgentCliTest 仅覆盖 picocli 派发路径，不覆盖 main() -->
+                                <exclude>com/example/agent/AgentCli.*</exclude>
+                            </excludes>
                             <rules>
                                 <rule>
-                                    <element>BUNDLE</element>
+                                    <element>PACKAGE</element>
                                     <includes>
-                                        <include>com.example.agent.provider.*</include>
-                                        <include>com.example.agent.agent.*</include>
-                                        <include>com.example.agent.tools.*</include>
-                                        <include>com.example.agent.permission.*</include>
-                                        <include>com.example.agent.session.*</include>
-                                        <include>com.example.agent.memory.*</include>
+                                        <!-- 与原 BUNDLE 规则对齐 5 个包；删除 com.example.agent.agent.*（指向不存在包） -->
+                                        <include>com.example.agent.provider</include>
+                                        <include>com.example.agent.tools</include>
+                                        <include>com.example.agent.permission</include>
+                                        <include>com.example.agent.session</include>
+                                        <include>com.example.agent.memory</include>
                                     </includes>
                                     <limits>
                                         <limit>
