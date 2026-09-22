@@ -65,7 +65,10 @@
   初值是 `"1"`（占位），真实流程（reload 有 localStorage / 侧边栏点击）不受影响，故未在本 change 动它。
   若要修，应让「挂载即传 sessionId」也走一次加载，属独立 bugfix change。
 
-## Follow-up
+## Follow-up（不在本 change 范围）
 
-- [ ] session 删除（归档）时级联删 `feedback/<sid>.json`
-- [ ] 反馈聚合视图（哪些回复被踩最多）——需先想清楚是否对模型可见
+| 项 | 说明 |
+|----|------|
+| session 删除（归档）时级联删 `feedback/<sid>.json` | 当前会残留孤儿 sidecar；体积很小，暂不处理 |
+| 反馈聚合视图（哪些回复被踩最多） | 需先想清楚聚合结果是否对模型可见（本 change 的前提是「反馈对模型不可见」） |
+| `ChatPanel` 首次挂载短路修复（D-2） | 挂载即带非空 `currentSessionId` 时历史/反馈都不加载；影响面大于本 change，建议独立 bugfix change |
