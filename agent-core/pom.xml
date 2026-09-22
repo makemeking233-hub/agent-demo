@@ -139,6 +139,18 @@
                                 <!-- AgentCli：JVM 入口，main() 不在单测中调用；
                                      既有 AgentCliTest 仅覆盖 picocli 派发路径，不覆盖 main() -->
                                 <exclude>com/example/agent/AgentCli.*</exclude>
+                                <!-- OnnxEmbeddingProvider：ONNX 推理适配层（add-embedding-rag）。
+                                     核心路径依赖两样单测环境不具备的东西：
+                                       1. 仓库外的 95MB 模型权重（model.onnx_data，git 忽略）
+                                       2. final 类 ai.onnxruntime.OrtSession（Mockito 无法 mock）
+                                     其降级路径（模型缺失 / 词表缺失 / 加载失败 / 空文本）由
+                                     EmbeddingProviderTest 覆盖；真实推理路径由
+                                     OnnxEmbeddingProviderE2ETest 条件覆盖（本地有模型时 4/4 通过，
+                                     无模型时 @EnabledIf 跳过）。
+                                     排除依据：openspec/specs/testability/spec.md 的《覆盖率门禁》
+                                     Requirement（"无测试覆盖意图的类 SHALL 通过 excludes 排除"），
+                                     并经 change exclude-onnx-inference-from-coverage 走流程。 -->
+                                <exclude>com/example/agent/memory/embedding/OnnxEmbeddingProvider.*</exclude>
                             </excludes>
                             <rules>
                                 <rule>
