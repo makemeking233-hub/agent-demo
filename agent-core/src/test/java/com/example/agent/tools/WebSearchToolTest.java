@@ -160,5 +160,161 @@ class WebSearchToolTest {
         assertFalse(r.toModelContent().contains("请检查搜索 provider 的 API key"),
                 () -> "不应再含 fallback 误导文案，实际=" + r.toModelContent());
     }
+
+    // ---------- fix-jacoco-rule：补 BRANCH 覆盖率 ----------
+    // WebSearchTool 的 renderUse / renderText 与 parseArguments 的容错分支此前几乎零覆盖
+    // （BRANCH 0.524）。以下用例逐条跑到这些分支。
+
+    @Test
+    void renderUseHandlesNullInputAndNullQuery() {
+        WebSearchTool tool = toolWith((q, max, t) -> new WebSearchResult(List.of(), false));
+        assertEquals("web_search(\"\")", tool.renderUse(null));
+        assertEquals("web_search(\"\")", tool.renderUse(new WebSearchTool.Input(null, null)));
+        assertEquals("web_search(\"天气\")", tool.renderUse(new WebSearchTool.Input("天气", 3)));
+    }
+
+    @Test
+    void renderResultPassesOutputThrough() {
+        WebSearchTool tool = toolWith((q, max, t) -> new WebSearchResult(List.of(), false));
+        assertEquals("原样返回", tool.renderResult("原样返回"));
+    }
+
+    @Test
+    void parseArgumentsWrapsInvalidJsonAsIllegalArgument() {
+        WebSearchTool tool = toolWith((q, max, t) -> new WebSearchResult(List.of(), false));
+        IllegalArgumentException e =
+                assertThrows(
+                        IllegalArgumentException.class, () -> tool.parseArguments("{不是合法 JSON"));
+        assertTrue(e.getMessage().contains("参数 JSON 解析失败"));
+    }
+
+    @Test
+    void parseArgumentsTreatsNonNumericMaxResultsAsAbsent() {
+        WebSearchTool tool = toolWith((q, max, t) -> new WebSearchResult(List.of(), false));
+        // maxResults 传字符串 → isNumber() 为假 → 视为未提供
+        WebSearchTool.Input in =
+                tool.parseArguments("{\"query\":\"天气\",\"maxResults\":\"3\"}");
+        assertNull(in.maxResults());
+    }
+
+    @Test
+    void executeWithNullInputReturnsError() {
+        WebSearchTool tool = toolWith((q, max, t) -> new WebSearchResult(List.of(), false));
+        ToolResult<String> r = tool.execute(null, ctx).block();
+        assertTrue(r.isError());
+        assertTrue(r.toModelContent().contains("需要非空查询词"));
+    }
+
+    @Test
+    void executeHonoursExplicitPositiveMaxResults() {
+        java.util.concurrent.atomic.AtomicInteger seen = new java.util.concurrent.atomic.AtomicInteger();
+        WebSearchTool tool =
+                new WebSearchTool(
+                        (q, max, t) -> {
+                            seen.set(max);
+                            return new WebSearchResult(List.of(), false);
+                        },
+                        5,
+                        60000);
+
+        tool.execute(new WebSearchTool.Input("天气", 2), ctx).block();
+
+        assertEquals(2, seen.get(), "显式 maxResults>0 时应覆盖构造注入的默认值");
+    }
+
+    @Test
+    void executeFallsBackToConfiguredMaxResultsWhenInputMaxIsNonPositive() {
+        java.util.concurrent.atomic.AtomicInteger seen = new java.util.concurrent.atomic.AtomicInteger();
+        WebSearchTool tool =
+                new WebSearchTool(
+                        (q, max, t) -> {
+                            seen.set(max);
+                            return new WebSearchResult(List.of(), false);
+                        },
+                        7,
+                        60000);
+
+        tool.execute(new WebSearchTool.Input("天气", 0), ctx).block();
+
+        assertEquals(7, seen.get(), "maxResults<=0 时应回退到构造注入的默认值");
+    }
+
+    @Test
+    void executeRendersPlaceholderWhenSourcesEmptyOrNull() {
+        WebSearchTool empty = toolWith((q, max, t) -> new WebSearchResult(List.of(), false));
+        assertTrue(
+                empty.execute(new WebSearchTool.Input("q", null), ctx)
+                        .block()
+                        .output()
+                        .contains("未找到相关结果"));
+
+        WebSearchTool nullSources = toolWith((q, max, t) -> new WebSearchResult(null, false));
+        assertTrue(
+                nullSources.execute(new WebSearchTool.Input("q", null), ctx)
+                        .block()
+                        .output()
+                        .contains("未找到相关结果"));
+    }
+
+    @Test
+    void executeFallsBackToUrlWhenTitleMissing() {
+        WebSearchTool tool =
+                toolWith(
+                        (q, max, t) ->
+                                new WebSearchResult(
+                                        List.of(new Source("https://n.example", "  ", null, null)),
+                                        false));
+        String out = tool.execute(new WebSearchTool.Input("q", null), ctx).block().output();
+        // 标题缺失/空白 → 用 URL 当标题
+        assertTrue(out.contains("[https://n.example](https://n.example)"));
+        // snippet / publishedAt 均为空 → 不输出对应行
+        assertFalse(out.contains("摘要:"));
+        assertFalse(out.contains("日期:"));
+    }
+
+    @Test
+    void executeOmitsSnippetAndDateWhenBlank() {
+        WebSearchTool tool =
+                toolWith(
+                        (q, max, t) ->
+                                new WebSearchResult(
+                                        List.of(
+                                                new Source(
+                                                        "https://b.example", "标题", "   ", "  ")),
+                                        false));
+        String out = tool.execute(new WebSearchTool.Input("q", null), ctx).block().output();
+        assertTrue(out.contains("标题"));
+        assertFalse(out.contains("摘要:"));
+        assertFalse(out.contains("日期:"));
+    }
+
+    @Test
+    void executeAppendsTruncatedMarker() {
+        WebSearchTool tool =
+                toolWith(
+                        (q, max, t) ->
+                                new WebSearchResult(
+                                        List.of(
+                                                new Source(
+                                                        "https://t.example",
+                                                        "标题",
+                                                        "摘要",
+                                                        "2024-01-01")),
+                                        true));
+        String out = tool.execute(new WebSearchTool.Input("q", null), ctx).block().output();
+        assertTrue(out.contains("结果已截断"));
+    }
+
+    @Test
+    void executeTrimsTrailingWhitespaceFromRenderedText() {
+        WebSearchTool tool =
+                toolWith(
+                        (q, max, t) ->
+                                new WebSearchResult(
+                                        List.of(new Source("https://x.example", "T", null, null)),
+                                        false));
+        String out = tool.execute(new WebSearchTool.Input("q", null), ctx).block().output();
+        assertEquals(out, out.stripTrailing());
+    }
 }
 
