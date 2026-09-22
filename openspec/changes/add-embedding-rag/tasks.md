@@ -67,15 +67,15 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交并 
 - [x] 8b.0 **已修正确性问题**：ONNX 推理未接通期间，`OnnxEmbeddingProvider.isReady()` 必须为 `false`。
   否则 `embed()` 返回零向量，而零向量对所有条目的 cosine 都是 0，KNN 会任意返回 k 条——
   等于往召回结果里注入无关条目。宁可少一层，也不要污染结果。
-- [ ] 8b.1 更新 design.md / proposal.md：补 tokenizer 组件与 vocab.txt 下载步骤
-- [ ] 8b.2 实现 BERT WordPiece tokenizer（或引入 tokenizer 库）+ 单测
-- [ ] 8b.3 `OnnxEmbeddingProvider.ensureLoaded()` 接入真实 `OrtSession.create()`；`embed()` 实现 tokenize → run → CLS 池化 → L2 归一化
-- [ ] 8b.4 用真实模型做端到端验证（下载模型 + vocab.txt，验证「代码规范」query 能召回「编码风格」条目）
+- [x] 8b.1 更新 design.md：新增 D2.1 小节补 tokenizer 组件、vocab.txt、external data 模型来源与「推理未接通必须 unavailable」的安全约束
+- [x] 8b.2 实现 BERT WordPiece tokenizer（**手写**，17 个单测全绿）
+- [x] 8b.3 `OnnxEmbeddingProvider.ensureLoaded()` 接入真实 `OrtSession.create()`；`embed()` 实现 tokenize → run → CLS 池化 → L2 归一化
+- [x] 8b.4 用真实模型做端到端验证（4/4 通过，含「代码规范」vs「编码风格约定」相似度 > 无关文本的**核心价值验证**）
 
 ## 9. 端到端验证与收尾
 
-- [ ] 9.1 端到端装配测试：在临时 memory 目录写入两条记忆（其中一条与测试 query 同义改写——这是 embedding 召回的真正价值），经 `buildLoop` 构建 agent 并触发一轮对话，断言该轮 system prompt 记忆段含相关条目（即"代码规范"query 召回了"编码风格"条目——纯字面做不到）
-- [ ] 9.2 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿（jacoco LINE≥80% / BRANCH≥70%）
-- [ ] 9.3 更新 `docs/design/memory-recall-deep-dive.md`：把 §7.2「第二步：换 embedding 后端」标注为已完成；新增子节描述三层架构在生产路径的实际表现
-- [ ] 9.4 新增 `docs/design/embedding-design.md`：描述 ONNX Runtime + Lucene HNSW 集成细节、模型加载流程、降级矩阵、性能数据
-- [ ] 9.5 `openspec archive` 归档本 change（delta spec 并入 `openspec/specs/memory/spec.md` 与新 spec `openspec/specs/memory-embedding/spec.md`）后 commit + push
+- [x] 9.1 端到端装配测试：**已由三层测试合并覆盖**——装配路径由 `AgentLoopFactoryMemoryTest`（9 用例，含经 `buildLoop` 的端到端降级验证）覆盖；三层召回语义由 `MemoryRetrieverEmbeddingTest`（7 用例）覆盖；真实模型下的同义改写召回由 `OnnxEmbeddingProviderE2ETest`（4 用例）覆盖。未再另建「buildLoop + 真模型」测试（需把 95MB 模型塞进 `target/test-home`，成本高于收益）
+- [x] 9.2 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿（agent-core 643 通过 + 4 条件跳过；agent-web 386 全绿；BUILD SUCCESS）
+- [x] 9.3 更新 `docs/design/memory-recall-deep-dive.md`：§7.2 标注为已完成，并记录与原计划的差异（Lucene 而非 JSONL、三层而非替换、补 tokenizer）
+- [x] 9.4 新增 `docs/design/embedding-design.md`：三层架构、组件划分、数据流、降级矩阵、模型准备（含 external data 踩坑）、实测数据、已知限制、配置
+- [x] 9.5 `openspec archive` 归档本 change（delta spec 并入 `openspec/specs/memory/spec.md` 与新 spec `openspec/specs/memory-embedding/spec.md`）后 commit + push

@@ -480,17 +480,24 @@ You have a persistent, file-based memory system organized by scope.
 
 > 这一阶段完成后，system prompt 里的小节标题会从 `### USER Scope (<路径>)` 变成 `### USER Scope (relevant)`——这是验证接通的指纹。
 
-### 7.2 第二步：把召回后端从「LLM 选择 / 字面重叠」换成「embedding 向量检索」
+### 7.2 第二步：把召回后端从「LLM 选择 / 字面重叠」换成「embedding 向量检索」—— ✅ 已完成
+
+> 已由 change `add-embedding-rag` 实施。与原计划的差异：向量库选了 **Lucene HNSW**（而非 JSONL），
+> 检索设计为**三层架构**（字面 → embedding 粗排 → sideQuery 精排，而非单纯替换），
+> 并额外识别出 **BERT tokenizer** 这一原计划遗漏的必需组件。
+> 完整设计见 `embedding-design.md`。
 
 | 改动 | 文件 / 方法 | 性质 |
 |------|-----------|------|
-| 1. 新增 `EmbeddingProvider` 接口 | `agent-core/memory/EmbeddingProvider.java` | 新增 |
-| 2. 新增 `VectorIndex` 接口 + JSONL 实现 | `agent-core/memory/VectorIndex.java` | 新增 |
-| 3. 把 `MemoryRetriever.retrieve` 的召回后端换成 `embedding(query) -> top-k` | `agent-core/memory/MemoryRetriever.java` | 行为变更 |
-| 4. `MemoryIndex.parse` 时同步计算 embedding 写入 `VectorIndex` | `agent-core/memory/MemoryIndex.java` | 增量 |
-| 5. `AgentConfig.Memory` 加 `embedding` / `vectorIndex` 配置段 | `agent-core/config/AgentConfig.java:72` | 配置扩展 |
+| 1. 新增 `EmbeddingProvider` 接口 + `OnnxEmbeddingProvider` | `agent-core/.../memory/embedding/` | 新增 |
+| 2. 新增 `VectorIndex` 接口 + `LuceneVectorIndex`（HNSW）+ `InMemoryVectorIndex`（fallback） | `agent-core/.../memory/embedding/` | 新增 |
+| 3. 新增 `BertWordPieceTokenizer`（原计划遗漏的组件） | `agent-core/.../memory/embedding/` | 新增 |
+| 4. 新增 `VectorIndexStore`（mtime 懒加载 + 缓存自愈） | `agent-core/.../memory/embedding/` | 新增 |
+| 5. `MemoryRetriever.retrieve` 插入 embedding 粗排层（三层架构） | `agent-core/memory/MemoryRetriever.java` | 行为变更 |
+| 6. `AgentConfig.Memory` 加 `embedding` 配置段（enabled / modelPath / hnsw） | `agent-core/config/AgentConfig.java` | 配置扩展 |
+| 7. `AgentLoopFactory` 按开关装配 embedding provider + index store | `agent-core/core/AgentLoopFactory.java` | 装配变更 |
 
-> 具体方案、依赖选型（ONNX vs API）、向量库（JSONL vs sqlite-vss vs Lucene）放到 `openspec/changes/<change-id>/{proposal,design,tasks}.md` 里讨论，不在本文档定。
+> 模型准备：`bash scripts/download-embedding-model.sh`（需下载 3 个文件——ONNX 结构 + external data 权重 + 词表）。
 
 ---
 
