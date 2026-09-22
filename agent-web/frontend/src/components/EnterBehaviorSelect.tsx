@@ -5,7 +5,6 @@
  */
 
 import { useSettingsStore } from "../hooks/useSettingsStore";
-import styles from "./SettingsRows.module.css";
 
 export type EnterBehavior = "send" | "queue" | "newSession";
 
@@ -23,12 +22,12 @@ export function EnterBehaviorSelect() {
   const patch = useSettingsStore((s) => s.patch);
 
   return (
-    <div className={styles.group}>
-      <div className={styles.title}>繁忙时 Enter 键行为</div>
-      <div className={styles.row}>
-        <div className={styles.rowControl}>
+    <div className="mb-6 flex flex-col gap-2">
+      <div className="text-sm font-medium text-foreground">繁忙时 Enter 键行为</div>
+      <div className="flex items-center gap-4 py-2">
+        <div className="flex-1">
           <select
-            className={styles.select}
+            className="min-w-[200px] rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground"
             value={value}
             onChange={(e) => void patch("general.enterBehavior.mode", e.target.value)}
             data-testid="enter-behavior-select"
@@ -39,7 +38,7 @@ export function EnterBehaviorSelect() {
               </option>
             ))}
           </select>
-          <div className={styles.hint}>
+          <div className="mt-1 text-xs text-muted-foreground">
             仅在智能体运行时生效；Cmd/Ctrl+Enter 使用另一行为
           </div>
         </div>
