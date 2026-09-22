@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChatApi, type HistoryMessage, type ModelEntry, type PermissionMode, type SessionStats } from "../api/chat";
+import {
+  deleteFeedback,
+  FeedbackConflictError,
+  getFeedback,
+  nextRating,
+  putFeedback,
+  type FeedbackItem,
+  type Rating,
+} from "../api/feedback";
 import { SseClient } from "../lib/sse-client";
 import { SseEvent } from "../lib/event-types";
 import { createVoice } from "../lib/voice";
@@ -322,6 +331,8 @@ export function ChatPanel(props: {
   ) as PermissionMode;
   const [sessionPermissionMode, setSessionPermissionMode] = useState<PermissionMode | null>(null);
   const permissionMode: PermissionMode = sessionPermissionMode ?? settingsPermissionMode;
+  // 消息反馈（add-message-feedback）：uuid → {rating, version}；进会话时一次性拉全量，点击走乐观更新。
+  const [ratings, setRatings] = useState<Record<string, FeedbackItem>>({});
   // add-models-dropdown-v0：model/reasoningEffort/currentModelEntry 由 props 传入（App.tsx 持有，避免双 state 不同步）
   const { provider, model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
@@ -348,12 +359,88 @@ export function ChatPanel(props: {
 
   const api = new ChatApi();
 
+  /**
+   * 拉取某会话的全部反馈（add-message-feedback F3.3）。
+   *
+   * <p>失败时按「无反馈」处理（不阻断对话）；切会话先把上一会话的 rating 清掉，避免串会话显示。
+   *
+   * @param sessionId 会话 id（`null` = 清空）
+   */
+  function loadFeedback(sessionId: string | null) {
+    setRatings({});
+    if (!sessionId) return;
+    getFeedback(sessionId)
+      .then((r) => setRatings(r.items ?? {}))
+      .catch(() => setRatings({}));
+  }
+
+  /**
+   * 点击 👍/👎：两态互斥 + 再点取消，乐观更新 → 请求 → 失败回滚 / 409 用 `current` 调和。
+   *
+   * @param messageId 消息 uuid
+   * @param clicked   被点击的按钮
+   */
+  async function handleRate(messageId: string, clicked: Rating) {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    const prev = ratings[messageId] ?? null;
+    const target = nextRating(prev ? prev.rating : null, clicked);
+    // 乐观更新：先按目标态改本地（version 仅用于展示，成功后被服务端值覆盖）
+    setRatings((r) => {
+      const next = { ...r };
+      if (target === null) delete next[messageId];
+      else next[messageId] = { rating: target, version: (prev?.version ?? 0) + 1, updated_at: Date.now() };
+      return next;
+    });
+    try {
+      if (target === null) {
+        await deleteFeedback(sessionId, messageId, prev ? prev.version : null);
+      } else {
+        const written = await putFeedback(sessionId, messageId, target, prev ? prev.version : null);
+        setRatings((r) => ({ ...r, [messageId]: written }));
+      }
+    } catch (e) {
+      if (e instanceof FeedbackConflictError) {
+        // 409：以服务端 current 为准（current=null 表示对方已删除 → 本地也删掉）
+        setRatings((r) => {
+          const next = { ...r };
+          if (e.current) next[messageId] = e.current;
+          else delete next[messageId];
+          return next;
+        });
+        return;
+      }
+      // 其它失败（500 / 网络）：回滚到点击前状态
+      setRatings((r) => {
+        const next = { ...r };
+        if (prev) next[messageId] = prev;
+        else delete next[messageId];
+        return next;
+      });
+    }
+  }
+
+  /**
+   * 取某条消息当前的 rating（add-message-feedback F3.3）。
+   *
+   * <p>返回约定：`undefined` = 该条**不支持**赞踩（无 uuid / 无会话，`MessageActionRow` 据此不渲染
+   * 按钮）；`null` = 支持但未选中。
+   *
+   * @param uuid 消息 uuid
+   * @returns 当前 rating / `null` / `undefined`
+   */
+  function ratingFor(uuid?: string | null): Rating | null | undefined {
+    if (!uuid || !sessionIdRef.current) return undefined;
+    return ratings[uuid]?.rating ?? null;
+  }
+
   // 会话重进恢复：挂载时从 localStorage 恢复 session_id + 消息快照；无快照但服务端有历史时回填。
   useEffect(() => {
     const saved = readPersisted();
     if (saved && saved.sessionId) {
       sessionIdRef.current = saved.sessionId;
       setItems(saved.items ?? []);
+      loadFeedback(saved.sessionId);
       if ((saved.items ?? []).length === 0) {
         api
           .history(saved.sessionId)
@@ -382,6 +469,8 @@ export function ChatPanel(props: {
     setStreamId(null);
     streamIdRef.current = null;
     sessionIdRef.current = next;
+    // add-message-feedback：切会话时重拉该会话反馈（旧会话的 rating 一并清掉）
+    loadFeedback(next);
     if (!next) {
       setStats(null);
       return;
@@ -625,7 +714,7 @@ export function ChatPanel(props: {
           </div>
         )}
         {items.map((it) => {
-          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} thinking={it.thinking} reasoningTokens={it.reasoningTokens} meta={it.meta} />;
+          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} thinking={it.thinking} reasoningTokens={it.reasoningTokens} meta={it.meta} rating={ratingFor(it.uuid)} onRate={(r) => it.uuid && handleRate(it.uuid, r)} />;
           if (it.kind === "tool") return <ToolCallCard key={it.id} name={it.name} status={it.status} text={it.text} durationMs={it.durationMs} denial={it.denial} onEscalate={(m) => handleEscalate(m as PermissionMode)} />;
           if (it.kind === "perm") return <PermissionCard key={it.id} toolName={it.toolName} reason={it.reason} choices={it.choices} onChoose={(d) => submitPermission(it.permissionId, d, it.id)} />;
           return null;
