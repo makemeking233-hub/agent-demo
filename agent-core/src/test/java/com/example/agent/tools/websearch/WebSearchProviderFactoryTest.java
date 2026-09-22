@@ -87,6 +87,46 @@ class WebSearchProviderFactoryTest {
                 .startsWith("https://custom.example.com/anthropic/v1/messages");
     }
 
+    // ===== fix-jacoco-rule：补 pickFirstNonBlank / infer 的容错分支 =====
+
+    /** search.provider 为空白 → 不视为「显式配置」，回落到模型推断 */
+    @Test
+    void blankExplicitProviderFallsBackToInference() {
+        AgentConfig cfg = withSearch(withProvider("deepseek", "deepseek-chat"), "   ");
+        // 空白 explicit 被忽略 → infer 出 deepseek
+        assertInstanceOf(DeepSeekWebSearchProvider.class, WebSearchProviderFactory.create(cfg));
+    }
+
+    /** 显式 key 为空白 → 视同未提供，回落 cfg.provider().apiKey()（pickFirstNonBlank 的 a-blank 分支） */
+    @Test
+    void blankDeepseekKeyFallsBackToCfgKey() {
+        AgentConfig cfg = withProviderAndKey("deepseek", "deepseek-chat", "sk-cfg");
+        WebSearchProvider p = WebSearchProviderFactory.create(cfg, "   ", null, null);
+        assertInstanceOf(DeepSeekWebSearchProvider.class, p);
+        assertThat(p).extracting("apiKey").isEqualTo("sk-cfg");
+    }
+
+    /**
+     * 显式 tavilyKey 为空白 → 回落到 {@code System.getenv(TAVILY_API_KEY)}。
+     *
+     * <p>只断言「仍构造成 Tavily provider」：env 里是否有 TAVILY_API_KEY 取决于运行机器，
+     * 断言具体 key 值会变成环境相关的脆弱测试。本用例的价值是跑过 pickFirstNonBlank 的
+     * a-blank 与 b 分支。
+     */
+    @Test
+    void blankTavilyKeyFallsBackToEnv() {
+        AgentConfig cfg = withSearch(withProvider("minimax", "minimax-text"), "tavily");
+        WebSearchProvider p = WebSearchProviderFactory.create(cfg, null, "  ", null);
+        assertInstanceOf(TavilyWebSearchProvider.class, p);
+    }
+
+    /** provider.type 与 model 均为 null → infer 走「两者都空」分支，回落 tavily */
+    @Test
+    void nullTypeAndModelInferTavily() {
+        AgentConfig cfg = withProvider(null, null);
+        assertInstanceOf(TavilyWebSearchProvider.class, WebSearchProviderFactory.create(cfg));
+    }
+
     private static AgentConfig withProvider(String type, String model) {
         AgentConfig d = AgentConfig.defaults();
         return new AgentConfig(

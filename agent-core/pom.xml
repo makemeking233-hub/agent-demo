@@ -125,12 +125,21 @@
                                 <rule>
                                     <element>PACKAGE</element>
                                     <includes>
-                                        <!-- 与原 BUNDLE 规则对齐 5 个包；删除 com.example.agent.agent.*（指向不存在包） -->
+                                        <!-- 注意：PACKAGE 元素下 includes 过滤的是**包名**，
+                                             `X` 只匹配根包 X、`X.*` 只匹配子包 X.y —— 两者必须都写，
+                                             否则会静默漏掉一半（agent-web 的 com.example.agent.web.*
+                                             就漏了根包 com.example.agent.web）。
+                                             原规则的 com.example.agent.agent.* 指向不存在的包，已删。 -->
                                         <include>com.example.agent.provider</include>
+                                        <include>com.example.agent.provider.*</include>
                                         <include>com.example.agent.tools</include>
+                                        <include>com.example.agent.tools.*</include>
                                         <include>com.example.agent.permission</include>
+                                        <include>com.example.agent.permission.*</include>
                                         <include>com.example.agent.session</include>
+                                        <include>com.example.agent.session.*</include>
                                         <include>com.example.agent.memory</include>
+                                        <include>com.example.agent.memory.*</include>
                                     </includes>
                                     <limits>
                                         <limit>
