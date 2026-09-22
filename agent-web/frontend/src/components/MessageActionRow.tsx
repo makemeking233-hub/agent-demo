@@ -90,7 +90,7 @@ export function MessageActionRow({ text, meta, rating, onRate, children, classNa
         <>
           <button
             type="button"
-            className={styles.action}
+            className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
             aria-label={rating === "up" ? "取消点赞" : "点赞"}
             aria-pressed={rating === "up"}
             title={rating === "up" ? "取消点赞" : "点赞"}
@@ -101,7 +101,7 @@ export function MessageActionRow({ text, meta, rating, onRate, children, classNa
           </button>
           <button
             type="button"
-            className={styles.action}
+            className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
             aria-label={rating === "down" ? "取消点踩" : "点踩"}
             aria-pressed={rating === "down"}
             title={rating === "down" ? "取消点踩" : "点踩"}
