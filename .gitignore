@@ -79,3 +79,8 @@ agent-core/src/main/java/com/example/agent/test/
 
 # 本地简历/笔记/学习材料（仓库根目录临时存放，不提交）
 /Agent-Demo-简历-PathMatcher详解.txt
+
+# add-embedding-rag：embedding 模型文件（~95MB，bge-small-zh-v1.5；由 tools/download-embedding-model.sh 下载）
+**/models/
+# add-embedding-rag：向量索引与 mtime 缓存（Lucene HNSW 索引 + mtime.json，均为本地派生态）
+**/.vectors/

@@ -24,7 +24,7 @@
 
 - 不引入服务端向量数据库。
 - 不改 memory 写入链路（写工具不感知 embedding）。
-- 不做 embedding 自动下载（仅提供 `tools/download-embedding-model.sh` 辅助脚本）。
+- 不做 embedding 自动下载（仅提供 `scripts/download-embedding-model.sh` 辅助脚本）。
 - 不做跨轮 embedding 缓存。
 - LOCAL scope 不建索引（无持久化意义）。
 - 不替换 sideQuery（保留为可选精排；embedding 启用时它仍是粗排后的窄候选精排）。
@@ -114,7 +114,7 @@ public class VectorIndexStore {
    ```
    [WARN] Embedding model not found at <path>
    To enable embedding-based memory retrieval, run:
-     bash tools/download-embedding-model.sh
+     bash scripts/download-embedding-model.sh
    Or set memory.embedding.enabled=false to disable.
    ```
 2. 文件存在 → 加载 ONNX session
@@ -162,7 +162,7 @@ public record HnswConfig(int m, int efConstruction) {}  // 默认 (16, 200)
 - [Lucene HNSW 依赖体积 +10MB] → 一次性代价，换未来扩展空间；agent-core 从 ~5MB 增到 ~15MB
 - [ONNX Runtime 依赖体积 +30MB] → 一次性代价，换离线可用 + 零 API 成本
 - [首次启动慢 5-10s（加载模型 + 重建索引）] → 仅首次，后续 mtime 缓存命中后 < 1s
-- [bge-small-zh 模型需手动下载] → 提供 `tools/download-embedding-model.sh` 辅助；缺失不致命
+- [bge-small-zh 模型需手动下载] → 提供 `scripts/download-embedding-model.sh` 辅助；缺失不致命
 - [Lucene 9.x HNSW 是较新 API，版本兼容风险] → 锁定 lucene-core 9.10.0（2024-04 stable）；如失败可降级为 9.4.0
 - [每轮 `embed(query)` 是同步调用，会阻塞 toRequest ~5ms] → 接受；后续可异步化（后续 change）
 - [mtime 比对不防秒级精度内的快速连续修改] → 可接受；mtime 缓存损坏 → 全部重算（自愈）
@@ -177,7 +177,7 @@ public record HnswConfig(int m, int efConstruction) {}  // 默认 (16, 200)
 4. **改造**：`MemoryRetriever` 注入 `EmbeddingProvider` + `VectorIndexStore`，加 embedding 粗排阶段
 5. **装配**：`AgentLoopFactory` 构造 embedding provider + index store，注入 retriever
 6. **首次启动处理**：模型缺失时 WARN + 指引，不致命
-7. **辅助脚本**：`tools/download-embedding-model.sh`（HF mirror 链接 + curl 指令）
+7. **辅助脚本**：`scripts/download-embedding-model.sh`（HF mirror 链接 + curl 指令）
 8. **测试**：embedding / vector index / retriever / 端到端装配 四组 + 7-9 个测试类
 9. **文档**：更新 `memory-recall-deep-dive.md` §6 + §7.2；新增 `embedding-design.md` 描述 ONNX / Lucene 集成细节
 

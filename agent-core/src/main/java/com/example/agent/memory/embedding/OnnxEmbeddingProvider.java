@@ -101,7 +101,8 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
             if (!Files.exists(modelPath)) {
                 log.warn(
                         "embedding model not found at {}; memory retrieval will fall back to "
-                                + "literal + sideQuery only. Run `bash tools/download-embedding-model.sh` to enable.",
+                                + "literal + sideQuery only. Run `bash scripts/download-embedding-model.sh` to enable, "
+                                + "or set memory.embedding.enabled=false to silence this warning.",
                         modelPath);
                 loadFailed = true;
                 return false;

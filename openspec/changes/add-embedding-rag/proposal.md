@@ -42,6 +42,6 @@
 - 不改 `MemoryPromptBuilder`（保持纯渲染）。
 - 不做跨轮 embedding 缓存 / LRU。
 - 不引入服务端向量数据库（Qdrant / Milvus / pgvector）。
-- 不做 embedding 模型自动下载（仅打印指引；提供 `tools/download-embedding-model.sh` 辅助脚本）。
+- 不做 embedding 模型自动下载（仅打印指引；提供 `scripts/download-embedding-model.sh` 辅助脚本）。
 - LOCAL scope 不建索引（无持久化意义）。
 - 不替换 sideQuery（保留为可选精排；`embedding.enabled=false` 即退化为当前架构）。

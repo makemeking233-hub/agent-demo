@@ -44,7 +44,7 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交并 
 ## 7. .gitignore + 首次启动提示 + 下载脚本
 
 - [ ] 7.1 测试先红：`GitignorePatternsTest`（简单 grep .gitignore）断言 `<agentHome>/models/` 与 `**/.vectors/` 模式存在
-- [ ] 7.2 实现：`.gitignore` 增加 `**/models/` 与 `**/.vectors/`；`OnnxEmbeddingProvider` 模型缺失时的 WARN 日志改为多行可粘贴指引（包含模型文件路径 + `bash tools/download-embedding-model.sh` 提示）；新增 `tools/download-embedding-model.sh`（curl from HF mirror → 解压 → chmod 0600）
+- [ ] 7.2 实现：`.gitignore` 增加 `**/models/` 与 `**/.vectors/`；`OnnxEmbeddingProvider` 模型缺失时的 WARN 日志改为多行可粘贴指引（包含模型文件路径 + `bash scripts/download-embedding-model.sh` 提示）；新增 `scripts/download-embedding-model.sh`（curl from HF mirror → 解压 → chmod 0600）
 - [ ] 7.3 `mvn -o -pl agent-core test` 转绿后 commit + push
 
 ## 8. 依赖接入：`pom.xml`
