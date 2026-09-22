@@ -128,9 +128,16 @@ public class OnnxEmbeddingProvider implements EmbeddingProvider {
                 loadFailed = true;
                 return false;
             }
-            log.debug("embedding model path found at {} ({} bytes); T8 will wire ONNX session.",
+            // T8b 待办：ONNX 推理尚未接通（需 BERT WordPiece tokenizer + OrtSession.run）。
+            // 在此之前**必须**保持 unavailable——否则 embed() 返回零向量，而零向量对所有条目的
+            // cosine 都是 0，KNN 会任意返回 k 条，等于往召回结果里注入无关条目。
+            // 宁可少一层，也不要污染结果。
+            log.info(
+                    "embedding model found at {} ({} bytes), but ONNX inference is not yet wired; "
+                            + "embedding layer stays disabled (memory recall uses literal + sideQuery).",
                     modelPath, size);
-            return true;
+            loadFailed = true;
+            return false;
         } catch (RuntimeException e) {
             log.warn("failed to initialize embedding model at {}: {}", modelPath, e.toString());
             loadFailed = true;

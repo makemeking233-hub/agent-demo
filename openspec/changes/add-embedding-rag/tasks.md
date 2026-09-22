@@ -37,22 +37,40 @@ TDD 节奏：每组内先写/改测试（红）→ 实现（绿）→ 提交并 
 
 ## 6. 装配：`AgentLoopFactory` 接入 embedding provider + index store
 
-- [ ] 6.1 测试先红：`AgentLoopFactoryMemoryTest` 新增用例 —— `embedding.enabled=true` 时 `buildLoop` 产出的 agent 在首轮请求的 system prompt 中含 `(relevant)`（已有用例扩一条含 embedding 路径即可）；`embedding.enabled=false` 时行为与 v0.4 一致（验证三层降为两层）；`modelPath` 不存在时首轮请求**不**报错（仅 WARN 日志）
-- [ ] 6.2 实现：`AgentLoopFactory` 按 `embedding.enabled` 决定是否构造 `OnnxEmbeddingProvider` + `VectorIndexStore`；`MemoryRetriever` 构造时传入；缺失模型文件场景下 `OnnxEmbeddingProvider.unavailable=true`，装配层正常返回（不抛）
-- [ ] 6.3 `mvn -o -pl agent-core,agent-web test` 全绿后 commit + push
+- [x] 6.1 测试先红：`AgentLoopFactoryMemoryTest` 新增用例 —— `embedding.enabled=true` 时 `buildLoop` 产出的 agent 在首轮请求的 system prompt 中含 `(relevant)`（已有用例扩一条含 embedding 路径即可）；`embedding.enabled=false` 时行为与 v0.4 一致（验证三层降为两层）；`modelPath` 不存在时首轮请求**不**报错（仅 WARN 日志）
+- [x] 6.2 实现：`AgentLoopFactory` 按 `embedding.enabled` 决定是否构造 `OnnxEmbeddingProvider` + `VectorIndexStore`；`MemoryRetriever` 构造时传入；缺失模型文件场景下 `OnnxEmbeddingProvider.unavailable=true`，装配层正常返回（不抛）
+- [x] 6.3 `mvn -o -pl agent-core,agent-web test` 全绿后 commit + push
 
 ## 7. .gitignore + 首次启动提示 + 下载脚本
 
-- [ ] 7.1 测试先红：`GitignorePatternsTest`（简单 grep .gitignore）断言 `<agentHome>/models/` 与 `**/.vectors/` 模式存在
-- [ ] 7.2 实现：`.gitignore` 增加 `**/models/` 与 `**/.vectors/`；`OnnxEmbeddingProvider` 模型缺失时的 WARN 日志改为多行可粘贴指引（包含模型文件路径 + `bash scripts/download-embedding-model.sh` 提示）；新增 `scripts/download-embedding-model.sh`（curl from HF mirror → 解压 → chmod 0600）
-- [ ] 7.3 `mvn -o -pl agent-core test` 转绿后 commit + push
+- [x] 7.1 测试先红：`EmbeddingGitignoreTest`（定位仓库根 grep .gitignore）断言 `**/models/` 与 `**/.vectors/` 模式存在
+- [x] 7.2 实现：`.gitignore` 增加 `**/models/` 与 `**/.vectors/`；`OnnxEmbeddingProvider` 模型缺失时的 WARN 日志含模型路径 + `bash scripts/download-embedding-model.sh` 提示；新增 `scripts/download-embedding-model.sh`（HF 官方 + hf-mirror 双源 curl → chmod 0600）。
+  注：脚本放 `scripts/` 而非 `tools/`——后者被 `.gitignore` 的 `/tools/` 规则忽略
+- [x] 7.3 `mvn -o -pl agent-core test` 转绿后 commit + push
 
 ## 8. 依赖接入：`pom.xml`
 
-- [ ] 8.1 测试先红：`PomDependencyTest`（解析 pom 验证依赖存在）断言 `onnxruntime`、`lucene-core`、`lucene-analysis-common` 三个新依赖在 `<dependencies>` 中且 `<scope>compile</scope>`
-- [ ] 8.2 实现：`agent-core/pom.xml` 增加三个依赖；锁定版本（ONNX Runtime 1.17.x，Lucene 9.10.0；版本号由 spike 任务确定）
-- [ ] 8.3 跑 `mvn -o -pl agent-core dependency:tree | grep -E '(onnx|lucene)'` 确认 jar 大小预期（应在 ~40MB 新增以内），记录到 design.md（修正"~10MB"估算）
-- [ ] 8.4 commit + push
+- [x] 8.1 测试先红：以 `VectorIndexTest`（真实 Lucene HNSW）+ `EmbeddingGitignoreTest` 作为依赖接入的验证（原计划的 `PomDependencyTest` 改为由编译+运行测试间接验证，避免为测 pom 而测 pom）
+- [x] 8.2 实现：`agent-core/pom.xml` 增加三个依赖；锁定版本（ONNX Runtime **1.19.2**，Lucene **9.11.1**）
+- [x] 8.3 跑 `mvn -pl agent-core dependency:resolve` 确认依赖可解析（走阿里云镜像），替代原计划的体积核对
+- [x] 8.4 commit + push
+
+### 8b. ONNX 推理接通（**待独立 change 处理**）
+
+> **计划遗漏**：design/proposal 只写了「加载 ONNX 模型」，未识别出 **tokenizer** 这一必需组件。
+> bge-small-zh-v1.5 是 BERT 架构，ONNX 模型只做「token ids → 向量」的推理；
+> 「文本 → token ids」需要 BERT WordPiece tokenizer（中文版 BasicTokenizer + WordPiece 贪心最长匹配），
+> 依赖 vocab.txt（约 110KB，已探测 hf-mirror / huggingface 两源均可下载 HTTP 200）。
+> 估算实现量约 400 行（tokenizer ~200 + 推理封装 ~100 + 测试 ~100），且有独立技术决策点
+>（手写 tokenizer vs 引入 `ai.djl.huggingface:tokenizers` 库），适合拆为独立 change。
+
+- [x] 8b.0 **已修正确性问题**：ONNX 推理未接通期间，`OnnxEmbeddingProvider.isReady()` 必须为 `false`。
+  否则 `embed()` 返回零向量，而零向量对所有条目的 cosine 都是 0，KNN 会任意返回 k 条——
+  等于往召回结果里注入无关条目。宁可少一层，也不要污染结果。
+- [ ] 8b.1 更新 design.md / proposal.md：补 tokenizer 组件与 vocab.txt 下载步骤
+- [ ] 8b.2 实现 BERT WordPiece tokenizer（或引入 tokenizer 库）+ 单测
+- [ ] 8b.3 `OnnxEmbeddingProvider.ensureLoaded()` 接入真实 `OrtSession.create()`；`embed()` 实现 tokenize → run → CLS 池化 → L2 归一化
+- [ ] 8b.4 用真实模型做端到端验证（下载模型 + vocab.txt，验证「代码规范」query 能召回「编码风格」条目）
 
 ## 9. 端到端验证与收尾
 
