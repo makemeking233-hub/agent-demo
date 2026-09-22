@@ -14,7 +14,6 @@
 import { ChatApi, type ModelSelection } from "../api/chat";
 import { ModelSelect } from "./ModelSelect";
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect";
-import styles from "./SettingsRows.module.css";
 
 interface ModelsSectionProps {
   api: ChatApi;
@@ -33,25 +32,25 @@ export function ModelsSection({
 }: ModelsSectionProps) {
   return (
     <div data-testid="settings-content-models">
-      <div className={styles.group}>
-        <div className={styles.title}>默认模型</div>
-        <div className={styles.row}>
-          <div className={styles.rowControl}>
+      <div className="mb-6 flex flex-col gap-2">
+        <div className="text-sm font-medium text-foreground">默认模型</div>
+        <div className="flex items-center gap-4 py-2">
+          <div className="flex-1">
             <ModelSelect api={api} value={selection} onChange={onSelectionChange} />
           </div>
         </div>
       </div>
       {reasoningEfforts.length > 0 && (
-        <div className={styles.group}>
-          <div className={styles.title}>默认推理强度</div>
-          <div className={styles.row}>
-            <div className={styles.rowControl}>
+        <div className="mb-6 flex flex-col gap-2">
+          <div className="text-sm font-medium text-foreground">默认推理强度</div>
+          <div className="flex items-center gap-4 py-2">
+            <div className="flex-1">
               <ReasoningEffortSelect
                 options={reasoningEfforts}
                 value={selection.reasoningEffort ?? ""}
                 onChange={onReasoningEffortChange}
               />
-              <div className={styles.hint}>下次发送生效</div>
+              <div className="mt-1 text-xs text-muted-foreground">下次发送生效</div>
             </div>
           </div>
         </div>

@@ -31,6 +31,7 @@ public final class AgentPaths {
     private static final String LOGS = "logs";
     private static final String SESSIONS = "sessions";
     private static final String WORKTREES = "worktrees";
+    private static final String FEEDBACK = "feedback";
 
     private AgentPaths() {}
 
@@ -102,6 +103,11 @@ public final class AgentPaths {
     /** 工作树目录（{@code <agentHome>/worktrees}）。 */
     public static String worktreesDir() {
         return agentHome().resolve(WORKTREES).toString();
+    }
+
+    /** 反馈 sidecar 目录（{@code <agentHome>/feedback}，add-message-feedback）。 */
+    public static String feedbackDir() {
+        return agentHome().resolve(FEEDBACK).toString();
     }
 
     private static String firstNonBlank(String a, String b) {

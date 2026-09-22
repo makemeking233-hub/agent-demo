@@ -1,9 +1,0 @@
-.bar {
-  padding: 4px 16px 8px;
-  font-size: 11px;
-  color: var(--dsw-alias-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-variant-numeric: tabular-nums;
-}

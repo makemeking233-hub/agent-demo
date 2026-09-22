@@ -1,5 +1,6 @@
 /**
- * MessageActionRow（add-message-actions P1 + P2）。
+ * MessageActionRow（add-message-actions P1 + P2
+ * → shadcn-components-p2: 从 CSS Modules 迁到 Tailwind utility）。
  *
  * <p>assistant / user 消息底部的操作栏：copy + 可选 per-message clock + 可选 extraActions（赞踩）。
  *
@@ -10,25 +11,34 @@
  * - `navigator.clipboard` 不可用 → 隐藏 textarea + `document.execCommand('copy')` 降级
  */
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { Rating } from "../api/feedback";
 import { formatClock, type MessageClock } from "../lib/message-clock";
-import styles from "./MessageActionRow.module.css";
 
 export interface MessageActionRowProps {
   /** 复制到剪贴板的纯文本 */
   text: string;
   /** 可选：per-message 读数（P2：时间 + Ran for + TTFT + tok/s）；null/缺失则不渲染 clock */
   meta?: MessageClock | null;
-  /** 可选：额外按钮（P3：赞踩） */
+  /**
+   * 可选：当前反馈（add-message-feedback）。`undefined` = 不渲染赞踩按钮（无 uuid / 无会话）；
+   * `null` = 渲染按钮但未选中。
+   */
+  rating?: Rating | null;
+  /** 可选：点击赞踩回调；与 `rating` 同时提供才渲染按钮 */
+  onRate?: (rating: Rating) => void;
+  /** 可选：额外按钮（插在赞踩之后） */
   children?: ReactNode;
   className?: string;
 }
 
-export function MessageActionRow({ text, meta, children, className }: MessageActionRowProps) {
+export function MessageActionRow({ text, meta, rating, onRate, children, className }: MessageActionRowProps) {
   const [copied, setCopied] = useState(false);
   const copyPending = useRef(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 用 number 而非 ReturnType<typeof setTimeout>：装了 @types/node 后后者会解析成
+  // NodeJS.Timeout，与 window.setTimeout 返回的 number 不兼容（tsc TS2322）。
+  const copyTimer = useRef<number | null>(null);
   const copyEpoch = useRef(0);
   const clockText = formatClock(meta);
 
@@ -60,12 +70,14 @@ export function MessageActionRow({ text, meta, children, className }: MessageAct
 
   return (
     <div
-      className={className ? `${styles.row} ${className}` : styles.row}
+      className={`mt-1 flex items-center gap-1 opacity-55 transition-opacity hover:opacity-100 ${
+        className ?? ""
+      }`}
       data-testid="message-action-row"
     >
       <button
         type="button"
-        className={styles.action}
+        className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
         aria-label={copied ? "已复制" : "复制"}
         title={copied ? "已复制" : "复制"}
         onClick={onCopy}
@@ -73,9 +85,40 @@ export function MessageActionRow({ text, meta, children, className }: MessageAct
       >
         {copied ? <Check size={13} /> : <Copy size={13} />}
       </button>
+      {/* add-message-feedback：👍/👎 两态（rating === undefined 时整组不渲染） */}
+      {rating !== undefined && onRate && (
+        <>
+          <button
+            type="button"
+            className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
+            aria-label={rating === "up" ? "取消点赞" : "点赞"}
+            aria-pressed={rating === "up"}
+            title={rating === "up" ? "取消点赞" : "点赞"}
+            onClick={() => onRate("up")}
+            data-testid="msg-up"
+          >
+            <ThumbsUp size={13} />
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
+            aria-label={rating === "down" ? "取消点踩" : "点踩"}
+            aria-pressed={rating === "down"}
+            title={rating === "down" ? "取消点踩" : "点踩"}
+            onClick={() => onRate("down")}
+            data-testid="msg-down"
+          >
+            <ThumbsDown size={13} />
+          </button>
+        </>
+      )}
       {children}
       {clockText && (
-        <span className={styles.clock} data-testid="msg-clock" title={clockText}>
+        <span
+          className="ml-1 text-[0.7em] whitespace-nowrap text-muted-foreground"
+          data-testid="msg-clock"
+          title={clockText}
+        >
           {clockText}
         </span>
       )}
