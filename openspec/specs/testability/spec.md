@@ -157,6 +157,13 @@
 
 `agent-core` 与 `agent-web` SHALL 在各自的 pom 中实现上述规则；任何对阈值、考核方式、排除清单的修改 SHALL 走 OpenSpec change 流程（门禁规则不再以「AGENTS.md 里一句口号」形式存在）。
 
+`agent-core` 的排除清单 SHALL 至少包含以下条目（每条 SHALL 有可陈述的排除理由）：
+
+| 排除项 | 理由 |
+|--------|------|
+| `com/example/agent/AgentCli.*` | JVM 入口，`main()` 不在单测中调用 |
+| `com/example/agent/memory/embedding/OnnxEmbeddingProvider.*` | ONNX 推理适配层，核心路径依赖 95MB 外部模型文件（`model.onnx_data`）与 final 类 `ai.onnxruntime.OrtSession`（无法 mock）；其降级路径由 `EmbeddingProviderTest` 覆盖，真实推理路径由 `OnnxEmbeddingProviderE2ETest` 条件覆盖（本地有模型时 4/4 通过，无模型时 skip） |
+
 #### Scenario: 阈值下调要走 change
 
 - **WHEN** 项目希望把 BRANCH 阈值从 0.70 调到 0.60
@@ -166,6 +173,11 @@
 
 - **WHEN** 一个类的唯一用途是 JVM 入口（`public static void main`）
 - **THEN** 通过 `<excludes>` 排除，路径用斜杠形式（如 `com/example/agent/AgentCli.*`）
+
+#### Scenario: 依赖外部大模型的适配层排除
+
+- **WHEN** 一个类的核心路径需要仓库外的大体积模型文件（如 95MB ONNX 权重）与无法 mock 的 final 类（如 `OrtSession`）
+- **THEN** 通过 `<excludes>` 排除，且排除理由中 SHALL 说明该类的降级路径与真实路径分别由哪个测试覆盖
 
 #### Scenario: 根包与子包都要写进 includes
 
