@@ -171,6 +171,47 @@ class SessionLoggerTest {
     }
 
     @Test
+    void sandboxModeEventPersistsAllFields() throws Exception {
+        // T9.4: sandbox/mode 事件落盘字段完整 (stream_id / from_mode / to_mode / reason / ts)
+        try (SessionLogger l = new SessionLogger(logging(), "sess-sandbox-01")) {
+            java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("stream_id", "stream-abc");
+            payload.put("from_mode", "ask");
+            payload.put("to_mode", "danger-full");
+            payload.put("reason", "escalate");
+            payload.put("ts", 1737000000000L);
+            l.onSystemEvent("sandbox/mode", payload);
+
+            String session = Files.readString(l.sessionDir().resolve("session.jsonl"));
+            assertTrue(session.contains("\"type\":\"sandbox/mode\""), "type 字段");
+            assertTrue(session.contains("\"stream_id\":\"stream-abc\""), "stream_id 字段");
+            assertTrue(session.contains("\"from_mode\":\"ask\""), "from_mode 字段");
+            assertTrue(session.contains("\"to_mode\":\"danger-full\""), "to_mode 字段");
+            assertTrue(session.contains("\"reason\":\"escalate\""), "reason 字段");
+            assertTrue(session.contains("\"ts\":1737000000000"), "ts 字段");
+        }
+    }
+
+    @Test
+    void sandboxModeTurnEndRestoreEventPersists() throws Exception {
+        // T9.4: turn_end_restore reason 落盘
+        try (SessionLogger l = new SessionLogger(logging(), "sess-sandbox-02")) {
+            java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("stream_id", "stream-xyz");
+            payload.put("from_mode", "danger-full");
+            payload.put("to_mode", "ask");
+            payload.put("reason", "turn_end_restore");
+            payload.put("ts", 1737000000001L);
+            l.onSystemEvent("sandbox/mode", payload);
+
+            String session = Files.readString(l.sessionDir().resolve("session.jsonl"));
+            assertTrue(session.contains("\"reason\":\"turn_end_restore\""));
+            assertTrue(session.contains("\"from_mode\":\"danger-full\""));
+            assertTrue(session.contains("\"to_mode\":\"ask\""));
+        }
+    }
+
+    @Test
     void contextSnapshotSystemPromptIsTruncated() throws Exception {
         // 用很小的 snapshotMaxChars 验证截断
         AgentConfig.Logging logging =

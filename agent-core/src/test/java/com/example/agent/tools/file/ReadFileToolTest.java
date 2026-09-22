@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.example.agent.permission.PermissionManager;
+import com.example.agent.permission.SandboxMode;
+import com.example.agent.permission.SandboxPolicyService;
 import com.example.agent.tools.Tool;
 
 import org.junit.jupiter.api.Test;
@@ -19,7 +21,15 @@ class ReadFileToolTest {
     @TempDir Path tmp;
 
     private Tool.ToolContext ctx() {
-        return new Tool.ToolContext(tmp, new PermissionManager(), () -> false);
+        // PLAN mode: workspace 外拒绝 (保留 v0.1 行为)
+        var svc = SandboxPolicyService.createForTest(SandboxMode.PLAN, tmp);
+        return new Tool.ToolContext(tmp, new PermissionManager(), () -> false, null, svc);
+    }
+
+    private Tool.ToolContext ctxWithDataDir(Path dataDir) {
+        // PLAN mode: agentDataDir 内放行 (memory/logs/sessions 兼容)
+        var svc = SandboxPolicyService.createForTest(SandboxMode.PLAN, tmp);
+        return new Tool.ToolContext(tmp, new PermissionManager(), () -> false, dataDir, svc);
     }
 
     @Test
@@ -72,7 +82,7 @@ class ReadFileToolTest {
         Files.createDirectories(dataDir);
         Files.writeString(dataDir.resolve("app.log"), "log line", StandardCharsets.UTF_8);
         // workingDirectory = tmp，agentDataDir = tmp/data；绝对路径落在数据目录下应放行
-        var ctx = new Tool.ToolContext(tmp, new PermissionManager(), () -> false, dataDir);
+        var ctx = ctxWithDataDir(dataDir);
         var tool = new ReadFileTool();
         StepVerifier.create(
                         tool.execute(
@@ -90,7 +100,7 @@ class ReadFileToolTest {
         Path dataDir = tmp.resolve("data");
         Path outside =
                 tmp.getParent().resolve("agent-demo-outside-" + System.nanoTime()).resolve("x.txt");
-        var ctx = new Tool.ToolContext(tmp, new PermissionManager(), () -> false, dataDir);
+        var ctx = ctxWithDataDir(dataDir);
         var tool = new ReadFileTool();
         StepVerifier.create(tool.execute(new ReadFileTool.Input(outside.toString()), ctx))
                 .assertNext(r -> assertTrue(r.isError()))

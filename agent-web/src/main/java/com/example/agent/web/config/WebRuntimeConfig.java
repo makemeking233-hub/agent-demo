@@ -5,6 +5,7 @@ import com.example.agent.config.ConfigLoader;
 import com.example.agent.core.AgentLoopFactory;
 import com.example.agent.llm.LlmProvider;
 import com.example.agent.llm.TokenEstimator;
+import com.example.agent.session.MessageFeedbackStore;
 import com.example.agent.tools.ToolRegistry;
 import com.example.agent.web.api.voice.DeepSeekVoiceCorrectionService;
 import com.example.agent.web.api.voice.VoiceCorrectionService;
@@ -81,6 +82,16 @@ public class WebRuntimeConfig {
     @Bean
     public VoiceCorrectionService webVoiceCorrectionService() {
         return new DeepSeekVoiceCorrectionService(webLlmProvider());
+    }
+
+    /**
+     * 消息反馈 sidecar 存储（add-message-feedback F2）：路径由 {@link com.example.agent.config.AgentPaths}
+     * 解析，保证测试隔离（系统属性 / 环境变量 / {@code user.home} 优先级同 sessions / logs）。
+     */
+    @Bean
+    public MessageFeedbackStore webMessageFeedbackStore() {
+        return new MessageFeedbackStore(
+                java.nio.file.Paths.get(com.example.agent.config.AgentPaths.feedbackDir()));
     }
 
     private static String pickFirstNonBlank(String... candidates) {

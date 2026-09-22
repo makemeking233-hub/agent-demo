@@ -1,17 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChatApi, type HistoryMessage, type ModelEntry, type PermissionMode, type SessionStats } from "../api/chat";
+import {
+  deleteFeedback,
+  FeedbackConflictError,
+  getFeedback,
+  nextRating,
+  putFeedback,
+  type FeedbackItem,
+  type Rating,
+} from "../api/feedback";
 import { SseClient } from "../lib/sse-client";
 import { SseEvent } from "../lib/event-types";
 import { createVoice } from "../lib/voice";
 import { createVoskStt } from "../lib/stt";
 import { useVoiceChat } from "../lib/useVoiceChat";
+import { useSettingsStore } from "../hooks/useSettingsStore";
+import { DEFAULT_PERMISSION_MODE } from "./PermissionModeSelect";
 import type { MessageClock } from "../lib/message-clock";
-import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
 import { PermissionCard } from "./PermissionCard";
 import { StatsBar } from "./StatsBar";
-import { ToolCallCard } from "./ToolCallCard";
+import { ToolCallCard, type SandboxDenial } from "./ToolCallCard";
 
 export type Item =
   | {
@@ -29,7 +39,7 @@ export type Item =
       // add-message-actions P2: per-message 读数（clock）
       meta?: MessageClock | null;
     }
-  | { kind: "tool"; id: string; name: string; toolCallId: string; status: "running" | "ok" | "fail"; text?: string; durationMs?: number }
+  | { kind: "tool"; id: string; name: string; toolCallId: string; status: "running" | "ok" | "fail"; text?: string; durationMs?: number; denial?: SandboxDenial }
   | { kind: "perm"; id: string; toolName: string; reason: string; permissionId: string; choices: ("yes" | "no" | "always")[]; toolCallId: string };
 
 type InlineTool = {
@@ -38,6 +48,7 @@ type InlineTool = {
   status: "running" | "ok" | "fail";
   text?: string;
   durationMs?: number;
+  denial?: SandboxDenial;
 };
 
 // ---------- 会话重进恢复：localStorage 持久化 + 服务端历史回填 ----------
@@ -154,6 +165,37 @@ function openAssistantIndexForText(items: Item[]): number {
     return items.length - 1;
   }
   return -1;
+}
+
+/**
+ * 从工具结果文本解析 sandbox denial（rewrite-permission-mode-dsh T10.3）。
+ *
+ * <p>后端 {@code PathResult.denied} 渲染为：
+ * {@code [sandbox: <kind> under <mode> mode] <message>}；
+ * 若 message 含 {@code writableRoots} 等额外信息也一并保留。
+ *
+ * @returns 解析成功返回结构化 denial；非 denial 文本返回 null
+ */
+function parseSandboxDenial(text: string | undefined): SandboxDenial | null {
+  if (!text) return null;
+  // 形如 [sandbox: write-out-of-bounds under ask mode] 路径越界（mode=ask）: ../x
+  const m = text.match(/\[sandbox:\s*([a-z-]+)\s+under\s+([a-z-]+)\s+mode\]\s*([\s\S]*)/);
+  if (!m) return null;
+  const kind = m[1];
+  const currentMode = m[2];
+  const rest = (m[3] ?? "").trim();
+  // 按 kind → suggestedMode 映射（与后端 FsDenialKind.suggestedMode 一致）
+  const suggestedMode =
+    kind === "write-out-of-bounds" ? "danger-full" : kind === "mode-rejected" ? "ask" : null;
+  const escalateHint = suggestedMode
+    ? ` Escalate: POST /api/chat/{streamId}/permission with mode=${suggestedMode}`
+    : "";
+  return {
+    kind,
+    currentMode,
+    suggestedMode,
+    marker: `[sandbox: ${kind} under ${currentMode} mode]${rest ? ` ${rest}` : ""}${escalateHint}`,
+  };
 }
 
 /**
@@ -278,8 +320,18 @@ export function ChatPanel(props: {
   const [streamId, setStreamId] = useState<string | null>(null);
   // 底部统计状态栏数据（add-session-stats-bar）：首屏拉 stats API，运行时由 turn_stats 事件刷新。
   const [stats, setStats] = useState<SessionStats | null>(null);
-  // 权限模式（add-permission-mode-dropdown）：缺省 read_only；切换即调后端 setPermission；随 send 透传初始模式。
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>("read_only");
+  // 权限模式（rewrite-permission-mode-dsh T10.2）：
+  // 默认从 settings.yaml 的 general.permission.mode 读（与 Settings 面板同源）；
+  // 用户在 Composer 切换时用 sessionMode 覆盖当前会话（不写回 settings）。
+  const settingsPermissionMode = useSettingsStore(
+    (s) =>
+      (s.snapshot?.general?.permission as { mode?: PermissionMode } | undefined)?.mode ??
+      DEFAULT_PERMISSION_MODE,
+  ) as PermissionMode;
+  const [sessionPermissionMode, setSessionPermissionMode] = useState<PermissionMode | null>(null);
+  const permissionMode: PermissionMode = sessionPermissionMode ?? settingsPermissionMode;
+  // 消息反馈（add-message-feedback）：uuid → {rating, version}；进会话时一次性拉全量，点击走乐观更新。
+  const [ratings, setRatings] = useState<Record<string, FeedbackItem>>({});
   // add-models-dropdown-v0：model/reasoningEffort/currentModelEntry 由 props 传入（App.tsx 持有，避免双 state 不同步）
   const { provider, model, reasoningEffort, currentModelEntry, onReasoningEffortChange } = props;
   // streamIdRef: 始终持有最新 streamId，避免 submitPermission/abortStream 读闭包里的陈旧值
@@ -306,12 +358,88 @@ export function ChatPanel(props: {
 
   const api = new ChatApi();
 
+  /**
+   * 拉取某会话的全部反馈（add-message-feedback F3.3）。
+   *
+   * <p>失败时按「无反馈」处理（不阻断对话）；切会话先把上一会话的 rating 清掉，避免串会话显示。
+   *
+   * @param sessionId 会话 id（`null` = 清空）
+   */
+  function loadFeedback(sessionId: string | null) {
+    setRatings({});
+    if (!sessionId) return;
+    getFeedback(sessionId)
+      .then((r) => setRatings(r.items ?? {}))
+      .catch(() => setRatings({}));
+  }
+
+  /**
+   * 点击 👍/👎：两态互斥 + 再点取消，乐观更新 → 请求 → 失败回滚 / 409 用 `current` 调和。
+   *
+   * @param messageId 消息 uuid
+   * @param clicked   被点击的按钮
+   */
+  async function handleRate(messageId: string, clicked: Rating) {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+    const prev = ratings[messageId] ?? null;
+    const target = nextRating(prev ? prev.rating : null, clicked);
+    // 乐观更新：先按目标态改本地（version 仅用于展示，成功后被服务端值覆盖）
+    setRatings((r) => {
+      const next = { ...r };
+      if (target === null) delete next[messageId];
+      else next[messageId] = { rating: target, version: (prev?.version ?? 0) + 1, updated_at: Date.now() };
+      return next;
+    });
+    try {
+      if (target === null) {
+        await deleteFeedback(sessionId, messageId, prev ? prev.version : null);
+      } else {
+        const written = await putFeedback(sessionId, messageId, target, prev ? prev.version : null);
+        setRatings((r) => ({ ...r, [messageId]: written }));
+      }
+    } catch (e) {
+      if (e instanceof FeedbackConflictError) {
+        // 409：以服务端 current 为准（current=null 表示对方已删除 → 本地也删掉）
+        setRatings((r) => {
+          const next = { ...r };
+          if (e.current) next[messageId] = e.current;
+          else delete next[messageId];
+          return next;
+        });
+        return;
+      }
+      // 其它失败（500 / 网络）：回滚到点击前状态
+      setRatings((r) => {
+        const next = { ...r };
+        if (prev) next[messageId] = prev;
+        else delete next[messageId];
+        return next;
+      });
+    }
+  }
+
+  /**
+   * 取某条消息当前的 rating（add-message-feedback F3.3）。
+   *
+   * <p>返回约定：`undefined` = 该条**不支持**赞踩（无 uuid / 无会话，`MessageActionRow` 据此不渲染
+   * 按钮）；`null` = 支持但未选中。
+   *
+   * @param uuid 消息 uuid
+   * @returns 当前 rating / `null` / `undefined`
+   */
+  function ratingFor(uuid?: string | null): Rating | null | undefined {
+    if (!uuid || !sessionIdRef.current) return undefined;
+    return ratings[uuid]?.rating ?? null;
+  }
+
   // 会话重进恢复：挂载时从 localStorage 恢复 session_id + 消息快照；无快照但服务端有历史时回填。
   useEffect(() => {
     const saved = readPersisted();
     if (saved && saved.sessionId) {
       sessionIdRef.current = saved.sessionId;
       setItems(saved.items ?? []);
+      loadFeedback(saved.sessionId);
       if ((saved.items ?? []).length === 0) {
         api
           .history(saved.sessionId)
@@ -340,6 +468,8 @@ export function ChatPanel(props: {
     setStreamId(null);
     streamIdRef.current = null;
     sessionIdRef.current = next;
+    // add-message-feedback：切会话时重拉该会话反馈（旧会话的 rating 一并清掉）
+    loadFeedback(next);
     if (!next) {
       setStats(null);
       return;
@@ -484,10 +614,13 @@ export function ChatPanel(props: {
       });
     } else if (ev.type === "tool_call_end") {
       const text = typeof ev.result === "string" ? ev.result : JSON.stringify(ev.result);
+      // T10.3: 检测 sandbox denial marker（后端 PathResult.denied 渲染为 "[sandbox: ... under <mode> mode] ..."）
+      const denial = parseSandboxDenial(text);
       updateToolInLastAssistant(ev.tool_call_id, {
         status: ev.ok ? "ok" : "fail",
         text,
         durationMs: ev.duration_ms,
+        ...(denial ? { denial } : {}),
       });
     } else if (ev.type === "permission_request") {
       appendItem({ kind: "perm", id: ev.permission_id, toolName: ev.tool_name, reason: ev.reason, permissionId: ev.permission_id, choices: ev.choices, toolCallId: ev.tool_call_id });
@@ -532,11 +665,18 @@ export function ChatPanel(props: {
     if (sid) await api.abort(sid);
   }
 
-  // 切换权限模式：本地状态 + 若有活动流则立即下发后端（add-permission-mode-dropdown）
+  // 切换权限模式：session 级覆盖 + 若有活动流则立即下发后端（rewrite-permission-mode-dsh T10.2）
   function handlePermissionModeChange(mode: PermissionMode) {
-    setPermissionMode(mode);
+    setSessionPermissionMode(mode);
     const sid = streamIdRef.current;
     if (sid) api.setPermission(sid, mode).catch(() => {});
+  }
+
+  // escalate 升级（T10.3）：从 denial 的 suggested_mode 触发, turn 结束自动恢复
+  function handleEscalate(targetMode: PermissionMode) {
+    const sid = streamIdRef.current;
+    if (!sid) return;
+    api.setPermission(sid, targetMode, true).catch(() => {});
   }
 
   // 切换自由语音（add-voice-interaction）：开则开始循环（懒加载 Vosk），关则停止
@@ -565,16 +705,22 @@ export function ChatPanel(props: {
   }
 
   return (
-    <div className={styles.panel}>
-      <div ref={listRef} className={styles.list}>
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div ref={listRef} className="flex-1 overflow-y-auto py-4">
         {items.length === 0 && (
-          <div className={styles.empty}>
-            <p>开始对话，或输入 <code>/help</code> 查看可用命令</p>
+          <div className="flex h-[200px] items-center justify-center text-muted-foreground">
+            <p>
+              开始对话，或输入{" "}
+              <code className="rounded-[3px] bg-secondary px-1.5 py-0.5 font-mono text-[13px]">
+                /help
+              </code>{" "}
+              查看可用命令
+            </p>
           </div>
         )}
         {items.map((it) => {
-          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} thinking={it.thinking} reasoningTokens={it.reasoningTokens} meta={it.meta} />;
-          if (it.kind === "tool") return <ToolCallCard key={it.id} name={it.name} status={it.status} text={it.text} durationMs={it.durationMs} />;
+          if (it.kind === "text") return <MessageBubble key={it.id} role={it.role} text={it.text} tools={it.tools} thinking={it.thinking} reasoningTokens={it.reasoningTokens} meta={it.meta} rating={ratingFor(it.uuid)} onRate={(r) => it.uuid && handleRate(it.uuid, r)} />;
+          if (it.kind === "tool") return <ToolCallCard key={it.id} name={it.name} status={it.status} text={it.text} durationMs={it.durationMs} denial={it.denial} onEscalate={(m) => handleEscalate(m as PermissionMode)} />;
           if (it.kind === "perm") return <PermissionCard key={it.id} toolName={it.toolName} reason={it.reason} choices={it.choices} onChoose={(d) => submitPermission(it.permissionId, d, it.id)} />;
           return null;
         })}

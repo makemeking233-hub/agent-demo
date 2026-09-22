@@ -1,5 +1,10 @@
 /* DSW tokens (亮色默认) — 复刻 deepseek-harness design-platform.css
- * 主题切换: body[data-ds-dark-theme] 覆盖到 tokens-dark.css 变量 */
+ * 主题切换（shadcn-components-p2 C6 统一后）：
+ *   <html data-theme="dark"> 由 hooks/useThemeApplication 写入，
+ *   tokens-dark.css 的 `:root[data-theme="dark"]` 覆盖本文件的变量。
+ *   <html data-theme="hc"> 的高对比度覆盖在 src/index.css。
+ * 注意：--dsw-alias-* 的 var() 在声明作用域求值，后代作用域覆盖
+ * --dsw-static-* 时必须同步重新声明别名（各主题文件已如此处理）。 */
 
 :root {
   --dsw-static-surface-default: #ffffff;

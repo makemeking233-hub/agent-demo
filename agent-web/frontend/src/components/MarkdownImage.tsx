@@ -1,5 +1,4 @@
 import { useState, type ComponentPropsWithoutRef } from "react";
-import styles from "./MarkdownContent.module.css";
 
 /**
  * 消息内图片（add-rich-markdown-rendering，design.md D4）。
@@ -18,7 +17,11 @@ export function MarkdownImage(props: ComponentPropsWithoutRef<"img">) {
 
   if (failed || !src) {
     return (
-      <span className={styles.imageFallback} role="img" aria-label={alt || "图片无法显示"}>
+      <span
+        className="inline-block rounded-sm border border-dashed border-border px-2 py-1 text-[13px] text-muted-foreground"
+        role="img"
+        aria-label={alt || "图片无法显示"}
+      >
         {alt || "图片无法显示"}
       </span>
     );

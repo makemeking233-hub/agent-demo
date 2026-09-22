@@ -63,12 +63,4 @@ describe("ReasoningEffortSelect（shadcn Popover + RadioGroup）", () => {
     const trigger = await screen.findByRole("button", { name: "思考强度" });
     expect(trigger.textContent).toBe("Medium");
   });
-
-  it.skip("trigger 通过 axe a11y 检查（jsdom 限制，见 shadcn-prototype §4）", async () => {
-    const { container } = render(
-      <ReasoningEffortSelect options={OPTIONS} value="medium" onChange={vi.fn()} />,
-    );
-    // @ts-expect-error vitest-axe 类型在 jsdom 路径下解析缺失
-    await expect(container).toHaveNoViolations();
-  });
 });

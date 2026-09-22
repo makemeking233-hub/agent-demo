@@ -183,6 +183,117 @@ class ChatStreamServiceTest {
         assertThat(svc.setPermission("unknown", com.example.agent.permission.PermissionMode.FULL_ACCESS)).isFalse();
     }
 
+    // ---- rewrite-permission-mode-dsh T9.3: SSE sandbox/mode 事件广播 ----
+
+    /**
+     * 订阅 SSE 并收集所有 sandbox/mode 事件（reason:from->to）。
+     *
+     * <p>注意 {@code ChatStreamService.emit} 把事件序列化为 JSON 字符串放进 {@code ServerSentEvent.data()}，
+     * 因此这里按 {@code sse.event()} == "sandbox/mode" 过滤 + Jackson 解析 data。
+     */
+    private static java.util.List<String> collectSandboxModeEvents(ChatStreamService svc, String streamId) {
+        java.util.List<String> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+        com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+        svc.stream(streamId)
+                .subscribe(
+                        sse -> {
+                            if (!"sandbox/mode".equals(sse.event())) return;
+                            try {
+                                var node = m.readTree(String.valueOf(sse.data()));
+                                events.add(node.path("reason").asText() + ":"
+                                        + node.path("from_mode").asText() + "->"
+                                        + node.path("to_mode").asText());
+                            } catch (Exception ignore) {
+                                // 解析失败跳过
+                            }
+                        },
+                        err -> { /* ignore */ });
+        return events;
+    }
+
+    /** 轮询等待事件数达到 expected（避免固定 sleep 的 flakiness）。 */
+    private static void awaitEvents(java.util.List<String> events, int expected, long timeoutMs)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (events.size() < expected && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+    }
+
+    @Test
+    void createBroadcastsInitialSandboxMode() throws Exception {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat");
+
+        java.util.List<String> events = collectSandboxModeEvents(svc, meta.streamId());
+        awaitEvents(events, 1, 3000);
+
+        assertThat(events).as("实际: " + events).contains("initial:null->plan");
+    }
+
+    @Test
+    void setPermissionBroadcastsUserSetSandboxMode() throws Exception {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat");
+
+        java.util.List<String> events = collectSandboxModeEvents(svc, meta.streamId());
+        awaitEvents(events, 1, 3000);
+        svc.setPermission(meta.streamId(), com.example.agent.permission.PermissionMode.FULL_ACCESS, false);
+        awaitEvents(events, 2, 3000);
+
+        assertThat(events).as("实际: " + events)
+                .contains("initial:null->plan", "user_set:plan->danger-full");
+    }
+
+    @Test
+    void escalateBroadcastsEscalateReason() throws Exception {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat");
+
+        java.util.List<String> events = collectSandboxModeEvents(svc, meta.streamId());
+        awaitEvents(events, 1, 3000);
+        svc.setPermission(meta.streamId(), com.example.agent.permission.PermissionMode.FULL_ACCESS, true);
+        awaitEvents(events, 2, 3000);
+
+        assertThat(events).as("实际: " + events).contains("escalate:plan->danger-full");
+    }
+
+    @Test
+    void turnEndRestoresEscalatedModeAndBroadcasts() throws Exception {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat");
+
+        java.util.List<String> events = collectSandboxModeEvents(svc, meta.streamId());
+        awaitEvents(events, 1, 3000);
+        svc.setPermission(meta.streamId(), com.example.agent.permission.PermissionMode.FULL_ACCESS, true);
+        awaitEvents(events, 2, 3000);
+        svc.onTurnEnd(meta.streamId(), null);
+        awaitEvents(events, 3, 3000);
+
+        assertThat(events).as("实际: " + events).contains("escalate:plan->danger-full");
+        assertThat(events.stream().anyMatch(e -> e.startsWith("turn_end_restore:")))
+                .as("应广播 turn_end_restore, 实际: " + events)
+                .isTrue();
+    }
+
+    @Test
+    void turnEndWithoutEscalateDoesNotBroadcastRestore() throws Exception {
+        WebAgentRuntime runtime = mockRuntime();
+        ChatStreamService svc = new ChatStreamService(runtime, new PermissionBridge());
+        ChatStreamService.ActiveStream meta = svc.create("s1", "deepseek-chat");
+
+        java.util.List<String> events = collectSandboxModeEvents(svc, meta.streamId());
+        awaitEvents(events, 1, 3000);
+        svc.onTurnEnd(meta.streamId(), null);
+        Thread.sleep(300);
+
+        assertThat(events).as("实际: " + events).doesNotContain("turn_end_restore");
+    }
+
     // ---- add-workspaces-and-rename：create 归属工作区 + workspaceExists ----
 
     @Test

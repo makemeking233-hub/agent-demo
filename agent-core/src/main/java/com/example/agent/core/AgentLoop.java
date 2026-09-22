@@ -472,6 +472,41 @@ public class AgentLoop {
         this.toolContext.permissions().setMode(this.mode);
     }
 
+    /**
+     * escalate 临时升级权限模式（rewrite-permission-mode-dsh T7.1；spec §"escalate 同回合升级"）。
+     *
+     * <p>由 ChatController 在拒绝响应 suggestedMode 时调用；turn 结束时调
+     * {@link #restoreEscalatedPermission(String)} 恢复。
+     *
+     * @param streamId   流 id（不可空）
+     * @param targetMode 升级目标（{@code null} 视为 {@link PermissionMode#DEFAULT}）
+     */
+    public void escalatePermission(String streamId, PermissionMode targetMode) {
+        if (streamId == null || streamId.isBlank()) {
+            throw new IllegalArgumentException("streamId 不可空");
+        }
+        PermissionMode effective = targetMode != null ? targetMode : PermissionMode.DEFAULT;
+        this.mode = effective;
+        this.toolContext.permissions().setMode(effective);
+        // 同步到 SandboxPolicyService escalate 表 (turn end 由 restoreEscalatedPermission 恢复)
+        com.example.agent.permission.SandboxPolicyService svc =
+                this.toolContext.permissions().sandboxPolicy();
+        svc.escalate(streamId, effective.toSandboxMode());
+    }
+
+    /**
+     * turn 结束时恢复 escalate 前的权限模式。
+     *
+     * @param streamId 流 id
+     * @return true 表示有 escalate 记录并恢复；false 表示无
+     */
+    public boolean restoreEscalatedPermission(String streamId) {
+        if (streamId == null) return false;
+        com.example.agent.permission.SandboxPolicyService svc =
+                this.toolContext.permissions().sandboxPolicy();
+        return svc.restoreOnTurnEnd(streamId);
+    }
+
     /** 当前权限模式（供 UI / 测试读取）。 */
     public PermissionMode permissionMode() {
         return mode;
@@ -1028,13 +1063,20 @@ public class AgentLoop {
     /**
      * 合并全局策略（敏感路径 + 分类默认）与工具级 {@code checkPermissions}（含 {@code ..} 越界 deny）。
      *
-     * <p>裁决顺序：
+     * <p>裁决顺序（rewrite-permission-mode-dsh T5.3 整合 SandboxPolicyService）：
      *
      * <ol>
-     *   <li>{@code DENY} 终态：任一为 DENY → DENY（含工具级 {@code ..} 越界兜底，FULL_ACCESS 也不绕过）
-     *   <li>{@code FULL_ACCESS} 短路：当前模式为 FULL_ACCESS 且全局 allow → ALLOW（工具默认 ASK 不再弹窗）
-     *   <li>任一 ASK → ASK（READ_ONLY / WORKSPACE_WRITE 维持原行为）
-     *   <li>其余 → ALLOW
+     *   <li><b>SandboxPolicyService</b>（via {@link PermissionManager#decide}）：
+     *     {@link SandboxPolicyService#defaultDecision} 按 mode × ToolCategory 决策
+     *     + {@link SensitivePathMatcher} 命中敏感路径升级 ask
+     *   <li><b>Tool.checkPermissions</b>（{@code local}）：工具级 deny 终态兜底
+     *   <li>合并：
+     *     <ul>
+     *       <li>任一 DENY → DENY（FULL_ACCESS 也不绕过工具级 deny）
+     *       <li>FULL_ACCESS 短路：global allow + FULL_ACCESS → ALLOW（不弹窗）
+     *       <li>任一 ASK → ASK
+     *       <li>其余 → ALLOW
+     *     </ul>
      * </ol>
      *
      * <p>fix-full-access-bypass：原逻辑把工具默认 ASK 与全局策略用 {@code OR} 合并，导致 FULL_ACCESS 仍弹窗。

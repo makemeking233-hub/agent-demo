@@ -104,7 +104,7 @@ class ChatControllerModelResolutionTest {
 
     private ResponseEntity<?> send(String model) {
         return (ResponseEntity<?>) controller
-                .send(new SendRequest("hi", "sess-1", "read_only", null, model, null))
+                .send(new SendRequest("hi", "sess-1", "read_only", null, model, null), null)
                 .block();
     }
 
@@ -197,7 +197,7 @@ class ChatControllerModelResolutionTest {
     void blankRequestIsStillCheckedBeforeModelResolution() {
         // content 为空时先于 model 解析返回 400 content_empty（保持既有优先级）
         ResponseEntity<?> resp = (ResponseEntity<?>) controller
-                .send(new SendRequest("   ", "sess-1", "read_only", null, "deepseek-chat", null))
+                .send(new SendRequest("   ", "sess-1", "read_only", null, "deepseek-chat", null), null)
                 .block();
         assertThat(resp.getStatusCode().value()).isEqualTo(400);
         @SuppressWarnings("unchecked")

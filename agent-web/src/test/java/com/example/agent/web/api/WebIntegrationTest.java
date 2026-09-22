@@ -327,6 +327,138 @@ class WebIntegrationTest {
                 .isEqualTo("full_access");
     }
 
+    // ---- rewrite-permission-mode-dsh T7.1: 新 4 档 dsh 命名 + escalate + effective_mode ----
+
+    @Test
+    void permissionAcceptsDshFourTierMode() throws Exception {
+        stubSlowChunks("slow");
+        String streamId = createStream("go");
+
+        client.post()
+                .uri("/api/chat/{id}/permission", streamId)
+                .bodyValue(Map.of("mode", "danger-full"))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.ok")
+                .isEqualTo(true)
+                .jsonPath("$.mode")
+                .isEqualTo("full_access")
+                // 新字段: effective_mode (dsh 命名)
+                .jsonPath("$.effective_mode")
+                .isEqualTo("danger-full");
+    }
+
+    @Test
+    void permissionAcceptsLegacyModeAndNormalizes() throws Exception {
+        stubSlowChunks("slow");
+        String streamId = createStream("go");
+
+        // 旧 3 档 full_access → 自动 normalize 为 danger-full
+        client.post()
+                .uri("/api/chat/{id}/permission", streamId)
+                .bodyValue(Map.of("mode", "full_access"))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.mode")
+                .isEqualTo("full_access")          // 旧 3 档 mode
+                .jsonPath("$.effective_mode")
+                .isEqualTo("danger-full");          // normalize 后
+    }
+
+    @Test
+    void permissionAcceptsEscalateTrue() throws Exception {
+        stubSlowChunks("slow");
+        String streamId = createStream("go");
+
+        client.post()
+                .uri("/api/chat/{id}/permission", streamId)
+                .bodyValue(Map.of("mode", "danger-full", "escalate", true))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.ok")
+                .isEqualTo(true)
+                .jsonPath("$.effective_mode")
+                .isEqualTo("danger-full");
+    }
+
+    @Test
+    void permissionAcceptsEscalateFalse() throws Exception {
+        stubSlowChunks("slow");
+        String streamId = createStream("go");
+
+        client.post()
+                .uri("/api/chat/{id}/permission", streamId)
+                .bodyValue(Map.of("mode", "ask", "escalate", false))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody()
+                .jsonPath("$.effective_mode")
+                .isEqualTo("ask");
+    }
+
+    @Test
+    void permissionRejectsBogusMode() {
+        client.post()
+                .uri("/api/chat/{id}/permission", "any")
+                .bodyValue(Map.of("mode", "bogus"))
+                .exchange()
+                .expectStatus()
+                .isEqualTo(HttpStatus.BAD_REQUEST)
+                .expectBody()
+                .jsonPath("$.error")
+                .isEqualTo("invalid_mode");
+    }
+
+    // ---- rewrite-permission-mode-dsh T7.2: send permission_mode 接受新 4 档 + 旧 3 档 normalize ----
+
+    @Test
+    void sendAcceptsDshFourTierPermissionMode() {
+        client.post()
+                .uri("/api/chat/send")
+                .bodyValue(Map.of("content", "hi", "permission_mode", "ask"))
+                .exchange()
+                .expectStatus()
+                .isOk();
+    }
+
+    @Test
+    void sendAcceptsLegacyPermissionModeAndNormalizes() {
+        client.post()
+                .uri("/api/chat/send")
+                .bodyValue(Map.of("content", "hi", "permission_mode", "workspace_write"))
+                .exchange()
+                .expectStatus()
+                .isOk();  // 旧 3 档自动 normalize, 不报错
+    }
+
+    /** helper: 创建流并返回 stream_id (T7 测试通用) */
+    private String createStream(String content) {
+        String body = client.post()
+                .uri("/api/chat/send")
+                .bodyValue(Map.of("content", content))
+                .exchange()
+                .expectStatus()
+                .isOk()
+                .expectBody(String.class)
+                .returnResult()
+                .getResponseBody();
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(body)
+                    .path("stream_id")
+                    .asText();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @Test
     void sendUnknownWorkspaceReturns400() {
         client.post()

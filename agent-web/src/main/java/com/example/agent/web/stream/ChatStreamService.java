@@ -60,6 +60,7 @@ public class ChatStreamService {
      * @param sinkAdapter SSE 事件观察者（把 AgentLoop 回调转 SSE 事件）
      * @param aborted 中断标记
      * @param workspace 归属工作区（add-session-stats-bar：统计按工作区路由）
+     * @param logSink 复合 session sink（SSE + 落盘；rewrite-permission-mode-dsh T8.2 引入，可空）
      */
     public record ActiveStream(
             String streamId,
@@ -70,7 +71,22 @@ public class ChatStreamService {
             AgentLoop loop,
             SseSessionLogSink sinkAdapter,
             java.util.concurrent.atomic.AtomicBoolean aborted,
-            String workspace) {}
+            String workspace,
+            SessionLogSink logSink) {
+        /** 9 参便捷构造：{@code logSink} 为 {@code null}（仅 SSE，不落盘）。 */
+        public ActiveStream(
+                String streamId,
+                String sessionId,
+                String model,
+                long startedAt,
+                Sinks.Many<ServerSentEvent<Object>> sink,
+                AgentLoop loop,
+                SseSessionLogSink sinkAdapter,
+                java.util.concurrent.atomic.AtomicBoolean aborted,
+                String workspace) {
+            this(streamId, sessionId, model, startedAt, sink, loop, sinkAdapter, aborted, workspace, null);
+        }
+    }
 
     public ActiveStream create(String sessionId, String model) {
         return create(sessionId, model, null);
@@ -169,9 +185,13 @@ public class ChatStreamService {
         }
         ActiveStream meta =
                 new ActiveStream(
-                        streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted, workspace);
+                        streamId, sessionId, model, System.currentTimeMillis(), sink, loop, adapter, aborted, workspace, sessionSink);
         actives.put(streamId, meta);
         emit(meta, new SseEvent.MessageStart(streamId, sessionId, model, System.currentTimeMillis()));
+        // T8.1: 初始 mode 广播 (reason=initial)
+        emitSandboxMode(meta, null,
+                mode != null ? mode.toSandboxMode().wireValue() : PermissionMode.DEFAULT.toSandboxMode().wireValue(),
+                "initial");
         return meta;
     }
 
@@ -332,6 +352,17 @@ public class ChatStreamService {
     public void onTurnEnd(String streamId, TurnResult result) {
         ActiveStream meta = actives.get(streamId);
         if (meta != null) {
+            // T8.3: turn 结束时恢复 escalate 前的 mode + 广播 turn_end_restore
+            String beforeRestore = meta.loop() != null && meta.loop().permissionMode() != null
+                    ? meta.loop().permissionMode().toSandboxMode().wireValue()
+                    : null;
+            boolean restored = meta.loop() != null && meta.loop().restoreEscalatedPermission(streamId);
+            if (restored) {
+                String afterRestore = meta.loop().permissionMode() != null
+                        ? meta.loop().permissionMode().toSandboxMode().wireValue()
+                        : null;
+                emitSandboxMode(meta, beforeRestore, afterRestore, "turn_end_restore");
+            }
             TurnDelta delta = result != null ? result.delta() : null;
             SessionStats stats = runtime.accumulateStats(meta.workspace(), meta.sessionId(), delta);
             // 防御：mock/异常路径可能返回 null，退化为空统计而非 NPE。
@@ -368,17 +399,59 @@ public class ChatStreamService {
     }
 
     /**
-     * 实时切换某流的权限模式（add-permission-mode-dropdown）。
+     * 实时切换某流的权限模式（add-permission-mode-dropdown + rewrite-permission-mode-dsh T7.1/T8.1）。
+     *
+     * <p>T8.1：切换时广播 SSE {@code sandbox/mode} 事件 + 落盘 session.jsonl。
      *
      * @param streamId 流 id
      * @param mode 新模式（不可空）
+     * @param escalate 是否 escalate（{@code true} 表示临时升级，turn 结束自动恢复）
      * @return 是否找到该流并已切换
      */
-    public boolean setPermission(String streamId, PermissionMode mode) {
+    public boolean setPermission(String streamId, PermissionMode mode, boolean escalate) {
         ActiveStream meta = actives.get(streamId);
         if (meta == null || meta.loop() == null) return false;
-        meta.loop().setPermissionMode(mode);
+        String fromMode = meta.loop().permissionMode() != null
+                ? meta.loop().permissionMode().toSandboxMode().wireValue()
+                : null;
+        if (escalate) {
+            meta.loop().escalatePermission(streamId, mode);
+        } else {
+            meta.loop().setPermissionMode(mode);
+        }
+        emitSandboxMode(meta, fromMode, mode.toSandboxMode().wireValue(),
+                escalate ? "escalate" : "user_set");
         return true;
+    }
+
+    /** v0.1 兼容：不带 escalate 参数 */
+    public boolean setPermission(String streamId, PermissionMode mode) {
+        return setPermission(streamId, mode, false);
+    }
+
+    /**
+     * 广播 sandbox/mode 事件（SSE + session.jsonl 落盘；T8.1 + T8.2）。
+     *
+     * @param meta     活动流
+     * @param fromMode 变更前 mode（wire value；首设为 null）
+     * @param toMode   变更后 mode（wire value）
+     * @param reason   变更原因（initial / user_set / escalate / turn_end_restore）
+     */
+    private void emitSandboxMode(ActiveStream meta, String fromMode, String toMode, String reason) {
+        long ts = System.currentTimeMillis();
+        // T8.1: SSE 广播
+        emit(meta, new SseEvent.SandboxModeChanged(meta.streamId(), fromMode, toMode, reason, ts));
+        // T8.2: 落盘 (SessionLogger.onSystemEvent 追加到 session.jsonl)
+        SessionLogSink sink = meta.logSink();
+        if (sink != null) {
+            java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("stream_id", meta.streamId());
+            payload.put("from_mode", fromMode != null ? fromMode : "");
+            payload.put("to_mode", toMode);
+            payload.put("reason", reason);
+            payload.put("ts", ts);
+            sink.onSystemEvent("sandbox/mode", payload);
+        }
     }
 
     public ActiveStream get(String streamId) {

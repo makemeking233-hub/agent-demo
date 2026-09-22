@@ -146,3 +146,65 @@ describe("MessageActionRow (P2 clock)", () => {
     expect(screen.queryByTestId("msg-clock")).toBeNull();
   });
 });
+
+describe("MessageActionRow (P3 👍/👎)", () => {
+  afterEach(() => cleanup());
+
+  it("renders no rating buttons when rating is undefined (无 uuid 不渲染)", () => {
+    render(<MessageActionRow text="x" onRate={() => {}} />);
+    expect(screen.queryByTestId("msg-up")).toBeNull();
+    expect(screen.queryByTestId("msg-down")).toBeNull();
+  });
+
+  it("renders no rating buttons when onRate is missing", () => {
+    render(<MessageActionRow text="x" rating={null} />);
+    expect(screen.queryByTestId("msg-up")).toBeNull();
+  });
+
+  it("renders both buttons unselected when rating is null", () => {
+    render(<MessageActionRow text="x" rating={null} onRate={() => {}} />);
+    expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByTestId("msg-down").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("marks up as pressed when rating is up", () => {
+    render(<MessageActionRow text="x" rating="up" onRate={() => {}} />);
+    expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("msg-up").getAttribute("aria-label")).toBe("取消点赞");
+  });
+
+  it("marks down as pressed when rating is down", () => {
+    render(<MessageActionRow text="x" rating="down" onRate={() => {}} />);
+    expect(screen.getByTestId("msg-down").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("calls onRate with the clicked rating", () => {
+    const onRate = vi.fn();
+    render(<MessageActionRow text="x" rating={null} onRate={onRate} />);
+    fireEvent.click(screen.getByTestId("msg-up"));
+    expect(onRate).toHaveBeenCalledWith("up");
+    fireEvent.click(screen.getByTestId("msg-down"));
+    expect(onRate).toHaveBeenCalledWith("down");
+  });
+
+  it("keeps copy first, then rating, then children, then clock", () => {
+    render(
+      <MessageActionRow
+        text="x"
+        rating={null}
+        onRate={() => {}}
+        meta={{ duration_ms: 1000, ttft_ms: null, tok_per_sec: null, timestamp: Date.now() }}
+      >
+        <button type="button" data-testid="extra">
+          x
+        </button>
+      </MessageActionRow>,
+    );
+    const row = screen.getByTestId("message-action-row");
+    const ids = Array.from(row.querySelectorAll("[data-testid]")).map((el) =>
+      el.getAttribute("data-testid"),
+    );
+    expect(ids).toEqual(["msg-copy", "msg-up", "msg-down", "extra", "msg-clock"]);
+  });
+});

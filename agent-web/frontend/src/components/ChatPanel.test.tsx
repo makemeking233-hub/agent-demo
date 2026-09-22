@@ -1,9 +1,27 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ChatPanel, attachMetaToTimeline, mapHistoryToItems, type Item } from "./ChatPanel";
 import type { MessageClock } from "../lib/message-clock";
 
 const KEY = "agent-demo.chat.v1";
+
+// rewrite-permission-mode-dsh T10.2/T11.2：ChatPanel 从 settings 读权限模式。
+// 用可变 store 让各测试控制 general.permission.mode。
+const settingsStore = {
+  snapshot: {
+    version: 1,
+    general: { permission: { mode: "plan" as string } },
+    revision: 0,
+  } as { version: number; general: { permission: { mode?: string } }; revision: number },
+  status: "ready" as const,
+  error: null,
+  patch: vi.fn().mockResolvedValue(undefined),
+  refresh: vi.fn(),
+};
+
+vi.mock("../hooks/useSettingsStore", () => ({
+  useSettingsStore: (selector: (s: typeof settingsStore) => unknown) => selector(settingsStore),
+}));
 
 describe("ChatPanel 会话重进恢复", () => {
   beforeAll(() => {
@@ -100,6 +118,70 @@ describe("ChatPanel 会话重进恢复", () => {
   });
 });
 
+// ---- rewrite-permission-mode-dsh T11.2: ChatPanel 从 settings 读权限模式 ----
+
+describe("ChatPanel 权限模式 (T11.2)", () => {
+  beforeAll(() => {
+    Object.defineProperty(Element.prototype, "scrollTo", {
+      configurable: true,
+      value: () => {},
+    });
+  });
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    settingsStore.snapshot = {
+      version: 1,
+      general: { permission: { mode: "plan" } },
+      revision: 0,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ session_id: "s-1", messages: [] }),
+      }),
+    );
+  });
+  afterEach(() => cleanup());
+
+  function renderPanel() {
+    return render(
+      <ChatPanel
+        provider="deepseek"
+        model="deepseek-chat"
+        reasoningEffort="medium"
+        currentModelEntry={null}
+        onReasoningEffortChange={() => {}}
+      />,
+    );
+  }
+
+  it("Composer 权限下拉反映 settings 中的 mode", () => {
+    settingsStore.snapshot.general.permission.mode = "danger-full";
+    renderPanel();
+    const select = screen.getByLabelText("权限模式") as HTMLSelectElement;
+    expect(select.value).toBe("danger-full");
+  });
+
+  it("settings 无 mode 时缺省 plan", () => {
+    settingsStore.snapshot.general.permission = {};
+    renderPanel();
+    const select = screen.getByLabelText("权限模式") as HTMLSelectElement;
+    expect(select.value).toBe("plan");
+  });
+
+  it("用户在 Composer 切换 mode 时 session 级覆盖生效", () => {
+    settingsStore.snapshot.general.permission.mode = "plan";
+    renderPanel();
+    const select = screen.getByLabelText("权限模式") as HTMLSelectElement;
+    expect(select.value).toBe("plan");
+    fireEvent.change(select, { target: { value: "ask" } });
+    expect((screen.getByLabelText("权限模式") as HTMLSelectElement).value).toBe("ask");
+  });
+});
+
 /** add-message-actions P2：per-message clock 的时间线装配。 */
 describe("ChatPanel per-message clock（P2）", () => {
   const ts = new Date(2026, 8, 14, 16, 23, 0).getTime();
@@ -158,5 +240,214 @@ describe("ChatPanel per-message clock（P2）", () => {
   it("后端没给读数时 item 的 meta 为 undefined（不渲染 clock）", () => {
     const items = mapHistoryToItems([{ role: "assistant", content: "旧的回复", toolCalls: [] }]);
     expect((items[0] as Extract<Item, { kind: "text" }>).meta).toBeUndefined();
+  });
+});
+
+/** add-message-feedback F3.5：👍/👎 接线、乐观更新、409 调和、失败回滚。 */
+describe("ChatPanel 消息反馈（P3）", () => {
+  const ASSISTANT_UUID = "u-rate-1";
+
+  beforeAll(() => {
+    Object.defineProperty(Element.prototype, "scrollTo", { configurable: true, value: () => {} });
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => cleanup());
+
+  /**
+   * 按 URL + method 路由的 fetch 桩：返回 history / feedback GET / feedback PUT|DELETE，
+   * 未匹配的 URL 一律 200 空对象（settings 等旁路请求）。
+   *
+   * @param opts.feedback       GET /api/feedback/{sid} 的 items
+   * @param opts.writeResponse  写请求（PUT/DELETE）的「状态 + body」
+   * @param opts.onWrite        写请求回调（用于断言 body）
+   */
+  function stubRoutedFetch(opts: {
+    feedback?: Record<string, { rating: string; version: number; updated_at: number }>;
+    writeStatus?: number;
+    writeBody?: unknown;
+    onWrite?: (method: string, url: string, body: unknown) => void;
+  }) {
+    const fn = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (url.includes("/api/feedback/") && method !== "GET") {
+        const body = init?.body ? JSON.parse(init.body as string) : {};
+        opts.onWrite?.(method, url, body);
+        const status = opts.writeStatus ?? 200;
+        return {
+          ok: status >= 200 && status < 300,
+          status,
+          json: async () => opts.writeBody ?? { rating: "up", version: 1, updated_at: 1 },
+        };
+      }
+      if (url.includes("/api/feedback/")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ session_id: "s-1", items: opts.feedback ?? {} }),
+        };
+      }
+      if (url.includes("/messages")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            session_id: "s-1",
+            messages: [
+              { role: "user", content: "问" },
+              { role: "assistant", content: "答", toolCalls: [], uuid: ASSISTANT_UUID },
+            ],
+          }),
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({}) };
+    });
+    vi.stubGlobal("fetch", fn);
+    return fn;
+  }
+
+  /**
+   * 渲染并模拟「用户在侧边栏点了 s-1」的真实流程。
+   *
+   * <p>不能直接在挂载时传 `currentSessionId="s-1"`：ChatPanel 的会话切换 effect 用
+   * `lastSessionIdRef` 做了「首次挂载不入内」的短路（首次加载交给 localStorage 恢复路径），
+   * 挂载即传会走到 early-return，`sessionIdRef` 保持 null → 历史与反馈都不会加载。
+   * 先以 null 挂载、再 rerender 成 "s-1"，与真实点击行为一致。
+   *
+   * @returns testing-library 的 render 结果（可 rerender）
+   */
+  function renderWithSession() {
+    const view = render(
+      <ChatPanel
+        currentSessionId={null}
+        provider="deepseek"
+        model="deepseek-chat"
+        reasoningEffort="medium"
+        currentModelEntry={null}
+        onReasoningEffortChange={() => {}}
+      />,
+    );
+    view.rerender(
+      <ChatPanel
+        currentSessionId="s-1"
+        provider="deepseek"
+        model="deepseek-chat"
+        reasoningEffort="medium"
+        currentModelEntry={null}
+        onReasoningEffortChange={() => {}}
+      />,
+    );
+    return view;
+  }
+
+  it("带 uuid 的 assistant 消息渲染赞踩按钮，且初始都未选中", async () => {
+    stubRoutedFetch({});
+    renderWithSession();
+    const { waitFor } = await import("@testing-library/react");
+    await waitFor(() => expect(screen.getByTestId("msg-up")).toBeInTheDocument());
+    expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByTestId("msg-down").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("首屏拉取已有 feedback 并高亮（刷新后仍选中）", async () => {
+    stubRoutedFetch({
+      feedback: { [ASSISTANT_UUID]: { rating: "down", version: 2, updated_at: 1 } },
+    });
+    renderWithSession();
+    const { waitFor } = await import("@testing-library/react");
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-down").getAttribute("aria-pressed")).toBe("true"),
+    );
+    expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("点击 👍 首次创建：PUT ifVersion=null，成功后保持高亮", async () => {
+    const writes: Array<{ method: string; body: unknown }> = [];
+    stubRoutedFetch({
+      onWrite: (method, _url, body) => writes.push({ method, body }),
+      writeBody: { rating: "up", version: 1, updated_at: 1 },
+    });
+    renderWithSession();
+    const { waitFor, fireEvent } = await import("@testing-library/react");
+    await waitFor(() => expect(screen.getByTestId("msg-up")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("msg-up"));
+    await waitFor(() => expect(writes.length).toBe(1));
+    expect(writes[0].method).toBe("PUT");
+    expect(writes[0].body).toEqual({ rating: "up", ifVersion: null });
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("true"),
+    );
+  });
+
+  it("已 👍 再点 👍 → DELETE 取消", async () => {
+    const writes: Array<{ method: string; body: unknown }> = [];
+    stubRoutedFetch({
+      feedback: { [ASSISTANT_UUID]: { rating: "up", version: 1, updated_at: 1 } },
+      writeStatus: 204,
+      onWrite: (method, _url, body) => writes.push({ method, body }),
+    });
+    renderWithSession();
+    const { waitFor, fireEvent } = await import("@testing-library/react");
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("true"),
+    );
+    fireEvent.click(screen.getByTestId("msg-up"));
+    await waitFor(() => expect(writes.length).toBe(1));
+    expect(writes[0].method).toBe("DELETE");
+    expect(writes[0].body).toEqual({ ifVersion: 1 });
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("false"),
+    );
+  });
+
+  it("已 👍 点 👎 → PUT 切换方向（ifVersion=当前）", async () => {
+    const writes: Array<{ method: string; body: unknown }> = [];
+    stubRoutedFetch({
+      feedback: { [ASSISTANT_UUID]: { rating: "up", version: 1, updated_at: 1 } },
+      writeBody: { rating: "down", version: 2, updated_at: 2 },
+      onWrite: (method, _url, body) => writes.push({ method, body }),
+    });
+    renderWithSession();
+    const { waitFor, fireEvent } = await import("@testing-library/react");
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("true"),
+    );
+    fireEvent.click(screen.getByTestId("msg-down"));
+    await waitFor(() => expect(writes.length).toBe(1));
+    expect(writes[0].body).toEqual({ rating: "down", ifVersion: 1 });
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-down").getAttribute("aria-pressed")).toBe("true"),
+    );
+  });
+
+  it("PUT 返回 500 → 回滚到点击前状态（不静默留错）", async () => {
+    stubRoutedFetch({ writeStatus: 500 });
+    renderWithSession();
+    const { waitFor, fireEvent } = await import("@testing-library/react");
+    await waitFor(() => expect(screen.getByTestId("msg-up")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("msg-up"));
+    // 乐观窗口内可能已高亮，最终必须回滚为未选中
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("false"),
+    );
+  });
+
+  it("PUT 返回 409 → 用服务端 current 调和（对方点过 👎）", async () => {
+    stubRoutedFetch({
+      writeStatus: 409,
+      writeBody: { current: { rating: "down", version: 3, updated_at: 7 } },
+    });
+    renderWithSession();
+    const { waitFor, fireEvent } = await import("@testing-library/react");
+    await waitFor(() => expect(screen.getByTestId("msg-up")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("msg-up"));
+    await waitFor(() =>
+      expect(screen.getByTestId("msg-down").getAttribute("aria-pressed")).toBe("true"),
+    );
+    expect(screen.getByTestId("msg-up").getAttribute("aria-pressed")).toBe("false");
   });
 });
