@@ -16,7 +16,6 @@
 import { ExternalLink, FolderSearch, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cancelPickFolder, pollPickFolder, startPickFolder } from "../api/workspace";
-import styles from "./WorkspacePickerModal.module.css";
 
 const STORAGE_KEY = "agent-demo.workspace-picker.last-path";
 const POLL_FAST_MS = 500;
@@ -187,7 +186,7 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
 
   return (
     <div
-      className={styles.wpOverlay}
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-foreground/45"
       ref={overlayRef}
       onClick={(e) => {
         if (e.target === overlayRef.current) {
@@ -199,12 +198,12 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
       aria-modal="true"
       aria-label="选择工作区目录"
     >
-      <div className={styles.wpModal}>
-        <header className={styles.wpHeader}>
-          <span className={styles.wpTitle}>Select Workspace Directory</span>
+      <div className="flex max-w-[calc(100vw-48px)] flex-col overflow-hidden rounded-xl bg-background text-foreground shadow-[0_20px_60px_rgba(0,0,0,0.25)] w-[640px]">
+        <header className="flex items-center justify-between border-b border-border px-5 py-4">
+          <span className="text-[15px] font-semibold">Select Workspace Directory</span>
           <button
             type="button"
-            className={styles.wpIconButton}
+            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-inherit hover:bg-foreground/[0.05]"
             onClick={() => {
               if (taskId) void cancelPickFolder(taskId);
               onClose();
@@ -215,21 +214,25 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
           </button>
         </header>
 
-        {error && <div className={styles.wpErrorBanner}>{error}</div>}
+        {error && (
+          <div className="border-b border-destructive/20 bg-destructive/[0.08] p-2.5 text-[13px] text-destructive">
+            {error}
+          </div>
+        )}
 
         {pickingHint && (
-          <div className={styles.wpHintBanner} data-testid="wp-pick-hint">
+          <div className="border-b border-primary/20 bg-primary/[0.08] p-2.5 text-[13px] leading-relaxed text-primary" data-testid="wp-pick-hint">
             💡 已发送 OS 文件夹选择请求。如果 5 秒内没有看到弹窗，请检查任务栏 / Alt+Tab；
             或直接点下方"取消"后在路径框里手动输入工作区目录。
           </div>
         )}
 
-        <div className={styles.wpBody}>
-          <div className={styles.wpRow}>
-            <label className={styles.wpLabel}>文件夹：</label>
-            <div className={styles.wpPathRow}>
+        <div className="flex flex-col gap-[18px] px-5 py-6">
+          <div className="flex items-center gap-4">
+            <label className="w-24 shrink-0 text-sm font-medium">文件夹：</label>
+            <div className="flex flex-1 gap-2">
               <input
-                className={styles.wpPathInput}
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-[13px] text-foreground"
                 value={selectedPath}
                 onChange={(e) => setSelectedPath(e.target.value)}
                 placeholder="点击右侧按钮调起资源管理器选择文件夹，或直接键入路径..."
@@ -238,7 +241,7 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
               />
               <button
                 type="button"
-                className={styles.wpPickButton}
+                className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border border-primary bg-primary px-3.5 py-2 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={handlePickFolder}
                 disabled={picking}
                 data-testid="wp-pick-folder"
@@ -248,7 +251,7 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
               </button>
               <button
                 type="button"
-                className={styles.wpRevealButton}
+                className="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-foreground/[0.05]"
                 onClick={handleReveal}
                 title="在资源管理器中显示（reveal 父目录后手动定位）"
                 data-testid="wp-reveal"
@@ -259,16 +262,20 @@ export function WorkspacePickerModal({ open, onClose, onSubmit }: WorkspacePicke
           </div>
         </div>
 
-        <footer className={styles.wpFooter}>
-          <button type="button" className={styles.wpCancel} onClick={() => {
-            if (taskId) void cancelPickFolder(taskId);
-            onClose();
-          }}>
+        <footer className="flex justify-end gap-2 border-t border-border bg-foreground/[0.02] px-5 py-3.5">
+          <button
+            type="button"
+            className="cursor-pointer rounded-md border border-border bg-background px-4 py-2 text-[13px] text-foreground"
+            onClick={() => {
+              if (taskId) void cancelPickFolder(taskId);
+              onClose();
+            }}
+          >
             取消
           </button>
           <button
             type="button"
-            className={styles.wpSubmit}
+            className="cursor-pointer rounded-md border border-primary bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
             onClick={handleSubmit}
             disabled={!canSubmit}
             data-testid="wp-submit"

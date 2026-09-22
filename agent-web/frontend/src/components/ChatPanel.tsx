@@ -15,7 +15,6 @@ import { createVoice } from "../lib/voice";
 import { createVoskStt } from "../lib/stt";
 import { useVoiceChat } from "../lib/useVoiceChat";
 import type { MessageClock } from "../lib/message-clock";
-import styles from "./ChatPanel.module.css";
 import { Composer } from "./Composer";
 import { MessageBubble } from "./MessageBubble";
 import { PermissionCard } from "./PermissionCard";
@@ -654,11 +653,17 @@ export function ChatPanel(props: {
   }
 
   return (
-    <div className={styles.panel}>
-      <div ref={listRef} className={styles.list}>
+    <div className="flex min-h-0 flex-1 flex-col bg-background">
+      <div ref={listRef} className="flex-1 overflow-y-auto py-4">
         {items.length === 0 && (
-          <div className={styles.empty}>
-            <p>开始对话，或输入 <code>/help</code> 查看可用命令</p>
+          <div className="flex h-[200px] items-center justify-center text-muted-foreground">
+            <p>
+              开始对话，或输入{" "}
+              <code className="rounded-[3px] bg-secondary px-1.5 py-0.5 font-mono text-[13px]">
+                /help
+              </code>{" "}
+              查看可用命令
+            </p>
           </div>
         )}
         {items.map((it) => {

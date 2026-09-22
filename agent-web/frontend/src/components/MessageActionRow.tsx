@@ -1,5 +1,6 @@
 /**
- * MessageActionRow（add-message-actions P1 + P2）。
+ * MessageActionRow（add-message-actions P1 + P2
+ * → shadcn-components-p2: 从 CSS Modules 迁到 Tailwind utility）。
  *
  * <p>assistant / user 消息底部的操作栏：copy + 可选 per-message clock + 可选 extraActions（赞踩）。
  *
@@ -14,7 +15,6 @@ import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Rating } from "../api/feedback";
 import { formatClock, type MessageClock } from "../lib/message-clock";
-import styles from "./MessageActionRow.module.css";
 
 export interface MessageActionRowProps {
   /** 复制到剪贴板的纯文本 */
@@ -36,7 +36,9 @@ export interface MessageActionRowProps {
 export function MessageActionRow({ text, meta, rating, onRate, children, className }: MessageActionRowProps) {
   const [copied, setCopied] = useState(false);
   const copyPending = useRef(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 用 number 而非 ReturnType<typeof setTimeout>：装了 @types/node 后后者会解析成
+  // NodeJS.Timeout，与 window.setTimeout 返回的 number 不兼容（tsc TS2322）。
+  const copyTimer = useRef<number | null>(null);
   const copyEpoch = useRef(0);
   const clockText = formatClock(meta);
 
@@ -68,12 +70,14 @@ export function MessageActionRow({ text, meta, rating, onRate, children, classNa
 
   return (
     <div
-      className={className ? `${styles.row} ${className}` : styles.row}
+      className={`mt-1 flex items-center gap-1 opacity-55 transition-opacity hover:opacity-100 ${
+        className ?? ""
+      }`}
       data-testid="message-action-row"
     >
       <button
         type="button"
-        className={styles.action}
+        className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
         aria-label={copied ? "已复制" : "复制"}
         title={copied ? "已复制" : "复制"}
         onClick={onCopy}
@@ -86,7 +90,7 @@ export function MessageActionRow({ text, meta, rating, onRate, children, classNa
         <>
           <button
             type="button"
-            className={styles.action}
+            className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
             aria-label={rating === "up" ? "取消点赞" : "点赞"}
             aria-pressed={rating === "up"}
             title={rating === "up" ? "取消点赞" : "点赞"}
@@ -97,7 +101,7 @@ export function MessageActionRow({ text, meta, rating, onRate, children, classNa
           </button>
           <button
             type="button"
-            className={styles.action}
+            className="inline-flex h-[22px] w-[22px] cursor-pointer items-center justify-center rounded border-none bg-transparent p-0 text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
             aria-label={rating === "down" ? "取消点踩" : "点踩"}
             aria-pressed={rating === "down"}
             title={rating === "down" ? "取消点踩" : "点踩"}
@@ -110,7 +114,11 @@ export function MessageActionRow({ text, meta, rating, onRate, children, classNa
       )}
       {children}
       {clockText && (
-        <span className={styles.clock} data-testid="msg-clock" title={clockText}>
+        <span
+          className="ml-1 text-[0.7em] whitespace-nowrap text-muted-foreground"
+          data-testid="msg-clock"
+          title={clockText}
+        >
           {clockText}
         </span>
       )}

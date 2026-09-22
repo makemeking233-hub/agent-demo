@@ -9,4 +9,7 @@
  *   - `import.meta.env` 报 TS2339（1 条）
  *
  * 声明前后 tsc 基线：28 -> 7。
+ *
+ * shadcn-frontend-migration §3：vitest-axe 的 matcher 类型增强见
+ * 同目录 `vitest-axe.d.ts`（子路径 reference 在此解析不了，故单独建文件）。
  */

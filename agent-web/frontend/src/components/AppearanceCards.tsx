@@ -9,7 +9,6 @@
 
 import { Contrast, Monitor, Moon, Sun } from "lucide-react";
 import { useSettingsStore } from "../hooks/useSettingsStore";
-import styles from "./SettingsRows.module.css";
 
 export type AppearancePreference = "light" | "dark" | "system" | "hc";
 
@@ -51,13 +50,17 @@ export function AppearanceCards({
 
   return (
     <div data-testid="appearance-cards-wrapper">
-      <div className={styles.title}>外观</div>
-      <div className={styles.cubeRow} data-testid="appearance-cards">
+      <div className="text-sm font-medium text-foreground">外观</div>
+      <div className="flex gap-2.5" data-testid="appearance-cards">
         {CUBES.map(({ id, label, Icon }) => (
           <button
             key={id}
             type="button"
-            className={`${styles.cube} ${value === id ? styles.selected : ""}`}
+            className={
+              value === id
+                ? "flex min-w-0 flex-1 cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-primary bg-primary/[0.10] px-4 py-3.5 text-[13px] font-medium text-primary shadow-[0_0_0_3px_rgba(59,130,246,0.15),0_2px_6px_rgba(59,130,246,0.10)] transition-all hover:bg-primary/[0.14]"
+                : "flex min-w-0 flex-1 cursor-pointer flex-col items-center gap-1.5 rounded-xl border border-border bg-background px-4 py-3.5 text-[13px] font-medium text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition-all hover:-translate-y-px hover:border-neutral-400 hover:bg-foreground/[0.04] hover:shadow-[0_2px_6px_rgba(0,0,0,0.06)] active:translate-y-0"
+            }
             aria-pressed={value === id}
             onClick={() => handleClick(id)}
             data-testid={`appearance-card-${id}`}

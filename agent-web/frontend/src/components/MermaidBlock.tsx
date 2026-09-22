@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import styles from "./MarkdownContent.module.css";
 
 type RenderState =
   | { kind: "pending" }
@@ -70,10 +69,10 @@ export function MermaidBlock(props: { source: string }) {
   }, [source]);
 
   return (
-    <div className={styles.mermaidBlock} data-mermaid-block="true">
+    <div className="my-2" data-mermaid-block="true">
       {state.kind === "ready" ? (
         <div
-          className={styles.mermaidWrap}
+          className="mx-auto block max-w-full overflow-x-auto text-center [&_svg]:max-w-full [&_svg]:h-auto"
           role="img"
           aria-label="mermaid 图"
           // strict 模式下 mermaid 已用 DOMPurify 消毒过标签，这里插入的是它自己生成的 SVG
@@ -81,7 +80,7 @@ export function MermaidBlock(props: { source: string }) {
         />
       ) : state.kind === "failed" ? (
         <>
-          <p className={styles.mermaidError}>mermaid 图渲染失败：{state.message}</p>
+          <p className="mb-1 text-[13px] text-muted-foreground">mermaid 图渲染失败：{state.message}</p>
           <pre>
             <code>{source}</code>
           </pre>

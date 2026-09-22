@@ -1,10 +1,38 @@
-/**
- * sonner.tsx placeholder (add-shadcn-infra 阶段).
- *
- * shadcn 4.x 输出严重压缩（行 6 含 `}return` 无分号），esbuild / swc 无法解析；
- * 该文件被人工简化为 stub。完整 sonner (Toaster) 组件将在 shadcn-components-p1 (§2)
- * 装包时从 registry 重新拉取并使用 prettier 格式化。
- *
- * 注意：sonner 依赖 `next-themes`（外部依赖），§2 装包时一并处理。
- */
-export {}
+import {
+  CircleCheckIcon,
+  InfoIcon,
+  Loader2Icon,
+  OctagonXIcon,
+  TriangleAlertIcon,
+} from "lucide-react"
+import { useTheme } from "next-themes"
+import { Toaster as Sonner, type ToasterProps } from "sonner"
+
+const Toaster = ({ ...props }: ToasterProps) => {
+  const { theme = "system" } = useTheme()
+
+  return (
+    <Sonner
+      theme={theme as ToasterProps["theme"]}
+      className="toaster group"
+      icons={{
+        success: <CircleCheckIcon className="size-4" />,
+        info: <InfoIcon className="size-4" />,
+        warning: <TriangleAlertIcon className="size-4" />,
+        error: <OctagonXIcon className="size-4" />,
+        loading: <Loader2Icon className="size-4 animate-spin" />,
+      }}
+      style={
+        {
+          "--normal-bg": "var(--popover)",
+          "--normal-text": "var(--popover-foreground)",
+          "--normal-border": "var(--border)",
+          "--border-radius": "var(--radius)",
+        } as React.CSSProperties
+      }
+      {...props}
+    />
+  )
+}
+
+export { Toaster }
