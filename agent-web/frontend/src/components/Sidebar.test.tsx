@@ -262,7 +262,7 @@ describe("Sidebar 会话管理", () => {
     });
 
     const lostEl = screen.getByTestId("workspace-item-lost");
-    expect(lostEl.className).toMatch(/workspaceMissing/);
+    expect(lostEl.className).toMatch(/text-destructive/);
     // title 显示「目录已移动」
     expect(lostEl.title).toContain("目录已移动");
   });
@@ -275,7 +275,7 @@ describe("Sidebar 会话管理", () => {
     });
 
     const el = screen.getByTestId("workspace-item-agent-demo");
-    expect(el.className).not.toMatch(/workspaceMissing/);
+    expect(el.className).not.toMatch(/text-destructive/);
   });
 
   // ===== align-dsh-workspace-ui-polish T7: drag 重排 =====

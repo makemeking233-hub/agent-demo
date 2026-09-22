@@ -16,7 +16,12 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { WorkspacePickerModal } from "./WorkspacePickerModal";
-import styles from "./Sidebar.module.css";
+
+/**
+ * Sidebar 类名映射（shadcn-components-p2）：
+ *  原 CSS Module 类 → 现有 Tailwind utility 串（合并到对应元素上）
+ *  Sidebar.module.css（11 KB / 490 行）迁移后删除，所有视觉等价。
+ */
 
 export interface SidebarSession {
   id: string;
@@ -171,7 +176,7 @@ export function Sidebar(props: SidebarProps) {
 
   if (collapsed) {
     return (
-      <button type="button" className={styles.collapseButton} onClick={toggle} aria-label="展开侧栏">
+      <button type="button" className="m-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-sm border border-border bg-transparent text-muted-foreground" onClick={toggle} aria-label="展开侧栏">
         <PanelLeftOpen size={18} />
       </button>
     );
@@ -226,38 +231,38 @@ export function Sidebar(props: SidebarProps) {
   const source = archiveView ? props.archived : props.sessions;
 
   return (
-    <aside className={styles.sidebar}>
-      <button type="button" className={styles.newSession} onClick={props.onNewSession}>
+    <aside className="flex w-[260px] flex-col overflow-hidden border-r border-border bg-card">
+      <button type="button" className="mx-2.5 mt-2.5 mb-1 flex cursor-pointer items-center justify-center gap-1.5 rounded-sm border border-border bg-secondary px-2 py-2 text-[13px] font-medium text-foreground hover:bg-accent-subtle" onClick={props.onNewSession}>
         <Plus size={16} />
         <span>新会话</span>
       </button>
 
-      <div className={styles.header}>
-        <span className={styles.title}>会话</span>
-        <div className={styles.headerActions}>
+      <div className="flex items-center justify-between border-b border-border px-4 pt-3 pb-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">会话</span>
+        <div className="inline-flex gap-1">
           <button
             type="button"
-            className={styles.iconButton}
+            className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent text-muted-foreground hover:bg-secondary"
             onClick={() => setArchiveView(!archiveView)}
             aria-label={archiveView ? "返回会话列表" : "归档"}
             title={archiveView ? "返回会话列表" : "归档/回收站"}
           >
             <Archive size={14} />
           </button>
-          <button type="button" className={styles.iconButton} onClick={toggle} aria-label="折叠侧栏">
+          <button type="button" className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent text-muted-foreground hover:bg-secondary" onClick={toggle} aria-label="折叠侧栏">
             <PanelLeftClose size={16} />
           </button>
         </div>
       </div>
 
       {/* 工作区切换条 + Menu（对齐 dsh：列已有 workspaces + 「Add workspace...」项） */}
-      <div className={styles.workspaceBar}>
-        <div className={styles.workspaceList}>
+      <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
+        <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
           {props.workspaces.map((ws) => (
             renamingWs === ws.name ? (
               <input
                 key={`rename-${ws.name}`}
-                className={styles.workspaceRenameInput}
+                className="flex-1 rounded border border-primary bg-background px-2 py-1.5 text-xs text-foreground"
                 autoFocus
                 value={renameWsValue}
                 onChange={(e) => setRenameWsValue(e.target.value)}
@@ -277,9 +282,13 @@ export function Sidebar(props: SidebarProps) {
               <button
                 key={ws.name}
                 type="button"
-                className={`${styles.workspaceItem} ${
-                  ws.name === props.activeWorkspace ? styles.workspaceActive : ""
-                } ${ws.status === "missing_dir" ? styles.workspaceMissing : ""}`}
+                className={
+                  ws.status === "missing_dir"
+                    ? "inline-flex items-center gap-1 whitespace-nowrap rounded-sm border bg-transparent px-1.5 py-1 text-[11px] text-destructive [text-decoration:line-through] [text-decoration-color:rgba(220,38,38,0.5)] cursor-pointer hover:bg-destructive/[0.08] !border-destructive"
+                    : ws.name === props.activeWorkspace
+                      ? "inline-flex items-center gap-1 whitespace-nowrap rounded-sm border bg-accent-subtle px-1.5 py-1 text-[11px] text-foreground !border-primary cursor-pointer hover:bg-secondary"
+                      : "inline-flex items-center gap-1 whitespace-nowrap rounded-sm border border-transparent bg-transparent px-1.5 py-1 text-[11px] text-muted-foreground cursor-pointer hover:bg-secondary"
+                }
                 onClick={() => {
                   setArchiveView(false);
                   props.onWorkspaceChange(ws.name);
@@ -318,12 +327,12 @@ export function Sidebar(props: SidebarProps) {
                 data-testid={`workspace-item-${ws.name}`}
               >
                 <Folder size={12} />
-                <span className={styles.workspaceName}>{ws.title ?? ws.name}</span>
-                <span className={styles.workspaceCount}>{ws.sessionCount}</span>
+                <span className="max-w-[120px] overflow-hidden text-ellipsis">{ws.title ?? ws.name}</span>
+                <span className="opacity-70">{ws.sessionCount}</span>
                 {ws.status === "missing_dir" && (
                   <button
                     type="button"
-                    className={styles.workspaceReconnect}
+                    className="ml-1 inline-flex h-4 w-4 cursor-pointer items-center justify-center rounded-[3px] border border-destructive bg-destructive/10 p-0 text-destructive hover:bg-destructive/20"
                     onClick={(e) => {
                       e.stopPropagation();
                       setReconnectFor(ws.name);
@@ -338,10 +347,10 @@ export function Sidebar(props: SidebarProps) {
             )
           ))}
         </div>
-        <div className={styles.workspaceMenuWrap} ref={workspaceMenuRef}>
+        <div className="relative shrink-0" ref={workspaceMenuRef}>
           <button
             type="button"
-            className={styles.iconButton}
+            className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent text-muted-foreground hover:bg-secondary"
             onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
             aria-label="新建工作区"
             aria-expanded={workspaceMenuOpen}
@@ -353,9 +362,9 @@ export function Sidebar(props: SidebarProps) {
             <ChevronDown size={10} />
           </button>
           {workspaceMenuOpen && (
-            <div className={styles.workspaceMenu} role="menu" data-testid="workspace-add-menu">
+            <div className="absolute top-[calc(100%+4px)] right-0 z-50 flex min-w-[200px] flex-col rounded-md border border-border bg-card p-1 shadow-[0_6px_24px_rgba(0,0,0,0.12)]" role="menu" data-testid="workspace-add-menu">
               {props.workspaces.length > 0 && (
-                <div className={styles.workspaceMenuHeader}>
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   <span>选择工作区</span>
                 </div>
               )}
@@ -363,7 +372,7 @@ export function Sidebar(props: SidebarProps) {
                 <button
                   key={ws.name}
                   type="button"
-                  className={styles.workspaceMenuItem}
+                  className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-[13px] text-foreground hover:bg-secondary"
                   role="menuitem"
                   onClick={() =>
                     handleWorkspaceMenuItem(() => {
@@ -380,10 +389,10 @@ export function Sidebar(props: SidebarProps) {
                   <span>{ws.name}</span>
                 </button>
               ))}
-              {props.workspaces.length > 0 && <div className={styles.workspaceMenuDivider} />}
+              {props.workspaces.length > 0 && <div className="mx-0 my-1 h-px bg-border" />}
               <button
                 type="button"
-                className={styles.workspaceMenuItem}
+                className="flex w-full cursor-pointer items-center gap-2 border-none bg-transparent px-3 py-1.5 text-left text-[13px] text-foreground hover:bg-secondary"
                 role="menuitem"
                 onClick={() => handleWorkspaceMenuItem(() => setShowPicker(true))}
                 data-testid="workspace-add-new"
@@ -400,13 +409,13 @@ export function Sidebar(props: SidebarProps) {
       {contextMenuFor && (
         <div
           ref={contextMenuRef}
-          className={styles.workspaceContextMenu}
+          className="absolute top-[calc(100%+4px)] right-0 z-[100] flex min-w-[140px] flex-col rounded-lg border border-border bg-background p-1 shadow-[0_6px_18px_rgba(0,0,0,0.12)]"
           role="menu"
           data-testid={`workspace-context-menu-${contextMenuFor}`}
         >
           <button
             type="button"
-            className={styles.workspaceContextItem}
+            className="flex w-full cursor-pointer items-center gap-2 rounded border-none bg-transparent px-2.5 py-1.5 text-left text-[13px] text-foreground hover:bg-secondary"
             role="menuitem"
             onClick={() => {
               const ws = props.workspaces.find((w) => w.name === contextMenuFor);
@@ -420,7 +429,7 @@ export function Sidebar(props: SidebarProps) {
           </button>
           <button
             type="button"
-            className={`${styles.workspaceContextItem} ${styles.workspaceContextItemDanger}`}
+            className="flex w-full cursor-pointer items-center gap-2 rounded border-none bg-transparent px-2.5 py-1.5 text-left text-[13px] text-destructive hover:bg-destructive/[0.08]"
             role="menuitem"
             onClick={() => {
               if (window.confirm(`确认删除工作区 ${contextMenuFor}？\n目录和会话日志不会被删除。`)) {
@@ -455,28 +464,30 @@ export function Sidebar(props: SidebarProps) {
         />
       )}
 
-      <div className={styles.list}>
+      <div className="flex-1 overflow-y-auto px-4 py-2">
         {groupEntries.map(([workspace, list]) => {
           const isExpanded = expanded.has(workspace);
           const visibleList = isExpanded ? list : list.slice(0, DEFAULT_VISIBLE);
           const hiddenCount = list.length - visibleList.length;
           return (
-            <div key={workspace} className={styles.group}>
-              <div className={styles.workspaceHeader}>
+            <div key={workspace} className="mb-3">
+              <div className="flex items-center gap-1.5 px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <Folder size={12} />
                 <span>{groupLabel(workspace)}</span>
               </div>
               {visibleList.map((s) => (
                 <div
                   key={s.id}
-                  className={`${styles.item} ${
-                    s.id === props.currentSessionId ? styles.itemActive : ""
-                  }`}
+                  className={
+                    s.id === props.currentSessionId
+                      ? "flex w-full cursor-pointer items-stretch gap-2 border-l-2 border-primary bg-accent-subtle px-4 py-2"
+                      : "flex w-full cursor-pointer items-stretch gap-2 border-l-2 border-transparent bg-transparent px-4 py-2 hover:bg-secondary"
+                  }
                 >
                   {renamingId === s.id ? (
-                    <div className={styles.renameRow}>
+                    <div className="flex min-w-0 flex-1 items-center gap-1">
                       <input
-                        className={styles.renameInput}
+                        className="min-w-0 flex-1 rounded-sm border border-primary bg-background px-2 py-1 text-[13px] text-foreground"
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={(e) => {
@@ -485,10 +496,10 @@ export function Sidebar(props: SidebarProps) {
                         }}
                         autoFocus
                       />
-                      <button type="button" className={styles.iconButton} onClick={submitRename} aria-label="确认重命名">
+                      <button type="button" className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent text-muted-foreground hover:bg-secondary" onClick={submitRename} aria-label="确认重命名">
                         <Check size={13} />
                       </button>
-                      <button type="button" className={styles.iconButton} onClick={() => setRenamingId(null)} aria-label="取消重命名">
+                      <button type="button" className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-sm border-none bg-transparent text-muted-foreground hover:bg-secondary" onClick={() => setRenamingId(null)} aria-label="取消重命名">
                         <X size={13} />
                       </button>
                     </div>
@@ -496,18 +507,18 @@ export function Sidebar(props: SidebarProps) {
                     <>
                       <button
                         type="button"
-                        className={styles.itemMain}
+                        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-none bg-transparent p-0 text-left text-inherit"
                         onClick={() => props.onSelect(s.id)}
                         title={s.preview || s.title}
                       >
-                        <MessageSquare size={12} className={styles.itemIcon} />
-                        <span className={styles.itemTitle}>{s.title}</span>
-                        <span className={styles.itemTime}>{formatRelativeTime(s.time)}</span>
+                        <MessageSquare size={12} className="shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.title}</span>
+                        <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">{formatRelativeTime(s.time)}</span>
                       </button>
-                      <div className={styles.menuWrap}>
+                      <div className="relative shrink-0">
                         <button
                           type="button"
-                          className={styles.menuButton}
+                          className="inline-flex h-[26px] w-[26px] cursor-pointer items-center justify-center rounded-sm border-none bg-transparent text-muted-foreground hover:bg-secondary"
                           onClick={() => setMenuOpen(menuOpen === s.id ? null : s.id)}
                           aria-label="会话操作"
                           title="更多操作"
@@ -515,11 +526,11 @@ export function Sidebar(props: SidebarProps) {
                           <MoreHorizontal size={14} />
                         </button>
                         {menuOpen === s.id && (
-                          <div className={styles.menu}>
+                          <div className="absolute right-0 top-full z-10 flex min-w-[110px] flex-col rounded-sm border border-border bg-card p-1 shadow-md">
                             {!archiveView && (
                               <button
                                 type="button"
-                                className={styles.menuItem}
+                                className="flex cursor-pointer items-center gap-1.5 border-none bg-transparent px-2 py-1.5 text-left text-xs text-foreground hover:bg-secondary"
                                 onClick={() => startRename(s.id, s.title)}
                               >
                                 <Pencil size={12} /> <span>重命名</span>
@@ -527,7 +538,7 @@ export function Sidebar(props: SidebarProps) {
                             )}
                             <button
                               type="button"
-                              className={styles.menuItem}
+                              className="flex cursor-pointer items-center gap-1.5 border-none bg-transparent px-2 py-1.5 text-left text-xs text-foreground hover:bg-secondary"
                               onClick={() => {
                                 archiveView ? props.onRestore(s.id) : props.onArchive(s.id);
                                 setMenuOpen(null);
@@ -544,7 +555,7 @@ export function Sidebar(props: SidebarProps) {
                 </div>
               ))}
               {list.length > DEFAULT_VISIBLE && (
-                <button type="button" className={styles.expandButton} onClick={() => toggleExpand(workspace)}>
+                <button type="button" className="block w-full cursor-pointer border-none bg-transparent px-4 py-1.5 text-left text-xs text-muted-foreground hover:text-primary" onClick={() => toggleExpand(workspace)}>
                   {isExpanded ? "收起" : `展开其余 ${hiddenCount} 个会话`}
                 </button>
               )}
@@ -552,7 +563,7 @@ export function Sidebar(props: SidebarProps) {
           );
         })}
         {source.length === 0 && (
-          <div className={styles.empty}>
+          <div className="px-4 py-6 text-center text-xs text-muted-foreground">
             <p>暂无会话</p>
           </div>
         )}
