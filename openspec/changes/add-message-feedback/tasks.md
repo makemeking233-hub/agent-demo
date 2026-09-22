@@ -5,15 +5,17 @@
 
 ## F1: sidecar 存储（agent-core，~1h）
 
-- [ ] 1.1 新增 `agent-core/src/main/java/com/example/agent/session/MessageFeedbackStore.java`
-      （构造接 `Path feedbackDir`；`get(sessionId)` / `put(sessionId, messageId, rating, ifVersion)` / `delete(sessionId, messageId, ifVersion)`）
-- [ ] 1.2 sidecar schema v1：`{version:1, session_id, items:{<uuid>:{rating, version, updated_at}}}`；
+- [x] 1.1 新增 `agent-core/src/main/java/com/example/agent/session/MessageFeedbackStore.java`
+      （构造接 `Path feedbackDir`；`getAll/get/put/delete`）
+- [x] 1.2 sidecar schema v1：`{version:1, session_id, items:{<uuid>:{rating, version, updated_at}}}`；
       文件 0600、目录 0700（POSIX；Windows 跳过）
-- [ ] 1.3 写操作加文件锁（`<sessionId>.lock`，`FileChannel.tryLock` + 超时退避），读操作不加锁
-- [ ] 1.4 CAS：`ifVersion == null` = 必须不存在；`ifVersion == N` = 必须等于当前 version；
-      冲突抛 `MessageFeedbackVersionConflict`（携带 `current`），未命中 lock 抛可重试异常
-- [ ] 1.5 `MessageFeedbackStoreTest`（`@TempDir`，**不得写真实 `~/.agent-demo`**）：创建 / CAS 冲突 /
-      删除 / 记录不存在时删除 / 并发两线程 PUT 同 message（6+ 用例）
+- [x] 1.3 写操作加文件锁（`<sessionId>.lock`，`FileChannel.tryLock` + 超时退避），读操作不加锁
+- [x] 1.4 CAS：`ifVersion == null` = 必须不存在；`ifVersion == N` = 必须等于当前 version；
+      冲突抛 `MessageFeedbackVersionConflict`（携带 `current`，可能为 null）
+- [x] 1.5 `MessageFeedbackStoreTest`（`@TempDir`，**不得写真实 `~/.agent-demo`**）：13 用例全绿
+      （创建 / 重复 CAS / 匹配 ifVersion / 不匹配 ifVersion / 删除 / 不存在删 /
+      排序 / 非法 id / 非法 rating / 空 session / 并发同 message / 并发不同 message /
+      跨 session 隔离）
 
 ## F2: REST 端点（agent-web，~45min）
 
