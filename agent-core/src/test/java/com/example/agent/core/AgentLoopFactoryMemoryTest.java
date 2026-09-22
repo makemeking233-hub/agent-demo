@@ -88,7 +88,7 @@ class AgentLoopFactoryMemoryTest {
                 base.shell(),
                 base.memoryInject(),
                 base.logging(),
-                new AgentConfig.Memory(base.memory().sideQuery(), dynamic),
+                new AgentConfig.Memory(base.memory().sideQuery(), dynamic, base.memory().embedding()),
                 base.mcp(),
                 base.worktree(),
                 base.plugins(),

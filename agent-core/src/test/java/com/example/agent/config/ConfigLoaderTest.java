@@ -2,6 +2,7 @@ package com.example.agent.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -119,6 +120,76 @@ class ConfigLoaderTest {
         var cfg = new ConfigLoader().load(yaml);
         assertEquals(false, cfg.memory().sideQuery().enabled());
         assertEquals(true, cfg.memory().dynamicRetrieval());
+    }
+
+    // ---- add-embedding-rag T1: memory.embedding 配置段 ----
+
+    /** add-embedding-rag T1.1: embedding 缺省为启用。 */
+    @Test
+    void embeddingEnabledByDefault() {
+        var cfg = new ConfigLoader().load(null);
+        assertEquals(true, cfg.memory().embedding().enabled());
+    }
+
+    /** add-embedding-rag T1.1: 缺省 modelPath 指向 <agentHome>/models/bge-small-zh-v1.5/model.onnx。 */
+    @Test
+    void embeddingModelPathDefaultsToAgentHomeModels() {
+        var cfg = new ConfigLoader().load(null);
+        String path = cfg.memory().embedding().modelPath();
+        assertTrue(
+                path.endsWith(".agent-demo" + java.io.File.separator + "models" + java.io.File.separator
+                        + "bge-small-zh-v1.5" + java.io.File.separator + "model.onnx"),
+                "缺省路径应指向 .agent-demo/models/bge-small-zh-v1.5/model.onnx，实际: " + path);
+    }
+
+    /** add-embedding-rag T1.1: HNSW 缺省参数 m=16, efConstruction=200。 */
+    @Test
+    void hnswDefaultsTo16And200() {
+        var cfg = new ConfigLoader().load(null);
+        assertEquals(16, cfg.memory().embedding().hnsw().m());
+        assertEquals(200, cfg.memory().embedding().hnsw().efConstruction());
+    }
+
+    /** add-embedding-rag T1.1: yaml memory.embedding.enabled=false 可关闭 embedding。 */
+    @Test
+    void yamlCanDisableEmbedding() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "memory:\n  embedding:\n    enabled: false\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(false, cfg.memory().embedding().enabled());
+    }
+
+    /** add-embedding-rag T1.1: yaml 可覆盖 HNSW 参数。 */
+    @Test
+    void yamlCanOverrideHnsw() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(
+                yaml,
+                "memory:\n  embedding:\n    enabled: true\n    hnsw:\n      m: 32\n      efConstruction: 400\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(true, cfg.memory().embedding().enabled());
+        assertEquals(32, cfg.memory().embedding().hnsw().m());
+        assertEquals(400, cfg.memory().embedding().hnsw().efConstruction());
+    }
+
+    /** add-embedding-rag T1.1: yaml memory 段缺失时 embedding 保持默认。 */
+    @Test
+    void yamlMemoryMissingKeepsEmbeddingDefault() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "provider:\n  model: deepseek-chat\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(true, cfg.memory().embedding().enabled());
+        assertEquals(16, cfg.memory().embedding().hnsw().m());
+    }
+
+    /** add-embedding-rag T1.1: 只配 dynamicRetrieval=false 不影响 embedding 缺省。 */
+    @Test
+    void yamlDynamicRetrievalDoesNotAffectEmbedding() throws Exception {
+        Path yaml = tmp.resolve("config.yaml");
+        Files.writeString(yaml, "memory:\n  dynamicRetrieval: false\n");
+        var cfg = new ConfigLoader().load(yaml);
+        assertEquals(false, cfg.memory().dynamicRetrieval());
+        assertEquals(true, cfg.memory().embedding().enabled());
     }
 }
 

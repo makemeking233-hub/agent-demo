@@ -170,8 +170,9 @@ public class ConfigLoader {
     /**
      * 合并 user yaml 的 {@code memory} 段到 base（缺失段保持 base 值）。
      *
-     * <p>识别两个键：{@code memory.sideQuery.*}（语义召回补充）与
-     * {@code memory.dynamicRetrieval}（是否每轮按 query 动态召回）。
+     * <p>识别三个键：{@code memory.sideQuery.*}（语义召回补充）、
+     * {@code memory.dynamicRetrieval}（是否每轮按 query 动态召回）、
+     * {@code memory.embedding.*}（embedding 粗排层，add-embedding-rag）。
      *
      * @param base 当前 memory 配置
      * @param map user yaml 顶层字典
@@ -197,7 +198,40 @@ public class ConfigLoader {
         boolean dynamicRetrieval = m.containsKey("dynamicRetrieval")
                 ? BoolVal(m.get("dynamicRetrieval"), base.dynamicRetrieval())
                 : base.dynamicRetrieval();
-        return new AgentConfig.Memory(sql, dynamicRetrieval);
+        AgentConfig.Embedding embedding = mergeEmbedding(base.embedding(), m);
+        return new AgentConfig.Memory(sql, dynamicRetrieval, embedding);
+    }
+
+    /**
+     * 合并 user yaml 的 {@code memory.embedding} 段到 base（缺失段保持 base 值）。
+     *
+     * <p>识别三个键：{@code enabled} / {@code modelPath} / {@code hnsw.{m,efConstruction}}。
+     *
+     * @param base 当前 embedding 配置
+     * @param memoryMap user yaml {@code memory:} 段字典
+     * @return 合并后的 {@link AgentConfig.Embedding}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Embedding mergeEmbedding(AgentConfig.Embedding base, Map<String, Object> memoryMap) {
+        Object seg = memoryMap.get("embedding");
+        if (!(seg instanceof Map<?, ?> em)) return base;
+        Map<String, Object> m = (Map<String, Object>) em;
+        boolean enabled = m.containsKey("enabled")
+                ? BoolVal(m.get("enabled"), base.enabled())
+                : base.enabled();
+        String modelPath = m.containsKey("modelPath") ? str(m, "modelPath", base.modelPath()) : base.modelPath();
+        AgentConfig.HnswConfig baseHnsw = base.hnsw();
+        AgentConfig.HnswConfig hnsw = baseHnsw;
+        Object hnswSeg = m.get("hnsw");
+        if (hnswSeg instanceof Map<?, ?> hm) {
+            Map<String, Object> h = (Map<String, Object>) hm;
+            int mVal = h.containsKey("m") ? intVal(h, "m", baseHnsw.m()) : baseHnsw.m();
+            int efc = h.containsKey("efConstruction")
+                    ? intVal(h, "efConstruction", baseHnsw.efConstruction())
+                    : baseHnsw.efConstruction();
+            hnsw = new AgentConfig.HnswConfig(mVal, efc);
+        }
+        return new AgentConfig.Embedding(enabled, modelPath, hnsw);
     }
 
     /**

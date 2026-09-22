@@ -1,5 +1,6 @@
 package com.example.agent.config;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -77,10 +78,28 @@ public record AgentConfig(
      *                         {@code true}（默认）= 每轮请求组装时按当轮 query 召回并注入记忆段；
      *                         {@code false} = 回退为启动期注入各 scope 全量索引（截断 200 行 / 25KB），
      *                         即 v0.1 兼容行为。关闭可省去每轮的索引解析与 sideQuery 调用开销。
+     * @param embedding       embedding 向量检索配置（add-embedding-rag）。关闭时三层召回退化为
+     *                         「字面 + sideQuery」两层；模型缺失时静默降级（不阻断主对话）。
      */
-    public record Memory(SideQuery sideQuery, boolean dynamicRetrieval) {}
+    public record Memory(SideQuery sideQuery, boolean dynamicRetrieval, Embedding embedding) {}
 
     public record SideQuery(boolean enabled, int maxCandidates, int minCandidates) {}
+
+    /**
+     * embedding 向量检索配置（add-embedding-rag）。
+     *
+     * @param enabled   是否启用 embedding 粗排层。{@code true}（默认）= 三层架构；
+     *                  {@code false} = 退回「字面 + sideQuery」两层
+     * @param modelPath ONNX 模型文件路径；缺省 {@code <agentHome>/models/bge-small-zh-v1.5/model.onnx}
+     * @param hnsw      Lucene HNSW 索引参数（m / efConstruction）
+     */
+    public record Embedding(boolean enabled, String modelPath, HnswConfig hnsw) {}
+
+    /**
+     * Lucene HNSW 索引参数。{@code m} 是图节点的最大连接数（越大越精确但越慢），
+     * {@code efConstruction} 是构建时的搜索深度（越大索引质量越高但构建越慢）。
+     */
+    public record HnswConfig(int m, int efConstruction) {}
 
     public record Mcp(List<McpServer> servers) {
         public Mcp {
@@ -160,7 +179,15 @@ public record AgentConfig(
                         2_000,
                         30,
                         50),
-                new Memory(new SideQuery(true, 8, 3), true),
+                // add-embedding-rag：缺省开启 embedding 粗排；模型路径指向 agentHome 下 models/ 目录
+                new Memory(
+                        new SideQuery(true, 8, 3),
+                        true,
+                        new Embedding(
+                                true,
+                                Path.of(AgentPaths.agentHome().toString(), "models", "bge-small-zh-v1.5", "model.onnx")
+                                        .toString(),
+                                new HnswConfig(16, 200))),
                 new Mcp(List.of()),
                 new Worktree(false, AgentPaths.worktreesDir()),
                 List.of(),
