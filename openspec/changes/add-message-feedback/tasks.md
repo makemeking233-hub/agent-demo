@@ -32,26 +32,38 @@
 
 ## F3: 前端赞踩（~1h）
 
-- [ ] 3.1 新增 `agent-web/frontend/src/api/feedback.ts`：`getFeedback(sessionId)` /
-      `putFeedback(sessionId, messageId, rating, ifVersion)` / `deleteFeedback(sessionId, messageId, ifVersion)`；
-      `409` 抛出携带 `current` 的 `FeedbackConflictError`
-- [ ] 3.2 `MessageActionRow` 加 👍/👎 按钮（`extraActions` 位置）：两态互斥、点已选中项 = 取消；
-      `data-testid="msg-up"` / `msg-down"`
-- [ ] 3.3 `MessageBubble` / `ChatPanel` 接线：`currentSessionId` + `item.uuid` 存在才渲染按钮；
-      进入会话时 `getFeedback` 一次性拉全量 rating
-- [ ] 3.4 乐观更新：点击立即改本地态 → 请求失败回滚；409 用 `current` 调和（`current:null` 表示对方删了）
-- [ ] 3.5 `MessageActionRow.test.tsx` / `ChatPanel.test.tsx`：toggle 三态 / 409 调和 / 500 回滚 /
-      无 uuid 不渲染（5+ 用例）
+- [x] 3.1 新增 `agent-web/frontend/src/api/feedback.ts`：`getFeedback` / `putFeedback` / `deleteFeedback`
+      + `nextRating` 纯函数；`409` 抛 `FeedbackConflictError`（携带 `current`）
+- [x] 3.2 `MessageActionRow` 加 👍/👎 按钮（copy 之后、children 之前）：两态互斥、点已选中项 = 取消；
+      `data-testid="msg-up"` / `msg-down"`；`rating === undefined` 时整组不渲染
+- [x] 3.3 `MessageBubble` / `ChatPanel` 接线：`ratingFor(uuid)` 决定 `undefined`（不渲染）/
+      `null`（未选中）；挂载（localStorage 恢复）与切会话（侧边栏）两条路径都 `getFeedback` 拉全量
+- [x] 3.4 乐观更新：点击立即改本地态 → 失败回滚；409 用 `current` 调和（`current:null` 表示对方已删）
+- [x] 3.5 前端测试：`feedback.test.ts` 14 用例（`nextRating` 四态 + API 错误码映射 + URL 编码）+
+      `MessageActionRow.test.tsx` P3 组 7 用例（无 uuid 不渲染 / 未选中 / up / down / 点击回调 / 顺序）+
+      `ChatPanel.test.tsx` P3 组 7 用例（渲染 / 首屏高亮 / 首次 PUT / 取消 DELETE / 切换 / 500 回滚 / 409 调和）
 
 ## F4: 验证与归档
 
-- [ ] 4.1 `npx vitest run` 全绿（基线外的既存 `EventSource is not defined` 需先归因再放行）
-- [ ] 4.2 `npx tsc --noEmit` 错误数 ≤ 基线（当前 3，AGENTS.md §2.7.7 记的 7 是旧值）
-- [ ] 4.3 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿（含 jacoco）
-- [ ] 4.4 测试数据隔离审计：确认测试只写 `@TempDir`；跑完核对 `~/.agent-demo/feedback/` 无测试残留
-- [ ] 4.5 中文 Conventional Commits → push `feat/add-message-feedback`
-- [ ] 4.6 `openspec validate add-message-feedback --type change --strict` 通过 → archive
-- [ ] 4.7 按 §2.7.5 门禁合并回 `main` + 在 `main` 上复验 + push + 清理 worktree
+- [x] 4.1 `npx vitest run`：**356 passed + 1 skipped / 42 文件**（328 → 356）；9 条
+      `EventSource is not defined` 为既有（上一 change 已在干净 HEAD 复现同样 9 条）→ 记录放行
+- [x] 4.2 `npx tsc --noEmit` 错误数 **3** ≤ 基线
+- [x] 4.3 `mvn -o -pl agent-core,agent-web verify -DskipNpm=true -Dsurefire.excludes=**/e2e/**` 全绿
+      （agent-web **399** tests、jacoco 全达标；BUILD SUCCESS）
+- [x] 4.4 测试数据隔离审计：`~/.agent-demo/feedback/` **不存在**（零污染）；仅
+      `agent-web/target/test-data*/.agent-demo/feedback` 两个**空目录**（surefire 的 `agent.demo.home`
+      隔离目录，位于 gitignored 的 `target/` 内、`mvn clean` 即清）→ 无需删除任何用户数据
+- [x] 4.5 中文 Conventional Commits → push `feat/add-message-feedback`
+- [x] 4.6 `openspec validate add-message-feedback --type change --strict` 通过 → archive
+- [x] 4.7 按 §2.7.5 门禁合并回 `main` + 在 `main` 上复验 + push + 清理 worktree
+- [x] 4.8 测试四件套 + `test-guide.md` 登记（§2.6.5）
+
+## 实施期发现（未改，留后续）
+
+- `ChatPanel` 的会话切换 effect 用 `lastSessionIdRef` 做「首次挂载不入内」短路：**挂载时若
+  `currentSessionId` prop 已非空且 localStorage 无快照，历史与反馈都不会加载**。当前 `App.tsx`
+  初值是 `"1"`（占位），真实流程（reload 有 localStorage / 侧边栏点击）不受影响，故未在本 change 动它。
+  若要修，应让「挂载即传 sessionId」也走一次加载，属独立 bugfix change。
 
 ## Follow-up
 

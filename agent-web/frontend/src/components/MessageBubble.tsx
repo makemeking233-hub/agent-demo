@@ -5,6 +5,7 @@ import { MessageActionRow } from "./MessageActionRow";
 import { ThinkingCollapse } from "./ThinkingCollapse";
 import { ToolCallCard } from "./ToolCallCard";
 import type { MessageClock } from "../lib/message-clock";
+import type { Rating } from "../api/feedback";
 
 export type InlineTool = {
   id: string;
@@ -23,7 +24,14 @@ export function MessageBubble(props: {
   reasoningTokens?: number;
   /** add-message-actions P2: per-message 读数（assistant finalize 后才有） */
   meta?: MessageClock | null;
-  /** add-message-actions P3: 赞踩按钮（extraActions slot） */
+  /**
+   * add-message-feedback: 当前反馈；`undefined` = 不渲染赞踩按钮（无 uuid / 无 session），
+   * `null` = 渲染但未选中。
+   */
+  rating?: Rating | null;
+  /** add-message-feedback: 点击赞踩回调 */
+  onRate?: (rating: Rating) => void;
+  /** add-message-actions P3: 额外按钮（extraActions slot） */
   actions?: React.ReactNode;
 }) {
   const isUser = props.role === "user";
@@ -52,7 +60,12 @@ export function MessageBubble(props: {
         ))}
         {/* add-message-actions P1: action row（copy + 可选 clock/赞踩）；流式中不显示 */}
         {showActions && (
-          <MessageActionRow text={props.text} meta={isUser ? undefined : props.meta}>
+          <MessageActionRow
+            text={props.text}
+            meta={isUser ? undefined : props.meta}
+            rating={isUser ? undefined : props.rating}
+            onRate={isUser ? undefined : props.onRate}
+          >
             {isUser ? undefined : props.actions}
           </MessageActionRow>
         )}
