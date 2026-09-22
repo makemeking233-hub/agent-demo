@@ -11,8 +11,9 @@
  * - `navigator.clipboard` 不可用 → 隐藏 textarea + `document.execCommand('copy')` 降级
  */
 
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { Rating } from "../api/feedback";
 import { formatClock, type MessageClock } from "../lib/message-clock";
 
 export interface MessageActionRowProps {
@@ -20,12 +21,19 @@ export interface MessageActionRowProps {
   text: string;
   /** 可选：per-message 读数（P2：时间 + Ran for + TTFT + tok/s）；null/缺失则不渲染 clock */
   meta?: MessageClock | null;
-  /** 可选：额外按钮（P3：赞踩） */
+  /**
+   * 可选：当前反馈（add-message-feedback）。`undefined` = 不渲染赞踩按钮（无 uuid / 无会话）；
+   * `null` = 渲染按钮但未选中。
+   */
+  rating?: Rating | null;
+  /** 可选：点击赞踩回调；与 `rating` 同时提供才渲染按钮 */
+  onRate?: (rating: Rating) => void;
+  /** 可选：额外按钮（插在赞踩之后） */
   children?: ReactNode;
   className?: string;
 }
 
-export function MessageActionRow({ text, meta, children, className }: MessageActionRowProps) {
+export function MessageActionRow({ text, meta, rating, onRate, children, className }: MessageActionRowProps) {
   const [copied, setCopied] = useState(false);
   const copyPending = useRef(false);
   // 用 number 而非 ReturnType<typeof setTimeout>：装了 @types/node 后后者会解析成
@@ -77,6 +85,33 @@ export function MessageActionRow({ text, meta, children, className }: MessageAct
       >
         {copied ? <Check size={13} /> : <Copy size={13} />}
       </button>
+      {/* add-message-feedback：👍/👎 两态（rating === undefined 时整组不渲染） */}
+      {rating !== undefined && onRate && (
+        <>
+          <button
+            type="button"
+            className={styles.action}
+            aria-label={rating === "up" ? "取消点赞" : "点赞"}
+            aria-pressed={rating === "up"}
+            title={rating === "up" ? "取消点赞" : "点赞"}
+            onClick={() => onRate("up")}
+            data-testid="msg-up"
+          >
+            <ThumbsUp size={13} />
+          </button>
+          <button
+            type="button"
+            className={styles.action}
+            aria-label={rating === "down" ? "取消点踩" : "点踩"}
+            aria-pressed={rating === "down"}
+            title={rating === "down" ? "取消点踩" : "点踩"}
+            onClick={() => onRate("down")}
+            data-testid="msg-down"
+          >
+            <ThumbsDown size={13} />
+          </button>
+        </>
+      )}
       {children}
       {clockText && (
         <span

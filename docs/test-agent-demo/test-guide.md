@@ -34,6 +34,7 @@
 | `2026-09-19-fix-provider-baseurl-e2e/` | 给 fix-provider-baseurl 加端到端验证：WireMock 桩捕获 cfg.provider.baseUrl 覆盖下的真实 HTTP 请求（之前 A 只证 baseUrl() 方法返回值正确，未证 WebClient 真的打到了那个 URL） | 2026-09-19 | 1 新增（AgentLoopFactoryBuildProviderBaseUrlTest） | ✅ agent-core 536/0 全绿；一次性跑绿（cfg.provider.baseUrl → WireMock.requestedFor 路径验证） | ✅ | 已归档 |
 | `2026-09-22-add-message-actions/` | add-message-actions P1 copy + P2 per-message clock（`MessageActionRow` copy 按钮 + `message_meta` SSE 事件 + `SessionRecorder` 落盘读数 + 历史回填 + `message-clock` 格式化 + ChatPanel 时间线装配） | 2026-09-22 | 新增 36（9 Java + 27 vitest）；套件 306 → **328 passed / 41 文件**；后端 agent-web **386 tests** 全绿 | ✅ mvn verify BUILD SUCCESS（jacoco 全达标）；tsc 3 ≤ 基线 7；vitest 用例全绿，9 条 `EventSource is not defined` 已在干净 HEAD `4c4df4d` 复现 → 记录放行 | ✅ | 已归档 |
 | `2026-09-22-snip-pairing-repair/` | snip-pairing-repair 修「会话恢复裁剪切断 tool_calls 配对组」导致的每轮 400（`snip` 裁剪点按配对组对齐 + 反向孤儿修复提取为 `ToolCallPairing.repairOrphanResults` 并让 `AgentLoop.toRequest` 每请求双向兜底） | 2026-09-22 | 12 新增（4 snip + 7 反向孤儿 + 1 请求路径；另 26 既有回归） | ✅ 全绿；`mvn verify` BUILD SUCCESS（分支与合并 main 后各一次）、前端 302 全过、tsc 6 ≤ 7。另发现 **agent-core 覆盖率门禁空转**（阈值抬升实验证明，已记录未修） | ✅ | 已归档 |
+| `2026-09-22-add-message-feedback/` | add-message-feedback 👍/👎 消息反馈（`MessageFeedbackStore` sidecar + 文件锁 + per-item version CAS + `FeedbackController` 3 端点 + 前端 `api/feedback.ts` 乐观更新/回滚/409 调和） | 2026-09-22 | 新增 54（26 Java + 28 vitest）；前端套件 328 → **356 passed / 42 文件**；后端 agent-web 386 → **399 tests** 全绿 | ✅ mvn verify BUILD SUCCESS（jacoco 全达标）；tsc 3 ≤ 基线 7；vitest 用例全绿，9 条 `EventSource is not defined` 为**既有**（上一批次已在干净 HEAD 复现逐位一致）→ 记录放行；隔离审计 `~/.agent-demo/feedback/` **不存在** | ✅ | 已归档 |
 
 ---
 
@@ -221,6 +222,16 @@
 - **数据隔离**：全部为纯单元测试（Java Mockito mock / 前端 jsdom + mock api），不启真实 Spring 应用、不写 `~/.agent-demo`；**未产生需清理的用户数据**。
 - **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **附带产物**：`docs/frontend-design.md`（项目级前端规范，design §7 要求）。
+- **归档状态**：已归档。
+
+---
+
+### 2.22 `2026-09-22-add-message-feedback/` — add-message-feedback 👍/👎 消息反馈
+
+- **测试目标**：把截图里剩下的两个按钮（👍/👎）做出来，并且**对模型不可见**——反馈存独立 sidecar（不进 `session.jsonl`、不参与 `AgentLoop.toRequest()`）。核心风险在存储侧：多标签页并发写同一 message 不能互相覆盖，故引入 **per-item version CAS**（`ifVersion=null` = 必须不存在，`N` = 必须等于 N），冲突返回 409 + `current` 让前端调和。
+- **执行要点**：worktree `.worktrees/add-message-feedback` 隔离作业（§2.7）。F1 存储 13 用例（`@TempDir` + 真文件系统跑真锁：CAS 全路径 / 并发同一 message 断言「1 赢 + N-1 冲突 + 终态 version=1」/ 并发不同 message 全落盘 / 非法 id 防路径穿越 / 跨 session 隔离）；F2 REST 13 用例（直接调控制器，3 端点 happy + 400/404/409 + `current=null` 语义）；F3 前端 28 用例（`nextRating` 四态穷举 + 3 个 fetch 的 409/500 映射 + 组件 7 + 接线 7）。门禁 `mvn -o -pl agent-core,agent-web verify` BUILD SUCCESS（agent-web **399 tests**、jacoco 全达标）、vitest **356 passed / 42 文件**、tsc 3 ≤ 基线。
+- **关键发现**：（1）**`Map.of` 不接受 null value**——「对方已删除」场景 409 body 要传 `current: null`，首版 `Map.of("current", null)` 直接 NPE，被 T-24 抓到；改用 `Collections.singletonMap`。（2）**并发用例第一版把「预期的 409」当成失败**：只用 `AtomicReference<Throwable>` 收集异常会让正常的 CAS 冲突把用例判红；改为分开捕获（冲突计数 + 意外异常），并断言 `conflicts == threads-1`。（3）**`ChatPanel` 有个「首次挂载不入内」的短路**：切换 effect 用 `lastSessionIdRef` 判等，挂载时若 `currentSessionId` prop 已非空（`App.tsx` 初值是占位的 `"1"`）且 localStorage 无快照，历史与反馈都不会加载；测试里直接挂载传 sessionId 会让 7 个用例全挂在「找不到按钮」上。真实流程（reload 有 localStorage / 侧边栏点击）不受影响，故**未修**，作为 D-2 记入后续。（4）**agent-web 用到 agent-core 新类前必须先 `mvn -pl agent-core install`**，否则 testCompile 找不到符号（本地 m2 里是旧 jar）。（5）**隔离审计是干净的一次**：`~/.agent-demo/feedback/` 根本不存在，唯二产生的是 `target/test-data*/.agent-demo/feedback` 两个**空目录**（bean 构造时 `ensureDir()`），在 gitignored 的 `target/` 内，无需删除任何用户数据。
+- **四件套**：`test-design.md` / `test-cases.md` / `test-report.md` / `test-review.md` ✅
 - **归档状态**：已归档。
 
 ---
