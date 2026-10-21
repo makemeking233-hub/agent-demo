@@ -142,6 +142,21 @@ public class AgentLoop {
     private volatile String memorySection;
 
     /**
+     * 技能候选段来源（add-skill-demand-loading T6.5；可空）。
+     *
+     * <p>复用 {@link MemorySectionSource} 抽象——它的签名 {@code String sectionFor(String query)}
+     * 与「按当轮提问产出 system prompt 片段」的语义完全一致，无需为技能另开接口。
+     * 非空时每轮把按当轮提问召回的技能候选小节追加到 system prompt 末尾。
+     */
+    private final MemorySectionSource skillSectionSource;
+
+    /** 上次解析技能候选段所用的 query（轮内缓存，机制同 {@link #memoryQuery}）。 */
+    private volatile String skillQuery;
+
+    /** 上次解析出的技能候选段。 */
+    private volatile String skillSection;
+
+    /**
      * 会话日志观察者（可空；默认 no-op，见 {@link SessionLogSink#NOOP}）
      */
     private final SessionLogSink sink;
@@ -366,6 +381,33 @@ public class AgentLoop {
             PermissionConfirmer confirmer,
             AbortSignal abortSignal,
             MemorySectionSource memorySectionSource) {
+        this(provider, tools, history, printer, maxToolIterations, model, workingDir, systemPrompt,
+                sink, agentDataDir, confirmer, abortSignal, memorySectionSource, null);
+    }
+
+    /**
+     * 构造 Agent 主循环（带记忆段 + 技能候选段来源；add-skill-demand-loading T6.5）。
+     *
+     * <p>与 13 参构造器的唯一差别是 {@code skillSectionSource}：非空时每轮把按当轮提问召回的
+     * 技能候选小节追加到 system prompt 末尾（在记忆段之后）；为空时行为与 13 参版本完全一致。
+     *
+     * @param skillSectionSource 技能候选段来源（{@code null} = 不注入候选）
+     */
+    public AgentLoop(
+            LlmProvider provider,
+            ToolRegistry tools,
+            MessageHistory history,
+            StreamingPrinter printer,
+            int maxToolIterations,
+            String model,
+            Path workingDir,
+            String systemPrompt,
+            SessionLogSink sink,
+            Path agentDataDir,
+            PermissionConfirmer confirmer,
+            AbortSignal abortSignal,
+            MemorySectionSource memorySectionSource,
+            MemorySectionSource skillSectionSource) {
         this.provider = provider;
         this.tools = tools;
         this.history = history;
@@ -374,6 +416,7 @@ public class AgentLoop {
         this.model = model;
         this.systemPrompt = systemPrompt;
         this.memorySectionSource = memorySectionSource;
+        this.skillSectionSource = skillSectionSource;
         this.sink = sink != null ? sink : SessionLogSink.NOOP;
         this.confirmer = confirmer;
         AbortSignal signal = abortSignal != null ? abortSignal : () -> false;
@@ -725,11 +768,43 @@ public class AgentLoop {
      * @return 本轮 system prompt
      */
     private String resolveSystemPrompt() {
-        if (memorySectionSource == null) return systemPrompt;
-        String section = memorySectionFor(latestUserQuery());
-        if (section == null || section.isBlank()) return systemPrompt;
-        if (systemPrompt == null || systemPrompt.isBlank()) return section;
-        return systemPrompt + "\n\n" + section;
+        String base = systemPrompt;
+        if (memorySectionSource != null) {
+            base = appendSection(base, memorySectionFor(latestUserQuery()));
+        }
+        if (skillSectionSource != null) {
+            base = appendSection(base, skillSectionFor(latestUserQuery()));
+        }
+        return base;
+    }
+
+    /**
+     * 把非空片段追加到基础段之后（避免引入多余分隔符）。
+     *
+     * @param base    基础段（可空 / 空白）
+     * @param section 待追加片段（可空 / 空白）
+     * @return 拼接结果
+     */
+    private static String appendSection(String base, String section) {
+        if (section == null || section.isBlank()) return base;
+        if (base == null || base.isBlank()) return section;
+        return base + "\n\n" + section;
+    }
+
+    /**
+     * 解析技能候选段（轮内缓存，机制与 {@link #memorySectionFor} 完全一致）。
+     *
+     * @param query 当轮用户提问
+     * @return 候选段文本（无则空串）
+     */
+    private String skillSectionFor(String query) {
+        if (query == null || query.isBlank()) return "";
+        if (query.equals(skillQuery)) return skillSection;
+        String section = skillSectionSource.sectionFor(query);
+        if (section == null) section = "";
+        skillSection = section;
+        skillQuery = query;
+        return section;
     }
 
     /**

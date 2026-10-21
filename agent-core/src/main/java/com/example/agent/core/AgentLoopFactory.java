@@ -133,25 +133,28 @@ public final class AgentLoopFactory {
         int timeoutSec = Math.max(1, cfg.shell().timeoutMs() / 1000);
         tools.register(new ShellTool(adapter, timeoutSec, cfg.shell().maxOutputBytes(), true));
         tools.register(new LsTool());
-        // Skills：发现用户级 + 项目级技能并注册为工具
+        // Skills：发现用户级 + 项目级技能
         // fix-agent-home-isolation：基目录统一走 AgentPaths，使其与 WebAgentRuntime 同源
         // （原先只认 env，不认系统属性 agent.demo.home，测试隔离盖不住这里）
         // refactor-skill-index-layer T5.1：改走 SkillPool（单例）——启动期只读 frontmatter，
-        // 正文在 SkillTool.execute() 时按需读盘；单例同时为 add-skill-demand-loading 的检索铺路。
+        // 正文在 SkillTool.execute() 时按需读盘。
+        // add-skill-demand-loading T6：按 agent.skill.mode 三档决定暴露哪些工具。
         String userHome = AgentPaths.homeBase();
         String cwd = System.getProperty("user.dir");
         java.util.List<Path> skillRoots = java.util.List.of(
                 Paths.get(userHome, ".agent-demo", "skills"),
                 Paths.get(cwd, ".agent-demo", "skills"));
-        com.example.agent.skill.SkillPool skillPool = com.example.agent.skill.SkillPool.bootstrap(skillRoots);
+        AgentConfig.Skill skillCfg = cfg.skill() != null
+                ? cfg.skill()
+                : AgentConfig.Skill.defaults();
+        com.example.agent.skill.SkillUsageStore skillUsage =
+                new com.example.agent.skill.SkillUsageStore(
+                        AgentPaths.agentHome().resolve("skill-usage.json"));
+        com.example.agent.skill.SkillPool skillPool =
+                com.example.agent.skill.SkillPool.bootstrap(
+                        skillRoots, buildSkillEmbedder(skillCfg));
         com.example.agent.skill.SkillPool.install(skillPool);
-        ToolRegistry.registerSkillTools(
-                tools,
-                skillPool.all().stream()
-                        .map(meta -> skillPool.load(meta.name()))
-                        .filter(java.util.Optional::isPresent)
-                        .map(java.util.Optional::get)
-                        .toList());
+        registerSkillToolsByMode(tools, skillPool, skillCfg, skillUsage);
         // MCP：从 config 连接 MCP server 并融合其工具
         AgentConfig.Mcp mcp = cfg.mcp();
         if (mcp != null && mcp.servers() != null && !mcp.servers().isEmpty()) {
@@ -255,8 +258,7 @@ public final class AgentLoopFactory {
     }
 
     /** 组装不含记忆段的基础 prompt（身份 / 行为规范 / 运行时存储 / 附加指引）。 */
-    private static String basePromptOf(AgentConfig cfg, String resolvedModel, String override) {
-        String providerName = cfg.provider().type() == null
+    private static String basePromptOf(AgentConfig cfg, String resolvedModel, String override) {        String providerName = cfg.provider().type() == null
                 ? "deepseek"
                 : cfg.provider().type().toLowerCase();
         // fix-agent-home-isolation：基目录统一走 AgentPaths，使其与 WebAgentRuntime 同源
@@ -401,7 +403,8 @@ public final class AgentLoopFactory {
                         agentDataDir,
                         confirmer,
                         abortSignal,
-                        promptParts.memorySectionSource());
+                        promptParts.memorySectionSource(),
+                        buildSkillSectionSource(cfg));
         if (mode != null) {
             loop.setPermissionMode(mode);
         }
@@ -468,5 +471,90 @@ public final class AgentLoopFactory {
                 + "- 会话存档目录: `"
                 + sessionsDir
                 + "`（`<会话ID>.jsonl`）";
+    }
+
+    /**
+     * 按 {@code agent.skill.mode} 把技能注册进工具集（add-skill-demand-loading T6.1）。
+     *
+     * <p>三档语义见 {@link AgentConfig.SkillMode}。关键点：{@code tools} 段规模与 skill 总数
+     * **解耦**——{@code search} 档恒只加 1 个 {@code skill_search}，{@code hybrid} 档加 ≤N 个
+     * 直露 + 1 个检索工具，{@code all} 档才线性增长（用户自担）。
+     *
+     * @param tools     目标工具集
+     * @param pool      技能池
+     * @param cfg       技能配置
+     * @param usage     频次存储（hybrid 热门排序用；可空）
+     */
+    private static void registerSkillToolsByMode(
+            ToolRegistry tools,
+            com.example.agent.skill.SkillPool pool,
+            AgentConfig.Skill cfg,
+            com.example.agent.skill.SkillUsageStore usage) {
+        if (pool == null || pool.all().isEmpty()) return;
+        switch (cfg.mode()) {
+            case ALL -> {
+                for (var meta : pool.all()) {
+                    pool.load(meta.name())
+                            .ifPresent(s -> tools.register(new com.example.agent.skill.SkillTool(s, usage)));
+                }
+            }
+            case SEARCH -> tools.register(
+                    new com.example.agent.skill.SkillSearchTool(pool, cfg.recallK()));
+            case HYBRID -> {
+                var hot = new com.example.agent.skill.HotSkillSelector(pool.all(), usage, List::of)
+                        .pick(cfg.hybridDirectLimit(), cfg.hybridProjectQuota());
+                for (var meta : hot) {
+                    pool.load(meta.name())
+                            .ifPresent(s -> tools.register(new com.example.agent.skill.SkillTool(s, usage)));
+                }
+                tools.register(new com.example.agent.skill.SkillSearchTool(pool, cfg.recallK()));
+            }
+        }
+        log.info(
+                "技能注册完成: mode={}, 池内={}, 直露工具={}",
+                cfg.mode(),
+                pool.all().size(),
+                tools.list().stream()
+                        .filter(t -> !(t instanceof com.example.agent.skill.SkillSearchTool))
+                        .filter(t -> pool.load(t.name()).isPresent())
+                        .count());
+    }
+
+    /**
+     * 构建技能候选段来源（add-skill-demand-loading T6.5）。
+     *
+     * <p>{@code all} 档不注入候选（全部工具已直露，再给候选名单是冗余且浪费 token）；
+     * {@code search} 与 {@code hybrid} 档注入。
+     *
+     * @param cfg 配置
+     * @return 候选段来源；{@code all} 档或无技能时返回 {@code null}
+     */
+    private static com.example.agent.memory.MemorySectionSource buildSkillSectionSource(
+            AgentConfig cfg) {
+        AgentConfig.Skill skillCfg = cfg.skill() != null ? cfg.skill() : AgentConfig.Skill.defaults();
+        if (skillCfg.mode() == AgentConfig.SkillMode.ALL) return null;
+        com.example.agent.skill.SkillPool pool = com.example.agent.skill.SkillPool.instance();
+        if (pool.all().isEmpty()) return null;
+        return new com.example.agent.skill.SkillSectionProvider(
+                pool, skillCfg.recallK(), skillCfg.descriptionTruncateChars());
+    }
+
+    /**
+     * 构建技能检索用 embedding 提供者（add-skill-demand-loading T3）。
+     *
+     * <p>模型缺失 / 加载失败时返回 {@code null}，{@link com.example.agent.skill.SkillPool}
+     * 会自动降级为纯倒排——与「记忆召回失败静默降级」一致，绝不阻断启动。
+     *
+     * @param cfg 技能配置（本 change 不单独开关 embedding，跟随 memory.embedding 的模型路径）
+     * @return embedding 提供者；不可用时 {@code null}
+     */
+    private static com.example.agent.memory.embedding.EmbeddingProvider buildSkillEmbedder(
+            AgentConfig.Skill cfg) {
+        try {
+            return new com.example.agent.memory.embedding.OnnxEmbeddingProvider();
+        } catch (RuntimeException e) {
+            log.warn("技能 embedding 提供者构建失败，降级为纯倒排检索: {}", e.toString());
+            return null;
+        }
     }
 }

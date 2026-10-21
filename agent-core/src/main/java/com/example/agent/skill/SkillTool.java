@@ -19,13 +19,27 @@ import java.util.Map;
 public class SkillTool implements Tool<String, String> {
     private final Skill skill;
 
+    /** 频次记录器（可空 = 不记录；add-skill-demand-loading T6.8）。 */
+    private final SkillUsageStore usageStore;
+
     /**
-     * 构造技能工具。
+     * 构造技能工具（不记录频次）。
      *
      * @param skill 技能
      */
     public SkillTool(Skill skill) {
+        this(skill, null);
+    }
+
+    /**
+     * 构造技能工具（成功调用时记录频次）。
+     *
+     * @param skill      技能
+     * @param usageStore 频次存储（可空）
+     */
+    public SkillTool(Skill skill, SkillUsageStore usageStore) {
         this.skill = skill;
+        this.usageStore = usageStore;
     }
 
     @Override
@@ -82,7 +96,15 @@ public class SkillTool implements Tool<String, String> {
     @Override
     public Mono<ToolResult<String>> execute(String input, Tool.ToolContext ctx) {
         // T2 重构：正文改为调用时按需读盘（skill.body()），不再由构造期常驻内存
-        return Mono.just(ToolResult.ok(skill.body()));
+        return Mono.fromSupplier(
+                () -> {
+                    String body = skill.body();
+                    // T6.8：成功加载才计入频次（读失败不计，避免把错误调用当成热门依据）
+                    if (usageStore != null && body != null && !body.startsWith("[skill ")) {
+                        usageStore.record(skill.name());
+                    }
+                    return ToolResult.ok(body);
+                });
     }
 
     /** @return 源技能。 */
