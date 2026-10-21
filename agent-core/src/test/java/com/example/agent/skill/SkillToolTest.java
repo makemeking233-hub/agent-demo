@@ -13,9 +13,22 @@ import java.nio.file.Path;
 
 class SkillToolTest {
 
-    private final Skill skill =
-            new Skill("deploy", "部署到服务器", "步骤：1. build 2. deploy", Path.of("/tmp/deploy"));
+    /** T2 重构后 Skill 由 record 改 final class；构造需真实 SKILL.md 供 body() 读盘 */
+    private final Skill skill = testSkill("deploy", "部署到服务器", "步骤：1. build 2. deploy");
     private final SkillTool tool = new SkillTool(skill);
+
+    /** 建临时技能目录并写 SKILL.md，返回包好的 Skill。 */
+    private static Skill testSkill(String name, String description, String body) {
+        try {
+            Path dir = java.nio.file.Files.createTempDirectory("skill-" + name);
+            java.nio.file.Files.writeString(
+                    dir.resolve("SKILL.md"),
+                    "---\nname: " + name + "\ndescription: " + description + "\n---\n" + body);
+            return new Skill(new SkillMeta(name, description, SkillScope.USER, dir));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("test skill 目录创建失败", e);
+        }
+    }
 
     @Test
     void exposesSkillNameAndDescription() {

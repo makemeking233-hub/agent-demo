@@ -81,7 +81,8 @@ public class SkillTool implements Tool<String, String> {
 
     @Override
     public Mono<ToolResult<String>> execute(String input, Tool.ToolContext ctx) {
-        return Mono.just(ToolResult.ok(skill.content()));
+        // T2 重构：正文改为调用时按需读盘（skill.body()），不再由构造期常驻内存
+        return Mono.just(ToolResult.ok(skill.body()));
     }
 
     /** @return 源技能。 */

@@ -32,7 +32,8 @@ class SkillCatalogTest {
         assertEquals(1, skills.size());
         assertEquals("my-skill", skills.get(0).name());
         assertEquals("处理某项任务", skills.get(0).description());
-        assertTrue(skills.get(0).content().contains("执行步骤 1"));
+        // T2 重构：正文改为 body() 按需读盘，不再是构造期常驻字段
+        assertTrue(skills.get(0).body().contains("执行步骤 1"));
     }
 
     @Test
