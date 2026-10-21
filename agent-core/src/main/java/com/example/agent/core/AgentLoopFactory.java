@@ -136,13 +136,22 @@ public final class AgentLoopFactory {
         // Skills：发现用户级 + 项目级技能并注册为工具
         // fix-agent-home-isolation：基目录统一走 AgentPaths，使其与 WebAgentRuntime 同源
         // （原先只认 env，不认系统属性 agent.demo.home，测试隔离盖不住这里）
+        // refactor-skill-index-layer T5.1：改走 SkillPool（单例）——启动期只读 frontmatter，
+        // 正文在 SkillTool.execute() 时按需读盘；单例同时为 add-skill-demand-loading 的检索铺路。
         String userHome = AgentPaths.homeBase();
         String cwd = System.getProperty("user.dir");
         java.util.List<Path> skillRoots = java.util.List.of(
                 Paths.get(userHome, ".agent-demo", "skills"),
                 Paths.get(cwd, ".agent-demo", "skills"));
+        com.example.agent.skill.SkillPool skillPool = com.example.agent.skill.SkillPool.bootstrap(skillRoots);
+        com.example.agent.skill.SkillPool.install(skillPool);
         ToolRegistry.registerSkillTools(
-                tools, com.example.agent.skill.SkillCatalog.discover(skillRoots));
+                tools,
+                skillPool.all().stream()
+                        .map(meta -> skillPool.load(meta.name()))
+                        .filter(java.util.Optional::isPresent)
+                        .map(java.util.Optional::get)
+                        .toList());
         // MCP：从 config 连接 MCP server 并融合其工具
         AgentConfig.Mcp mcp = cfg.mcp();
         if (mcp != null && mcp.servers() != null && !mcp.servers().isEmpty()) {

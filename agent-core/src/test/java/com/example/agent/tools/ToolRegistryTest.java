@@ -65,15 +65,27 @@ class ToolRegistryTest {
     }
 
     @Test
-    void registerSkillToolsRegistersEachSkill() {
+    void registerSkillToolsRegistersEachSkill() throws Exception {
         var reg = new ToolRegistry();
-        var s1 = new Skill("a", "desc-a", "content-a", Path.of("/tmp/a"));
-        var s2 = new Skill("b", "desc-b", "content-b", Path.of("/tmp/b"));
+        var s1 = tempSkill("a", "desc-a");
+        var s2 = tempSkill("b", "desc-b");
         ToolRegistry.registerSkillTools(reg, List.of(s1, s2));
         // 每个 skill 注册为一个工具，工具名 = skill name
         assertEquals(2, reg.list().size());
         assertEquals("a", reg.get("a").name());
         assertEquals("b", reg.get("b").name());
+    }
+
+    /** T2 重构后 Skill 由 record 改 final class；构造需真实 SKILL.md 供 body() 读盘 */
+    private static com.example.agent.skill.Skill tempSkill(String name, String desc)
+            throws java.io.IOException {
+        Path dir = java.nio.file.Files.createTempDirectory("skill-" + name);
+        java.nio.file.Files.writeString(
+                dir.resolve("SKILL.md"),
+                "---\nname: " + name + "\ndescription: " + desc + "\n---\n正文");
+        return new com.example.agent.skill.Skill(
+                new com.example.agent.skill.SkillMeta(
+                        name, desc, com.example.agent.skill.SkillScope.USER, dir));
     }
 
     @Test
