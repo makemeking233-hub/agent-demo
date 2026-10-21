@@ -161,7 +161,7 @@ class SkillPoolTest {
         writeSkill("user-skills", "s", "技能");
 
         var first = SkillPool.bootstrap(List.of(u));
-        SkillPool.installForTest(first);
+        SkillPool.install(first);
         var second = SkillPool.instance();
         assertSame(first, second, "instance() 应返回已安装的单例");
 

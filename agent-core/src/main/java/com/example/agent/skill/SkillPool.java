@@ -95,12 +95,18 @@ public final class SkillPool implements AutoCloseable {
         return (firstValid != null && !firstValid.equals(root)) ? SkillScope.PROJECT : SkillScope.USER;
     }
 
-    /** 安装为全局单例（供 AgentLoopFactory 与测试使用）。 */
-    public static void installForTest(SkillPool pool) {
+    /**
+     * 安装为全局单例（由 {@code AgentLoopFactory.buildTools} 在启动期调用）。
+     *
+     * <p>幂等：重复安装以最后一次为准；{@link #resetForTest()} 可清空。
+     *
+     * @param pool 池实例（{@code null} 等价于清空）
+     */
+    public static void install(SkillPool pool) {
         installed = pool;
     }
 
-    /** 清空全局单例（测试用）。 */
+    /** 清空全局单例（仅测试用）。 */
     public static void resetForTest() {
         installed = null;
     }
