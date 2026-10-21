@@ -74,5 +74,48 @@ class SkillCatalogTest {
         assertEquals("项目版", skills.get(0).description());
         assertEquals(projDir, skills.get(0).dir().toString());
     }
+
+    // ---- T1.1：补齐「行为不变」保护网（重构前基线） ----
+
+    @Test
+    void nestedSubdirectoryIsNotDiscovered() throws Exception {
+        // 一级深度规则：<root>/<name>/SKILL.md 才是技能，<root>/outer/inner/SKILL.md 不识别
+        Path root = tmp.resolve("skills");
+        Path nested = root.resolve("outer").resolve("inner");
+        Files.createDirectories(nested);
+        Files.writeString(
+                nested.resolve("SKILL.md"),
+                "---\nname: inner\ndescription: 嵌套技能\n---\n正文\n");
+
+        List<Skill> skills = SkillCatalog.discover(List.of(root));
+        assertTrue(skills.isEmpty(), "嵌套子目录不应被识别为技能");
+    }
+
+    @Test
+    void skipsSkillWithUnclosedFrontmatter() throws Exception {
+        // frontmatter 未闭合（没有第二个 ---）
+        Path root = tmp.resolve("skills");
+        writeSkill(root, "unclosed", "---\nname: unclosed\ndescription: 没闭合\n正文继续\n");
+
+        List<Skill> skills = SkillCatalog.discover(List.of(root));
+        assertTrue(skills.isEmpty(), "frontmatter 未闭合应跳过");
+    }
+
+    @Test
+    void flatNameDotMdAtRootIsNotDiscovered() throws Exception {
+        // T1.1 发现的既有实现与 spec 偏差（记录真实行为，不在本 change 修）：
+        //   spec 说「<root>/<name>/SKILL.md 或 <root>/<name>.md 均可」，
+        //   但 discover() 只遍历 root 的一级【子目录】，root 下直放的 <name>.md 不会被发现。
+        //   resolveSkillFile 的 named 分支只在【子目录内】找 <dirname>.md。
+        //   修复它属于行为变更，另开 change；本 change 保持该行为不变。
+        Path root = tmp.resolve("skills");
+        Files.createDirectories(root);
+        Files.writeString(
+                root.resolve("flat-skill.md"),
+                "---\nname: flat-skill\ndescription: 扁平布局\n---\n正文\n");
+
+        List<Skill> skills = SkillCatalog.discover(List.of(root));
+        assertTrue(skills.isEmpty(), "root 下直放的 <name>.md 当前实现不识别（既有行为，本 change 不改）");
+    }
 }
 

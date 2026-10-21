@@ -36,5 +36,28 @@ class SkillToolTest {
         assertTrue(tool.isReadOnly("{}"));
         assertEquals(PermissionDecision.allow(), tool.checkPermissions("{}", null));
     }
+
+    // ---- T1.2：补齐「SkillTool 对外契约不变」保护网 ----
+
+    @Test
+    void descriptionCarriesFixedPrefix() {
+        // 前缀「技能：调用以加载技能内容。」是模型识别 skill 的信号，重构后必须保持
+        String desc = tool.description();
+        assertTrue(desc.startsWith("技能：调用以加载技能内容。"), "描述前缀必须保留: " + desc);
+        assertTrue(desc.endsWith("部署到服务器"), "描述以 frontmatter description 结尾: " + desc);
+    }
+
+    @Test
+    void inputSchemaIsEmptyObject() {
+        var schema = tool.inputSchema();
+        assertEquals("object", schema.get("type"));
+        assertEquals(java.util.Map.of(), schema.get("properties"));
+        assertEquals(java.util.List.of(), schema.get("required"));
+    }
+
+    @Test
+    void renderUseShowsSkillName() {
+        assertTrue(tool.renderUse("{}").contains("deploy"));
+    }
 }
 
