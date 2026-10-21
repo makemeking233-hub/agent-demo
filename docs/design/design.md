@@ -301,7 +301,7 @@ agent-demo/
 ### 5.3 v0.1 明确不做
 
 - Subagent / sidechain transcript
-- Skills 系统
+- ~~Skills 系统~~（已实现：见 §5.2.1 Skill 按需加载）
 - Plan attachment
 - Memory Snapshot（snapshot.json / .snapshot-synced.json）
 - Team Memory（带同步、checksum）
@@ -310,6 +310,53 @@ agent-demo/
 - Hooks / 插件市场
 - Bridge / Remote mode
 - Headless / SDK 模式
+
+### 5.2.1 Skill 按需加载（add-skill-demand-loading）
+
+**问题**：若把每个 skill 都注册为一个 Tool，tools 段体积随 skill 数量线性增长。单条 ToolSpec
+（name + description + 空 schema）约 90 token，1000 个 skill ≈ 90k token，已超过 83808 的
+compact 阈值；10000 个 ≈ 900k token，彻底发不出去。且工具数超过 ~100 时模型的 function
+calling 准确率显著退化。
+
+**方案**：暴露与总量解耦，分三档（`agent.skill.mode`）。
+
+| 档位 | tools 段内容 | 适用 |
+|------|-------------|------|
+| `all` | 全部 skill 直露（线性增长，不设上限） | skill 很少（<20）、要求模型直接看到全部能力 |
+| `search`（默认） | 仅 1 个 `skill_search` | 任意规模，最安全 |
+| `hybrid` | ≤`hybrid-direct-limit` 个热门直露 + 1 个 `skill_search` | 常用 skill 频繁调用，想省一次检索往返 |
+
+**存储与检索的分层**：
+
+```mermaid
+flowchart TB
+    subgraph BOOT["启动期"]
+        S["SkillCatalog.discoverMeta<br/>只读 frontmatter"]
+        S --> M["SkillMeta × N<br/>name + desc + scope + dir"]
+        S --> INV["InvertedIndex<br/>keyword 到 skillNames"]
+        S --> EMB["embedding × N<br/>name + desc 向量"]
+    end
+    subgraph RUN["每轮"]
+        Q["用户 query"] --> PRE["倒排预筛<br/>N 到约 200"]
+        PRE --> KNN["候选集内 cosine 精排<br/>200 到 top-k(20)"]
+        KNN --> SEC["候选小节<br/>name + 截断描述<br/>追加到 system prompt 末尾"]
+    end
+    INV --> PRE
+    EMB --> KNN
+```
+
+**关键设计点**：
+
+| 决策 | 理由 |
+|------|------|
+| 正文懒加载 | 启动期只读 frontmatter，10000 skill 的常驻堆从「元数据 + 全文」降到「仅元数据」 |
+| 倒排预筛先行 | 10000 条全量 KNN 是 10000×512 次浮点运算；预筛到 200 后快 50 倍 |
+| 候选集为空不回退全量 KNN | query 与技能库无关键词交集时，全量 cosine 只返回「相似度都差不多」的噪声 |
+| embedding 不可用时完全不建索引 | 零向量与所有 query 的 cosine 都是 0，排序退化为任意，比纯倒排更差 |
+| 候选名单进 system 末尾而非 tools | 候选每轮变化，放 tools 会击穿 KV prefix cache |
+| 模型可多次调 `skill_search` | 框架给的候选是固定 top-k，模型需要能换关键词精化 |
+
+## 运行时存储
 
 ### 5.4 Memory 设计细化（v0.1 仅 user scope）
 
