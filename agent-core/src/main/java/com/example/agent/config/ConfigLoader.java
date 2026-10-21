@@ -64,7 +64,8 @@ public class ConfigLoader {
                     mergeWorktree(base.worktree(), map),
                     mergePlugins(base.plugins(), map),
                     mergeSearch(base.search(), map),
-                    mergeVoice(base.voice(), map));
+                    mergeVoice(base.voice(), map),
+                    mergeSkill(base.skill(), map));
         } catch (IOException e) {
             throw new RuntimeException("加载配置失败: " + yamlPath, e);
         }
@@ -102,7 +103,8 @@ public class ConfigLoader {
                 base.worktree(),
                 base.plugins(),
                 base.search(),
-                base.voice());
+                base.voice(),
+                base.skill());
     }
 
     /**
@@ -332,6 +334,68 @@ public class ConfigLoader {
     private static boolean BoolVal(Object v, boolean d) {
         if (v instanceof Boolean b) return b;
         if (v != null) return Boolean.parseBoolean(v.toString());
+        return d;
+    }
+
+    /**
+     * 合并 user yaml 的 {@code agent.skill} 段到 base（add-skill-demand-loading T1.2）。
+     *
+     * <p>YAML 结构示例：
+     * <pre>
+     * agent:
+     *   skill:
+     *     mode: hybrid
+     *     hybrid-direct-limit: 10
+     *     hybrid-project-quota: 6
+     *     recall-k: 20
+     *     decay-lambda: 0.05
+     *     description-truncate-chars: 40
+     * </pre>
+     *
+     * <p>非法值一律回退默认（不抛异常）——配置错误不该阻断启动。
+     *
+     * @param base 当前 skill 配置
+     * @param map  user yaml 顶层字典
+     * @return 合并后的 {@link AgentConfig.Skill}
+     */
+    @SuppressWarnings("unchecked")
+    private AgentConfig.Skill mergeSkill(AgentConfig.Skill base, Map<String, Object> map) {
+        Object agentSeg = map.get("agent");
+        if (!(agentSeg instanceof Map<?, ?> am)) return base;
+        Object skillSeg = ((Map<String, Object>) am).get("skill");
+        if (!(skillSeg instanceof Map<?, ?> sm)) return base;
+        Map<String, Object> m = (Map<String, Object>) sm;
+        AgentConfig.SkillMode mode =
+                m.containsKey("mode")
+                        ? AgentConfig.SkillMode.from(str(m, "mode", null))
+                        : base.mode();
+        return new AgentConfig.Skill(
+                mode,
+                intVal(m, "hybrid-direct-limit", base.hybridDirectLimit()),
+                intVal(m, "hybrid-project-quota", base.hybridProjectQuota()),
+                intVal(m, "recall-k", base.recallK()),
+                doubleVal(m, "decay-lambda", base.decayLambda()),
+                intVal(m, "description-truncate-chars", base.descriptionTruncateChars()));
+    }
+
+    /**
+     * 读 double，缺失/非数字返回默认值。
+     *
+     * @param m 字典
+     * @param k 键
+     * @param d 默认值
+     * @return 数值
+     */
+    private static double doubleVal(Map<String, Object> m, String k, double d) {
+        Object v = m.get(k);
+        if (v instanceof Number n) return n.doubleValue();
+        if (v != null) {
+            try {
+                return Double.parseDouble(v.toString().trim());
+            } catch (NumberFormatException ignored) {
+                return d;
+            }
+        }
         return d;
     }
 

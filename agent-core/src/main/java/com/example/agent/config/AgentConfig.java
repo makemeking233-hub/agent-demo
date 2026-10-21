@@ -36,7 +36,132 @@ public record AgentConfig(
         Worktree worktree,
         List<PluginConfig> plugins,
         Search search,
-        Voice voice) {
+        Voice voice,
+        Skill skill) {
+
+    /**
+     * 兼容构造器（13 参，{@code skill} 取默认值）。
+     *
+     * <p>add-skill-demand-loading 新增 {@code skill} 字段后，既有调用方（大量测试与
+     * {@code ConfigLoader} 的部分路径）仍按 13 参构造——本构造器让它们无需改动即保持原行为
+     * （默认 {@code search} 档）。
+     */
+    public AgentConfig(
+            Provider provider,
+            Permission permission,
+            Cost cost,
+            Context context,
+            Shell shell,
+            List<String> memoryInject,
+            Logging logging,
+            Memory memory,
+            Mcp mcp,
+            Worktree worktree,
+            List<PluginConfig> plugins,
+            Search search,
+            Voice voice) {
+        this(
+                provider,
+                permission,
+                cost,
+                context,
+                shell,
+                memoryInject,
+                logging,
+                memory,
+                mcp,
+                worktree,
+                plugins,
+                search,
+                voice,
+                Skill.defaults());
+    }
+
+    /**
+     * 技能暴露档位（add-skill-demand-loading T1.1）。
+     *
+     * <ul>
+     *   <li>{@link #ALL}：全部 skill 直露为工具（不限制数量，等价重构前行为）
+     *   <li>{@link #SEARCH}：不直露任何 skill，仅注册 {@code skill_search}（**默认**，最安全）
+     *   <li>{@link #HYBRID}：按热门规则直露至多 {@code hybridDirectLimit} 个 + {@code skill_search}
+     * </ul>
+     */
+    public enum SkillMode {
+        ALL,
+        SEARCH,
+        HYBRID;
+
+        /**
+         * 解析档位名（大小写不敏感）。
+         *
+         * @param raw 原始值（{@code null} / 空白 / 非法值均回退 {@link #SEARCH}）
+         * @return 生效档位
+         */
+        public static SkillMode from(String raw) {
+            if (raw == null || raw.isBlank()) return SEARCH;
+            try {
+                return valueOf(raw.trim().toUpperCase(java.util.Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                return SEARCH;
+            }
+        }
+    }
+
+    /**
+     * 技能按需加载配置（add-skill-demand-loading）。
+     *
+     * @param mode                     暴露档位（缺省 {@link SkillMode#SEARCH}）
+     * @param hybridDirectLimit        hybrid 档直露总数上限（{@code <= 0} 回退 10）
+     * @param hybridProjectQuota       hybrid 档中 PROJECT scope 的名额（clamp 到 directLimit）
+     * @param recallK                  候选名单长度（{@code <= 0} 回退 20）
+     * @param decayLambda              频次指数衰减系数（{@code <= 0} 回退 0.05，半衰期约 14 天）
+     * @param descriptionTruncateChars 候选名单描述截断字符数（{@code <= 0} 回退 40）
+     */
+    public record Skill(
+            SkillMode mode,
+            int hybridDirectLimit,
+            int hybridProjectQuota,
+            int recallK,
+            double decayLambda,
+            int descriptionTruncateChars) {
+
+        /** 默认直露上限。 */
+        public static final int DEFAULT_DIRECT_LIMIT = 10;
+        /** 默认 PROJECT 配额。 */
+        public static final int DEFAULT_PROJECT_QUOTA = 6;
+        /** 默认候选名单长度。 */
+        public static final int DEFAULT_RECALL_K = 20;
+        /** 默认衰减系数（半衰期 ln2/0.05 ≈ 13.9 天）。 */
+        public static final double DEFAULT_DECAY_LAMBDA = 0.05;
+        /** 默认描述截断字符数。 */
+        public static final int DEFAULT_TRUNCATE_CHARS = 40;
+
+        /** 紧凑构造：非法值回退默认，project quota clamp 到 direct limit。 */
+        public Skill {
+            mode = mode == null ? SkillMode.SEARCH : mode;
+            hybridDirectLimit =
+                    hybridDirectLimit > 0 ? hybridDirectLimit : DEFAULT_DIRECT_LIMIT;
+            int quota = hybridProjectQuota > 0 ? hybridProjectQuota : DEFAULT_PROJECT_QUOTA;
+            hybridProjectQuota = Math.min(quota, hybridDirectLimit);
+            recallK = recallK > 0 ? recallK : DEFAULT_RECALL_K;
+            decayLambda = decayLambda > 0 ? decayLambda : DEFAULT_DECAY_LAMBDA;
+            descriptionTruncateChars =
+                    descriptionTruncateChars > 0
+                            ? descriptionTruncateChars
+                            : DEFAULT_TRUNCATE_CHARS;
+        }
+
+        /** @return 默认配置（search 档 + 全部默认值） */
+        public static Skill defaults() {
+            return new Skill(
+                    SkillMode.SEARCH,
+                    DEFAULT_DIRECT_LIMIT,
+                    DEFAULT_PROJECT_QUOTA,
+                    DEFAULT_RECALL_K,
+                    DEFAULT_DECAY_LAMBDA,
+                    DEFAULT_TRUNCATE_CHARS);
+        }
+    }
 
     public record PluginConfig(String className, Map<String, Object> config) {
         public PluginConfig {
@@ -193,6 +318,7 @@ public record AgentConfig(
                 List.of(),
                 new Search("", 5, 60_000),
                 // improve-voice-accuracy T8: 默认开启 ASR 后处理（语义纠错）；DeepSeek key 由启动门禁校验。
-                new Voice(new PostProcess(true)));
+                new Voice(new PostProcess(true)),
+                Skill.defaults());
     }
 }

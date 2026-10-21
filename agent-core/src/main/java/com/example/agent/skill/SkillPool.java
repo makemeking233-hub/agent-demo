@@ -36,7 +36,19 @@ public final class SkillPool implements AutoCloseable {
     /** scope -> 倒排索引 */
     private final Map<SkillScope, InvertedIndex> inverted = new LinkedHashMap<>();
 
+    /** skillName -> 预计算 embedding（add-skill-demand-loading T3；embedding 不可用时为空）。 */
+    private final Map<String, float[]> embeddings = new LinkedHashMap<>();
+
+    /** embedding 提供者（可空 = 不启用 embedding 精排层）。 */
+    private final com.example.agent.memory.embedding.EmbeddingProvider embedder;
+
     private SkillPool(List<SkillMeta> metas) {
+        this(metas, null);
+    }
+
+    private SkillPool(
+            List<SkillMeta> metas, com.example.agent.memory.embedding.EmbeddingProvider embedder) {
+        this.embedder = embedder;
         for (SkillScope scope : SkillScope.values()) {
             inverted.put(scope, new InvertedIndex(List.of()));
         }
@@ -55,17 +67,53 @@ public final class SkillPool implements AutoCloseable {
                                     .filter(m -> m.scope() == scope)
                                     .toList()));
         }
+        buildEmbeddings();
     }
 
     /**
-     * 扫描技能根目录并建池。
+     * 预计算每个 skill 的 embedding（name + description）。
      *
-     * @param roots 技能根目录列表（顺序即覆盖优先级：后出现的覆盖同名）。
-     *               约定为 {@code [USER 根, PROJECT 根]}（与 {@code AgentLoopFactory.buildTools} 一致），
-     *               长度为 1 时全部标 USER。
-     * @return 新的池实例（**不**安装为单例；单例由 {@link #installForTest} 或调用方显式安装）
+     * <p>严格降级（Memory 侧 T8b.0 教训的延伸）：{@code isReady()=false} 时**完全不建**索引，
+     * 而不是建一堆零向量——零向量与所有 query 的 cosine 都是 0，会让排序退化为任意顺序，
+     * 反而比纯倒排更差。
+     */
+    private void buildEmbeddings() {
+        if (embedder == null || !embedder.isReady()) {
+            return;
+        }
+        try {
+            for (Skill skill : byName.values()) {
+                String text = skill.name() + " " + skill.description();
+                embeddings.put(skill.name(), embedder.embed(text));
+            }
+            log.info("SkillPool embedding 索引完成: {} 条", embeddings.size());
+        } catch (RuntimeException e) {
+            // 任何推理异常都清空索引并降级（不让坏掉的 embedding 污染召回）
+            log.warn("SkillPool embedding 构建失败，降级为纯倒排: {}", e.toString());
+            embeddings.clear();
+        }
+    }
+
+    /**
+     * 扫描技能根目录并建池（不启用 embedding，纯倒排）。
+     *
+     * @param roots 技能根目录列表
+     * @return 新的池实例
      */
     public static SkillPool bootstrap(List<java.nio.file.Path> roots) {
+        return bootstrap(roots, null);
+    }
+
+    /**
+     * 扫描技能根目录并建池（启用 embedding 精排层）。
+     *
+     * @param roots    技能根目录列表（顺序即覆盖优先级：后出现的覆盖同名）
+     * @param embedder embedding 提供者（{@code null} 或 {@code isReady()=false} → 纯倒排）
+     * @return 新的池实例（**不**安装为单例）
+     */
+    public static SkillPool bootstrap(
+            List<java.nio.file.Path> roots,
+            com.example.agent.memory.embedding.EmbeddingProvider embedder) {
         // 按根目录逐个发现，这样 scope 归属天然正确（后出现的根覆盖同名，其 scope 也随之替换）
         List<SkillMeta> metas = new ArrayList<>();
         if (roots != null) {
@@ -77,8 +125,9 @@ public final class SkillPool implements AutoCloseable {
                 }
             }
         }
-        log.info("SkillPool bootstrap: {} 个技能", metas.size());
-        return new SkillPool(metas);
+        log.info("SkillPool bootstrap: {} 个技能 (embedding={})",
+                metas.size(), embedder != null && embedder.isReady());
+        return new SkillPool(metas, embedder);
     }
 
     /**
@@ -148,29 +197,93 @@ public final class SkillPool implements AutoCloseable {
     }
 
     /**
-     * 按关键词检索技能（当前为**纯倒排**实现）。
+     * 按关键词 + 语义检索技能（T3：倒排预筛 → embedding 精排 → 降级纯倒排）。
      *
-     * <p>add-skill-demand-loading 会把内部替换为「倒排预筛 → embedding KNN 精排」；对外签名不变。
+     * <p>链路：
+     *
+     * <ol>
+     *   <li><b>倒排预筛</b>：query 分词后查 per-scope 倒排索引得候选集（10000 → 通常几十~几百）
+     *   <li><b>embedding 精排</b>：候选集非空且 embedder 就绪时，对候选集内每个 skill 算
+     *       cosine 相似度并按降序取 top-k
+     *   <li><b>降级</b>：候选集为空 → 直接返回空（**不回退全量 KNN**，query 与所有 skill
+     *       都不沾边时全量 KNN 只会返回噪声）；embedder 不可用 → 纯倒排顺序
+     * </ol>
      *
      * @param query 查询串（{@code null} / 空白返回空列表）
-     * @param k 返回条数上限（{@code <= 0} 视为 1）
+     * @param k 返回条数上限（{@code <= 0} 返回空列表）
      * @return 命中的元数据列表（最多 k 条）
      */
     public List<SkillMeta> search(String query, int k) {
         if (query == null || query.isBlank() || k <= 0) return List.of();
-        int limit = k <= 0 ? 1 : k;
         Set<String> candidates = new LinkedHashSet<>();
         for (InvertedIndex idx : inverted.values()) {
             candidates.addAll(idx.lookupAll(tokenize(query)));
         }
-        if (candidates.isEmpty()) return List.of();
+        if (candidates.isEmpty()) {
+            // 倒排无命中时不回退全量 KNN：query 与技能库无关键词交集，全量 cosine 只会
+            // 返回一批「相似度都差不多」的无关条目，噪声大于收益
+            return List.of();
+        }
         List<SkillMeta> hits = new ArrayList<>();
+        if (embedder != null && embedder.isReady() && !embeddings.isEmpty()) {
+            float[] qv = embedder.embed(query);
+            hits.addAll(rankByCosine(qv, candidates, k));
+            if (!hits.isEmpty()) return hits;
+            // 精排无结果（如维度异常）→ 退回纯倒排
+        }
         for (String name : candidates) {
             Skill s = byName.get(name);
             if (s != null) hits.add(s.meta());
-            if (hits.size() >= limit) break;
+            if (hits.size() >= k) break;
         }
         return hits;
+    }
+
+    /**
+     * 在候选集内按 cosine 相似度降序取 top-k。
+     *
+     * <p>为什么不用 {@code VectorIndex.search}：后者不支持「只在候选集内检索」，而本层的价值
+     * 恰是把 10000 条压到 ~200 条后再精排。候选集规模下暴力 cosine（200×512）远快于维护索引。
+     *
+     * @param qv         查询向量
+     * @param candidates 候选 skill 名
+     * @param k          返回条数上限
+     * @return 按相似度降序的元数据列表
+     */
+    private List<SkillMeta> rankByCosine(float[] qv, Set<String> candidates, int k) {
+        List<java.util.Map.Entry<String, Double>> scored = new ArrayList<>();
+        for (String name : candidates) {
+            float[] v = embeddings.get(name);
+            if (v == null || v.length != qv.length) continue;
+            scored.add(java.util.Map.entry(name, (double) cosine(qv, v)));
+        }
+        scored.sort((a, b) -> Double.compare(b.getValue(), a.getValue()));
+        List<SkillMeta> out = new ArrayList<>();
+        for (var e : scored) {
+            Skill s = byName.get(e.getKey());
+            if (s != null) out.add(s.meta());
+            if (out.size() >= k) break;
+        }
+        return out;
+    }
+
+    /** 两个已归一化向量的 cosine（输入未归一化时自动补除）。 */
+    private static float cosine(float[] a, float[] b) {
+        double dot = 0;
+        double na = 0;
+        double nb = 0;
+        for (int i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            na += a[i] * a[i];
+            nb += b[i] * b[i];
+        }
+        if (na == 0 || nb == 0) return 0f;
+        return (float) (dot / (Math.sqrt(na) * Math.sqrt(nb)));
+    }
+
+    /** @return 已建 embedding 的条数（可观测 / 测试用） */
+    public int embeddingCount() {
+        return embeddings.size();
     }
 
     /** @return 索引中的关键词总数（可观测 / 测试用） */
